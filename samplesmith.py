@@ -83,6 +83,10 @@ def build_key_ranges(notes: list[int]) -> list[tuple[int, int, int]]:
     return ranges
 
 
+def mapping_text(lo_note: int, hi_note: int) -> str:
+    return f"MIDI {lo_note}–{hi_note} ({midi_to_name(lo_note)} to {midi_to_name(hi_note)})"
+
+
 @dataclass
 class SampleInfo:
     path: Path
@@ -301,11 +305,13 @@ class SampleSmithApp(tk.Tk):
         ttk.Spinbox(controls, textvariable=self.step_var, from_=1, to=12, width=4).pack(side="left")
         ttk.Button(controls, text="Build note list", command=self._build_note_list).pack(side="left", padx=8)
 
-        self.note_tree = ttk.Treeview(self.pitched_tab, columns=("note", "file"), show="headings", height=14)
-        self.note_tree.heading("note", text="Note")
+        self.note_tree = ttk.Treeview(self.pitched_tab, columns=("note", "maps", "file"), show="headings", height=14)
+        self.note_tree.heading("note", text="Recorded note")
+        self.note_tree.heading("maps", text="Maps to keys")
         self.note_tree.heading("file", text="Sample file")
-        self.note_tree.column("note", width=100, stretch=False)
-        self.note_tree.column("file", width=620)
+        self.note_tree.column("note", width=120, stretch=False)
+        self.note_tree.column("maps", width=230, stretch=False)
+        self.note_tree.column("file", width=420)
         self.note_tree.pack(fill="both", expand=True, pady=8)
         buttons = ttk.Frame(self.pitched_tab)
         buttons.pack(fill="x")
@@ -325,7 +331,7 @@ class SampleSmithApp(tk.Tk):
         ttk.Button(controls, text="Record pad", command=self._record_pad).pack(side="left", padx=8)
 
         self.pad_tree = ttk.Treeview(self.pads_tab, columns=("note", "label", "file"), show="headings", height=14)
-        self.pad_tree.heading("note", text="Pad")
+        self.pad_tree.heading("note", text="Maps to pad")
         self.pad_tree.heading("label", text="Label")
         self.pad_tree.heading("file", text="Sample file")
         self.pad_tree.column("note", width=90, stretch=False)
@@ -417,11 +423,14 @@ class SampleSmithApp(tk.Tk):
         for item in self.note_tree.get_children():
             self.note_tree.delete(item)
         self.note_rows.clear()
-        for note in note_range(self.low_note, self.high_note, self.step_var.get()):
+        notes = note_range(self.low_note, self.high_note, self.step_var.get())
+        ranges = dict((root, (lo, hi)) for root, lo, hi in build_key_ranges(notes))
+        for note in notes:
             iid = str(note)
+            lo, hi = ranges[note]
             self.note_rows[note] = ""
-            self.note_tree.insert("", "end", iid=iid, values=(midi_to_name(note), ""))
-        self._log("Built note list")
+            self.note_tree.insert("", "end", iid=iid, values=(midi_to_name(note), mapping_text(lo, hi), ""))
+        self._log("Built note list with full-keyboard sampler mapping")
 
     def _selected_note(self) -> int | None:
         selected = self.note_tree.selection()
@@ -474,8 +483,8 @@ class SampleSmithApp(tk.Tk):
             def apply():
                 self._upsert_sample(info)
                 self.note_rows[note] = str(path)
-                self.note_tree.item(str(note), values=(note_name, str(path.name)))
-                self._log(f"Recorded {note_name}: {path.name}")
+                self.note_tree.item(str(note), values=(note_name, mapping_text(lo, hi), str(path.name)))
+                self._log(f"Recorded {note_name}: {path.name} — maps {mapping_text(lo, hi)}")
                 if after:
                     after()
             return apply

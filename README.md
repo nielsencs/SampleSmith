@@ -54,7 +54,7 @@ From this folder:
 python samplesmith.py
 ```
 
-The GUI is the intended everyday route: set the name/output folder, choose pitched or pads, then record and generate the `.dspreset`.
+The GUI is the intended everyday route: set the name/output folder, choose pitched or pads, then record and generate the `.dspreset`. In pitched mode it now shows the key mapping for each recorded note, including MIDI numbers, so octave-label differences between Python/Reaper/Decent Sampler do not hide what is actually mapped.
 
 ## Run the CLI
 
@@ -80,6 +80,16 @@ captured-samplers/<InstrumentName>/
 ```
 
 Open the `.dspreset` in Decent Sampler, including from Reaper.
+
+## Mapping behaviour
+
+Default pitched behaviour is classic sampler spreading: SampleSmith generates a playable instrument from whatever samples exist, even one sample. If there are two samples an octave apart, the lower sample maps downward and up to the midpoint, and the higher sample maps from the midpoint upward. This can make strange-but-useful transformed sounds, such as very low growls.
+
+Possible later range modes:
+
+- full keyboard — current/default
+- captured range only
+- custom low/high playable range
 
 ## Test without audio hardware
 

@@ -359,6 +359,10 @@ def build_key_ranges(notes: list[int]) -> list[tuple[int, int, int]]:
     return ranges
 
 
+def mapping_text(lo_note: int, hi_note: int) -> str:
+    return f"MIDI {lo_note}–{hi_note} ({midi_to_name(lo_note)} to {midi_to_name(hi_note)})"
+
+
 def generate_dspreset(config: CaptureConfig, samples: Iterable[SampleInfo]) -> Path:
     config.output_dir.mkdir(parents=True, exist_ok=True)
     root = ET.Element("DecentSampler")
@@ -393,14 +397,18 @@ def pitched_mode(config: CaptureConfig) -> None:
     step = max(1, int(step_answer))
     notes = note_range(low, high, step)
     print("\nCapture notes:", ", ".join(midi_to_name(note) for note in notes))
+    root_ranges = build_key_ranges(notes)
+    print("\nFull-keyboard sampler mapping:")
+    for root, lo, hi in root_ranges:
+        print(f"  recorded {midi_to_name(root)} maps {mapping_text(lo, hi)}")
     if not ask_yes_no("Continue?", True):
         return
-    root_ranges = build_key_ranges(notes)
     samples: list[SampleInfo] = []
     for root, lo, hi in root_ranges:
         note_name = midi_to_name(root)
         path = sample_path(config, note_name.replace("#", "sharp"))
         print(f"\n=== {note_name} ===")
+        print(f"Maps {mapping_text(lo, hi)}")
         capture_sample(path, config, reference_note=root)
         samples.append(SampleInfo(path=path, root_note=root, lo_note=lo, hi_note=hi, label=note_name))
     generate_dspreset(config, samples)
