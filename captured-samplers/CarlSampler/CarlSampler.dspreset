@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<DecentSampler>
+  <groups>
+    <group attack="0.01" release="0.8">
+      <sample path="Samples/CarlSampler_C3.wav" rootNote="60" loNote="0" hiNote="54" loVel="1" hiVel="127" loopEnabled="true" />
+      <sample path="Samples/CarlSampler_C4.wav" rootNote="72" loNote="55" hiNote="127" loVel="1" hiVel="127" loopEnabled="true" />
+    </group>
+  </groups>
+</DecentSampler>

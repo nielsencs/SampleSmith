@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "name": "CarlSampler",
+  "output": "C:\\Users\\Carl\\Documents\\SampleSmith\\captured-samplers",
+  "sample_rate": 44100,
+  "record_seconds": 4.0,
+  "trim_threshold_db": -45.0,
+  "normalise": true,
+  "loop_enabled": true,
+  "root_note_offset": 12,
+  "low_note": 36,
+  "high_note": 60,
+  "step": 1,
+  "pad_start": "C2",
+  "next_pad_note": 36,
+  "samples": [
+    {
+      "path": "C:\\Users\\Carl\\Documents\\SampleSmith\\captured-samplers\\CarlSampler\\Samples\\CarlSampler_C3.wav",
+      "root_note": 48,
+      "lo_note": 48,
+      "hi_note": 48,
+      "label": "C3",
+      "mode": "pitched"
+    },
+    {
+      "path": "C:\\Users\\Carl\\Documents\\SampleSmith\\captured-samplers\\CarlSampler\\Samples\\CarlSampler_C4.wav",
+      "root_note": 60,
+      "lo_note": 60,
+      "hi_note": 127,
+      "label": "C4",
+      "mode": "pitched"
+    }
+  ]
+}
