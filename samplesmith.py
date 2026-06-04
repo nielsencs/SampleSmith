@@ -1,0 +1,543 @@
+#!/usr/bin/env python3
+"""SampleSmith - a small GUI helper for building Decent Sampler instruments.
+
+This is an MVP. It gives Carl a visual workflow for:
+- pitched sampling: detect sung/played lowest and highest notes, build a note list,
+  play references, record/trim samples, and generate a .dspreset;
+- unpitched/pad sampling: record labelled sounds onto consecutive MIDI pads and
+  generate a .dspreset.
+
+Install audio dependencies on the recording machine:
+  python -m pip install sounddevice soundfile numpy
+Optional, for better pitch detection:
+  python -m pip install librosa
+"""
+
+from __future__ import annotations
+
+import math
+import queue
+import re
+import threading
+import time
+import tkinter as tk
+import wave
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
+
+NOTE_NAMES_SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+NOTE_ALIASES = {"DB": "C#", "EB": "D#", "GB": "F#", "AB": "G#", "BB": "A#"}
+A4_MIDI = 69
+A4_HZ = 440.0
+DEFAULT_SAMPLE_RATE = 44100
+DEFAULT_PAD_START_NOTE = 36  # C2
+
+
+def slugify(value: str) -> str:
+    value = re.sub(r"[^A-Za-z0-9._ -]+", "", value.strip())
+    value = re.sub(r"[\s-]+", "_", value)
+    return value.strip("_") or "SampleSmithInstrument"
+
+
+def midi_to_freq(midi_note: int) -> float:
+    return A4_HZ * (2 ** ((midi_note - A4_MIDI) / 12))
+
+
+def freq_to_midi(freq: float) -> int:
+    return int(round(A4_MIDI + 12 * math.log2(freq / A4_HZ)))
+
+
+def midi_to_name(midi_note: int) -> str:
+    return f"{NOTE_NAMES_SHARP[midi_note % 12]}{(midi_note // 12) - 1}"
+
+
+def name_to_midi(note_name: str) -> int:
+    match = re.fullmatch(r"\s*([A-Ga-g])([#bB]?)(-?\d+)\s*", note_name)
+    if not match:
+        raise ValueError(f"Invalid note name: {note_name!r}")
+    base, accidental, octave_text = match.groups()
+    note = (base.upper() + accidental.upper()).replace("♯", "#").replace("♭", "B")
+    note = NOTE_ALIASES.get(note, note)
+    if note not in NOTE_NAMES_SHARP:
+        raise ValueError(f"Invalid note name: {note_name!r}")
+    return (int(octave_text) + 1) * 12 + NOTE_NAMES_SHARP.index(note)
+
+
+def note_range(low: int, high: int, step: int) -> list[int]:
+    if high < low:
+        low, high = high, low
+    return list(range(low, high + 1, max(1, step)))
+
+
+def build_key_ranges(notes: list[int]) -> list[tuple[int, int, int]]:
+    ranges: list[tuple[int, int, int]] = []
+    for index, root in enumerate(notes):
+        if len(notes) == 1:
+            lo, hi = 0, 127
+        else:
+            lo = 0 if index == 0 else int(math.floor((notes[index - 1] + root) / 2)) + 1
+            hi = 127 if index == len(notes) - 1 else int(math.floor((root + notes[index + 1]) / 2))
+        ranges.append((root, lo, hi))
+    return ranges
+
+
+@dataclass
+class SampleInfo:
+    path: Path
+    root_note: int
+    lo_note: int
+    hi_note: int
+    label: str
+
+
+class AudioEngine:
+    def __init__(self, sample_rate: int, trim_threshold_db: float, pre_roll_ms: float, post_roll_ms: float, normalise: bool) -> None:
+        self.sample_rate = sample_rate
+        self.trim_threshold_db = trim_threshold_db
+        self.pre_roll_ms = pre_roll_ms
+        self.post_roll_ms = post_roll_ms
+        self.normalise = normalise
+
+    def _deps(self):
+        try:
+            import numpy as np
+            import sounddevice as sd
+            import soundfile as sf
+        except ImportError as exc:
+            raise RuntimeError(
+                "Missing audio dependencies. Install with: python -m pip install sounddevice soundfile numpy"
+            ) from exc
+        return np, sd, sf
+
+    def play_tone(self, midi_note: int, seconds: float = 1.2) -> None:
+        np, sd, _ = self._deps()
+        freq = midi_to_freq(midi_note)
+        t = np.linspace(0, seconds, int(self.sample_rate * seconds), endpoint=False)
+        envelope = np.ones_like(t)
+        fade_len = min(len(envelope) // 10, int(self.sample_rate * 0.05))
+        if fade_len > 0:
+            fade = np.linspace(0, 1, fade_len)
+            envelope[:fade_len] *= fade
+            envelope[-fade_len:] *= fade[::-1]
+        audio = 0.18 * np.sin(2 * np.pi * freq * t) * envelope
+        sd.play(audio, self.sample_rate)
+        sd.wait()
+
+    def record(self, seconds: float):
+        np, sd, _ = self._deps()
+        audio = sd.rec(int(seconds * self.sample_rate), samplerate=self.sample_rate, channels=1, dtype="float32")
+        sd.wait()
+        return np.asarray(audio[:, 0], dtype=np.float32)
+
+    def trim(self, audio):
+        np, _, _ = self._deps()
+        if audio.size == 0:
+            return audio
+        peak = float(np.max(np.abs(audio)))
+        if peak <= 0:
+            return audio
+        threshold = peak * (10 ** (self.trim_threshold_db / 20.0))
+        active = np.flatnonzero(np.abs(audio) >= threshold)
+        if active.size == 0:
+            return audio
+        pre = int(self.sample_rate * self.pre_roll_ms / 1000.0)
+        post = int(self.sample_rate * self.post_roll_ms / 1000.0)
+        start = max(0, int(active[0]) - pre)
+        end = min(audio.size, int(active[-1]) + post)
+        trimmed = audio[start:end]
+        fade_len = min(int(self.sample_rate * 0.005), trimmed.size // 4)
+        if fade_len > 0:
+            fade = np.linspace(0, 1, fade_len)
+            trimmed[:fade_len] *= fade
+            trimmed[-fade_len:] *= fade[::-1]
+        if self.normalise:
+            peak = float(np.max(np.abs(trimmed))) if trimmed.size else 0.0
+            if peak > 0:
+                trimmed = (trimmed / peak * 0.9).astype(np.float32)
+        return trimmed
+
+    def write_wav(self, path: Path, audio) -> None:
+        _, _, sf = self._deps()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        sf.write(path, audio, self.sample_rate, subtype="PCM_24")
+
+    def detect_pitch(self, audio) -> float | None:
+        np, _, _ = self._deps()
+        try:
+            import librosa  # type: ignore
+
+            pitches, voiced_flags, _ = librosa.pyin(
+                audio.astype(float),
+                fmin=librosa.note_to_hz("C2"),
+                fmax=librosa.note_to_hz("C7"),
+                sr=self.sample_rate,
+            )
+            voiced = pitches[voiced_flags]
+            if len(voiced):
+                return float(np.nanmedian(voiced))
+        except Exception:
+            pass
+
+        audio = audio.astype(float)
+        audio = audio - np.mean(audio)
+        peak = np.max(np.abs(audio)) if audio.size else 0
+        if peak < 0.005:
+            return None
+        audio = audio / peak
+        min_lag = int(self.sample_rate / 1200.0)
+        max_lag = int(self.sample_rate / 60.0)
+        corr = np.correlate(audio, audio, mode="full")[audio.size - 1 :]
+        max_lag = min(max_lag, corr.size - 1)
+        if max_lag <= min_lag:
+            return None
+        lag = int(np.argmax(corr[min_lag:max_lag])) + min_lag
+        return self.sample_rate / lag if lag > 0 else None
+
+
+def write_silent_wav(path: Path, sample_rate: int = DEFAULT_SAMPLE_RATE) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(sample_rate)
+        handle.writeframes(b"\x00\x00" * int(sample_rate * 0.1))
+
+
+def generate_dspreset(instrument_name: str, output_dir: Path, samples: list[SampleInfo]) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    root = ET.Element("DecentSampler")
+    groups = ET.SubElement(root, "groups")
+    group = ET.SubElement(groups, "group", {"attack": "0.01", "release": "0.8"})
+    for sample in samples:
+        ET.SubElement(
+            group,
+            "sample",
+            {
+                "path": sample.path.relative_to(output_dir).as_posix(),
+                "rootNote": str(sample.root_note),
+                "loNote": str(sample.lo_note),
+                "hiNote": str(sample.hi_note),
+                "loVel": "1",
+                "hiVel": "127",
+            },
+        )
+    tree = ET.ElementTree(root)
+    ET.indent(tree, space="  ")
+    preset_path = output_dir / f"{slugify(instrument_name)}.dspreset"
+    tree.write(preset_path, encoding="utf-8", xml_declaration=True)
+    return preset_path
+
+
+class SampleSmithApp(tk.Tk):
+    def __init__(self) -> None:
+        super().__init__()
+        self.title("SampleSmith")
+        self.geometry("920x680")
+        self.queue: queue.Queue[tuple[str, object]] = queue.Queue()
+        self.samples: list[SampleInfo] = []
+        self.low_note: int | None = None
+        self.high_note: int | None = None
+        self.note_rows: dict[int, str] = {}
+        self.pad_note = DEFAULT_PAD_START_NOTE
+        self._build_ui()
+        self.after(100, self._drain_queue)
+
+    def _build_ui(self) -> None:
+        outer = ttk.Frame(self, padding=10)
+        outer.pack(fill="both", expand=True)
+
+        project = ttk.LabelFrame(outer, text="Project")
+        project.pack(fill="x")
+        self.name_var = tk.StringVar(value="CarlSampler")
+        self.output_var = tk.StringVar(value=str(Path.cwd() / "captured-samplers"))
+        self.sample_rate_var = tk.IntVar(value=DEFAULT_SAMPLE_RATE)
+        self.record_seconds_var = tk.DoubleVar(value=4.0)
+        self.threshold_var = tk.DoubleVar(value=-45.0)
+        self.normalise_var = tk.BooleanVar(value=True)
+
+        ttk.Label(project, text="Name").grid(row=0, column=0, sticky="w")
+        ttk.Entry(project, textvariable=self.name_var, width=28).grid(row=0, column=1, sticky="ew", padx=4)
+        ttk.Label(project, text="Output").grid(row=0, column=2, sticky="w")
+        ttk.Entry(project, textvariable=self.output_var, width=46).grid(row=0, column=3, sticky="ew", padx=4)
+        ttk.Button(project, text="Browse", command=self._browse_output).grid(row=0, column=4)
+        ttk.Label(project, text="Record seconds").grid(row=1, column=0, sticky="w")
+        ttk.Spinbox(project, textvariable=self.record_seconds_var, from_=0.5, to=30, increment=0.5, width=8).grid(row=1, column=1, sticky="w", padx=4)
+        ttk.Label(project, text="Trim dB").grid(row=1, column=2, sticky="w")
+        ttk.Spinbox(project, textvariable=self.threshold_var, from_=-80, to=-10, increment=1, width=8).grid(row=1, column=3, sticky="w", padx=4)
+        ttk.Checkbutton(project, text="Normalise", variable=self.normalise_var).grid(row=1, column=4, sticky="w")
+        project.columnconfigure(3, weight=1)
+
+        tabs = ttk.Notebook(outer)
+        tabs.pack(fill="both", expand=True, pady=8)
+        self.pitched_tab = ttk.Frame(tabs, padding=8)
+        self.pads_tab = ttk.Frame(tabs, padding=8)
+        tabs.add(self.pitched_tab, text="Pitched")
+        tabs.add(self.pads_tab, text="Unpitched / Pads")
+        self._build_pitched_tab()
+        self._build_pads_tab()
+
+        bottom = ttk.Frame(outer)
+        bottom.pack(fill="both")
+        ttk.Button(bottom, text="Generate Decent Sampler preset", command=self._generate_preset).pack(side="left")
+        ttk.Button(bottom, text="Open output folder", command=self._open_output_folder).pack(side="left", padx=6)
+        self.status_var = tk.StringVar(value="Ready")
+        ttk.Label(bottom, textvariable=self.status_var).pack(side="left", padx=12)
+        self.log = tk.Text(outer, height=9, wrap="word")
+        self.log.pack(fill="both", expand=False, pady=(8, 0))
+
+    def _build_pitched_tab(self) -> None:
+        controls = ttk.Frame(self.pitched_tab)
+        controls.pack(fill="x")
+        ttk.Button(controls, text="Record lowest note", command=lambda: self._detect_note("low")).pack(side="left")
+        self.low_var = tk.StringVar(value="not set")
+        ttk.Label(controls, textvariable=self.low_var, width=14).pack(side="left", padx=5)
+        ttk.Button(controls, text="Record highest note", command=lambda: self._detect_note("high")).pack(side="left", padx=(12, 0))
+        self.high_var = tk.StringVar(value="not set")
+        ttk.Label(controls, textvariable=self.high_var, width=14).pack(side="left", padx=5)
+        ttk.Label(controls, text="Step").pack(side="left", padx=(12, 2))
+        self.step_var = tk.IntVar(value=1)
+        ttk.Spinbox(controls, textvariable=self.step_var, from_=1, to=12, width=4).pack(side="left")
+        ttk.Button(controls, text="Build note list", command=self._build_note_list).pack(side="left", padx=8)
+
+        self.note_tree = ttk.Treeview(self.pitched_tab, columns=("note", "file"), show="headings", height=14)
+        self.note_tree.heading("note", text="Note")
+        self.note_tree.heading("file", text="Sample file")
+        self.note_tree.column("note", width=100, stretch=False)
+        self.note_tree.column("file", width=620)
+        self.note_tree.pack(fill="both", expand=True, pady=8)
+        buttons = ttk.Frame(self.pitched_tab)
+        buttons.pack(fill="x")
+        ttk.Button(buttons, text="Play selected reference", command=self._play_selected_reference).pack(side="left")
+        ttk.Button(buttons, text="Record selected sample", command=self._record_selected_note).pack(side="left", padx=6)
+        ttk.Button(buttons, text="Record all missing", command=self._record_all_missing).pack(side="left")
+
+    def _build_pads_tab(self) -> None:
+        controls = ttk.Frame(self.pads_tab)
+        controls.pack(fill="x")
+        ttk.Label(controls, text="Pad label").pack(side="left")
+        self.pad_label_var = tk.StringVar()
+        ttk.Entry(controls, textvariable=self.pad_label_var, width=28).pack(side="left", padx=4)
+        ttk.Label(controls, text="Start note").pack(side="left", padx=(12, 2))
+        self.pad_start_var = tk.StringVar(value=midi_to_name(DEFAULT_PAD_START_NOTE))
+        ttk.Entry(controls, textvariable=self.pad_start_var, width=8).pack(side="left")
+        ttk.Button(controls, text="Record pad", command=self._record_pad).pack(side="left", padx=8)
+
+        self.pad_tree = ttk.Treeview(self.pads_tab, columns=("note", "label", "file"), show="headings", height=14)
+        self.pad_tree.heading("note", text="Pad")
+        self.pad_tree.heading("label", text="Label")
+        self.pad_tree.heading("file", text="Sample file")
+        self.pad_tree.column("note", width=90, stretch=False)
+        self.pad_tree.column("label", width=160, stretch=False)
+        self.pad_tree.column("file", width=520)
+        self.pad_tree.pack(fill="both", expand=True, pady=8)
+
+    def _audio(self) -> AudioEngine:
+        return AudioEngine(
+            sample_rate=self.sample_rate_var.get(),
+            trim_threshold_db=self.threshold_var.get(),
+            pre_roll_ms=40.0,
+            post_roll_ms=180.0,
+            normalise=self.normalise_var.get(),
+        )
+
+    def _instrument_dir(self) -> Path:
+        return Path(self.output_var.get()).expanduser() / slugify(self.name_var.get())
+
+    def _sample_path(self, label: str) -> Path:
+        return self._instrument_dir() / "Samples" / f"{slugify(self.name_var.get())}_{label}.wav"
+
+    def _browse_output(self) -> None:
+        chosen = filedialog.askdirectory(initialdir=self.output_var.get() or str(Path.cwd()))
+        if chosen:
+            self.output_var.set(chosen)
+
+    def _log(self, text: str) -> None:
+        self.log.insert("end", text + "\n")
+        self.log.see("end")
+        self.status_var.set(text)
+
+    def _run_worker(self, label: str, func) -> None:
+        self.status_var.set(label)
+        threading.Thread(target=lambda: self._worker_wrapper(func), daemon=True).start()
+
+    def _worker_wrapper(self, func) -> None:
+        try:
+            result = func()
+            self.queue.put(("ok", result))
+        except Exception as exc:  # pragma: no cover - GUI error path
+            self.queue.put(("error", exc))
+
+    def _drain_queue(self) -> None:
+        try:
+            while True:
+                kind, payload = self.queue.get_nowait()
+                if kind == "error":
+                    self._log(f"Error: {payload}")
+                    messagebox.showerror("SampleSmith", str(payload))
+                elif callable(payload):
+                    payload()
+                elif payload:
+                    self._log(str(payload))
+        except queue.Empty:
+            pass
+        self.after(100, self._drain_queue)
+
+    def _detect_note(self, which: str) -> None:
+        if not messagebox.askokcancel("SampleSmith", f"After pressing OK, sing/play your {which} usable note for 2.5 seconds."):
+            return
+
+        def work():
+            audio = self._audio()
+            raw = audio.record(2.5)
+            freq = audio.detect_pitch(raw)
+            if freq is None:
+                raise RuntimeError("Could not detect a clear pitch. Try again, or use pad mode for noisy sounds.")
+            midi = freq_to_midi(freq)
+            name = midi_to_name(midi)
+
+            def apply():
+                if messagebox.askyesno("Confirm pitch", f"I think that was {name} ({freq:.1f} Hz). Accept?"):
+                    if which == "low":
+                        self.low_note = midi
+                        self.low_var.set(name)
+                    else:
+                        self.high_note = midi
+                        self.high_var.set(name)
+                    self._log(f"Set {which} note to {name}")
+            return apply
+
+        self._run_worker("Detecting pitch...", work)
+
+    def _build_note_list(self) -> None:
+        if self.low_note is None or self.high_note is None:
+            messagebox.showwarning("SampleSmith", "Record lowest and highest notes first.")
+            return
+        for item in self.note_tree.get_children():
+            self.note_tree.delete(item)
+        self.note_rows.clear()
+        for note in note_range(self.low_note, self.high_note, self.step_var.get()):
+            iid = str(note)
+            self.note_rows[note] = ""
+            self.note_tree.insert("", "end", iid=iid, values=(midi_to_name(note), ""))
+        self._log("Built note list")
+
+    def _selected_note(self) -> int | None:
+        selected = self.note_tree.selection()
+        if not selected:
+            messagebox.showwarning("SampleSmith", "Select a note first.")
+            return None
+        return int(selected[0])
+
+    def _play_selected_reference(self) -> None:
+        note = self._selected_note()
+        if note is None:
+            return
+        self._run_worker(f"Playing {midi_to_name(note)}", lambda: (self._audio().play_tone(note), f"Played {midi_to_name(note)}")[1])
+
+    def _record_selected_note(self) -> None:
+        note = self._selected_note()
+        if note is not None:
+            self._record_note(note)
+
+    def _record_all_missing(self) -> None:
+        notes = [int(item) for item in self.note_tree.get_children() if not self.note_rows.get(int(item))]
+        if not notes:
+            self._log("No missing pitched samples")
+            return
+        self._record_note_sequence(notes)
+
+    def _record_note_sequence(self, notes: list[int]) -> None:
+        if not notes:
+            return
+        note = notes.pop(0)
+        self._record_note(note, after=lambda: self._record_note_sequence(notes))
+
+    def _record_note(self, note: int, after=None) -> None:
+        note_name = midi_to_name(note)
+        if not messagebox.askokcancel("SampleSmith", f"Ready to record {note_name}? I will play the reference first."):
+            return
+        path = self._sample_path(note_name.replace("#", "sharp"))
+
+        def work():
+            audio = self._audio()
+            audio.play_tone(note)
+            time.sleep(0.3)
+            raw = audio.record(self.record_seconds_var.get())
+            trimmed = audio.trim(raw)
+            audio.write_wav(path, trimmed)
+            ranges = dict((root, (lo, hi)) for root, lo, hi in build_key_ranges([int(i) for i in self.note_tree.get_children()]))
+            lo, hi = ranges[note]
+            info = SampleInfo(path=path, root_note=note, lo_note=lo, hi_note=hi, label=note_name)
+
+            def apply():
+                self._upsert_sample(info)
+                self.note_rows[note] = str(path)
+                self.note_tree.item(str(note), values=(note_name, str(path.name)))
+                self._log(f"Recorded {note_name}: {path.name}")
+                if after:
+                    after()
+            return apply
+
+        self._run_worker(f"Recording {note_name}...", work)
+
+    def _record_pad(self) -> None:
+        label = self.pad_label_var.get().strip()
+        if not label:
+            messagebox.showwarning("SampleSmith", "Enter a pad label first.")
+            return
+        if not self.pad_tree.get_children():
+            try:
+                self.pad_note = int(self.pad_start_var.get())
+            except ValueError:
+                self.pad_note = name_to_midi(self.pad_start_var.get())
+        midi_note = self.pad_note
+        self.pad_note += 1
+        path = self._sample_path(f"pad_{midi_to_name(midi_note).replace('#', 'sharp')}_{slugify(label)}")
+        if not messagebox.askokcancel("SampleSmith", f"Ready to record pad {midi_to_name(midi_note)}: {label}?"):
+            self.pad_note -= 1
+            return
+
+        def work():
+            audio = self._audio()
+            raw = audio.record(self.record_seconds_var.get())
+            trimmed = audio.trim(raw)
+            audio.write_wav(path, trimmed)
+            info = SampleInfo(path=path, root_note=midi_note, lo_note=midi_note, hi_note=midi_note, label=label)
+
+            def apply():
+                self._upsert_sample(info)
+                self.pad_tree.insert("", "end", values=(midi_to_name(midi_note), label, path.name))
+                self.pad_label_var.set("")
+                self._log(f"Recorded pad {midi_to_name(midi_note)}: {path.name}")
+            return apply
+
+        self._run_worker(f"Recording pad {label}...", work)
+
+    def _upsert_sample(self, info: SampleInfo) -> None:
+        self.samples = [sample for sample in self.samples if not (sample.root_note == info.root_note and sample.lo_note == info.lo_note and sample.hi_note == info.hi_note)]
+        self.samples.append(info)
+        self.samples.sort(key=lambda sample: (sample.root_note, sample.path.name))
+
+    def _generate_preset(self) -> None:
+        if not self.samples:
+            messagebox.showwarning("SampleSmith", "No recorded samples yet.")
+            return
+        preset = generate_dspreset(self.name_var.get(), self._instrument_dir(), self.samples)
+        self._log(f"Generated {preset}")
+        messagebox.showinfo("SampleSmith", f"Generated:\n{preset}")
+
+    def _open_output_folder(self) -> None:
+        folder = self._instrument_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        self._log(f"Output folder: {folder}")
+
+
+def main() -> None:
+    app = SampleSmithApp()
+    app.mainloop()
+
+
+if __name__ == "__main__":
+    main()

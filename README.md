@@ -1,6 +1,11 @@
-# Sample Smith
+# SampleSmith
 
-A first-pass Python helper for building Decent Sampler instruments from sounds you can make.
+A first-pass helper for building Decent Sampler instruments from sounds you can make.
+
+It now has two entry points:
+
+- `samplesmith.py` — GUI prototype. This is the main Carl-friendly route.
+- `sampler_capture.py` — original CLI prototype, still useful for dry-runs and automation.
 
 It is designed for two workflows:
 
@@ -21,6 +26,12 @@ It is designed for two workflows:
 
 ## Install dependencies
 
+SampleSmith uses Tkinter for the GUI. Python often includes it, but if not:
+
+```bash
+sudo apt install python3-tk
+```
+
 On the machine doing the recording:
 
 ```bash
@@ -35,9 +46,17 @@ python -m pip install librosa
 
 Without `librosa`, the script uses a simpler built-in autocorrelation pitch detector. That may be fine for clear monophonic sounds, but it will be less reliable for breathy/noisy notes.
 
-## Run
+## Run the GUI
 
 From this folder:
+
+```bash
+python samplesmith.py
+```
+
+The GUI is the intended everyday route: set the name/output folder, choose pitched or pads, then record and generate the `.dspreset`.
+
+## Run the CLI
 
 ```bash
 python sampler_capture.py
