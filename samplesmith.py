@@ -306,9 +306,6 @@ class SampleSmithApp(tk.Tk):
         ttk.Label(project, text="Trim dB").grid(row=1, column=2, sticky="w")
         ttk.Spinbox(project, textvariable=self.threshold_var, from_=-80, to=-10, increment=1, width=8).grid(row=1, column=3, sticky="w", padx=4)
         ttk.Checkbutton(project, text="Normalise", variable=self.normalise_var).grid(row=1, column=4, sticky="w")
-        ttk.Checkbutton(project, text="Loop samples", variable=self.loop_enabled_var, command=self._on_output_parameter_changed).grid(row=1, column=5, sticky="w", padx=(8, 0))
-        ttk.Label(project, text="Root offset").grid(row=2, column=2, sticky="w", pady=(6, 0))
-        ttk.Spinbox(project, textvariable=self.root_note_offset_var, from_=-36, to=36, increment=12, width=6, command=self._on_output_parameter_changed).grid(row=2, column=3, sticky="w", pady=(6, 0), padx=4)
         ttk.Button(project, text="Open project", command=self._open_project_dialog).grid(row=2, column=0, sticky="w", pady=(6, 0))
         ttk.Button(project, text="Save project", command=self._save_project_dialog).grid(row=2, column=1, sticky="w", pady=(6, 0), padx=4)
         project.columnconfigure(3, weight=1)
@@ -317,14 +314,16 @@ class SampleSmithApp(tk.Tk):
         tabs.pack(fill="both", expand=True, pady=8)
         self.pitched_tab = ttk.Frame(tabs, padding=8)
         self.pads_tab = ttk.Frame(tabs, padding=8)
+        self.decent_sampler_tab = ttk.Frame(tabs, padding=8)
         tabs.add(self.pitched_tab, text="Pitched")
         tabs.add(self.pads_tab, text="Unpitched / Pads")
+        tabs.add(self.decent_sampler_tab, text="Decent Sampler")
         self._build_pitched_tab()
         self._build_pads_tab()
+        self._build_decent_sampler_tab()
 
         bottom = ttk.Frame(outer)
         bottom.pack(fill="both")
-        ttk.Button(bottom, text="Generate Decent Sampler preset", command=self._generate_preset).pack(side="left")
         ttk.Button(bottom, text="Open output folder", command=self._open_output_folder).pack(side="left", padx=6)
         self.status_var = tk.StringVar(value="Ready")
         ttk.Label(bottom, textvariable=self.status_var).pack(side="left", padx=12)
@@ -384,6 +383,27 @@ class SampleSmithApp(tk.Tk):
         self.pad_tree.column("label", width=160, stretch=False)
         self.pad_tree.column("file", width=520)
         self.pad_tree.pack(fill="both", expand=True, pady=8)
+
+    def _build_decent_sampler_tab(self) -> None:
+        export = ttk.LabelFrame(self.decent_sampler_tab, text="Decent Sampler output")
+        export.pack(fill="x")
+        ttk.Checkbutton(export, text="Loop samples", variable=self.loop_enabled_var, command=self._on_output_parameter_changed).grid(row=0, column=0, sticky="w", padx=6, pady=6)
+        ttk.Label(export, text="Root offset").grid(row=0, column=1, sticky="w", padx=(18, 4), pady=6)
+        ttk.Spinbox(export, textvariable=self.root_note_offset_var, from_=-36, to=36, increment=12, width=6, command=self._on_output_parameter_changed).grid(row=0, column=2, sticky="w", pady=6)
+        ttk.Button(export, text="Generate / update .dspreset", command=self._generate_preset).grid(row=0, column=3, sticky="w", padx=(18, 6), pady=6)
+        ttk.Button(export, text="Open output folder", command=self._open_output_folder).grid(row=0, column=4, sticky="w", padx=6, pady=6)
+
+        notes = ttk.LabelFrame(self.decent_sampler_tab, text="Notes")
+        notes.pack(fill="x", pady=(10, 0))
+        ttk.Label(
+            notes,
+            text=(
+                "This tab is for Decent Sampler generation settings. "
+                "Loop start/end, sample start/end, envelopes, and other export controls can grow here later."
+            ),
+            wraplength=820,
+            justify="left",
+        ).pack(anchor="w", padx=6, pady=6)
 
     def _audio(self) -> AudioEngine:
         return AudioEngine(

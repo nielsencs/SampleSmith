@@ -54,7 +54,7 @@ From this folder:
 python samplesmith.py
 ```
 
-The GUI is the intended everyday route: set the name/output folder, choose pitched or pads, then record. Each recording now writes/updates both the `.dspreset` and a `.samplesmith.json` project file automatically; the generate/save buttons are there for manual regeneration. Use **Open project** to return to an existing SampleSmith project.
+The GUI is the intended everyday route: set the name/output folder, choose pitched or pads, then record. Each recording now writes/updates both the `.dspreset` and a `.samplesmith.json` project file automatically; the generate/save buttons are there for manual regeneration. Use **Open project** to return to an existing SampleSmith project. Decent Sampler export settings live on their own **Decent Sampler** tab so loop and playback controls can grow there.
 
 In pitched mode you can either record-detect the lowest/highest notes or type them manually, e.g. `C2`, `F#3`, or a MIDI number. It shows the key mapping for each recorded note, including MIDI numbers, so octave-label differences between Python/Reaper/Decent Sampler do not hide what is actually mapped.
 
