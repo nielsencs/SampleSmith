@@ -269,6 +269,9 @@ def generate_dspreset(
     delay_feedback: float = 0.7,
     delay_wet_level: float = 0.1,
     lowpass_enabled: bool = False,
+    lowpass_frequency: float = 22000.0,
+    reverb_enabled: bool = False,
+    reverb_wet_level: float = 0.5,
     chorus_enabled: bool = False,
     chorus_mix: float = 0.5,
     chorus_mod_depth: float = 0.5,
@@ -277,7 +280,7 @@ def generate_dspreset(
     reverb_mix: float = 0.0,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    root = ET.Element("DecentSampler")
+    root = ET.Element("DecentSampler", {"pluginVersion": "1"})
     groups = ET.SubElement(root, "groups")
     group = ET.SubElement(groups, "group", {"attack": "0.01", "release": "0.8"})
     for sample in samples:
@@ -306,7 +309,9 @@ def generate_dspreset(
             )
         )
     if lowpass_enabled:
-        effects_to_write.append(("lowpass", {}))
+        effects_to_write.append(("lowpass_4pl", {"frequency": f"{lowpass_frequency:.1f}"}))
+    if reverb_enabled:
+        effects_to_write.append(("reverb", {"wetLevel": f"{reverb_wet_level:.3f}"}))
     if chorus_enabled:
         effects_to_write.append(
             (
@@ -366,6 +371,9 @@ class SampleSmithApp(tk.Tk):
         self.delay_feedback_var = tk.DoubleVar(value=0.7)
         self.delay_wet_level_var = tk.DoubleVar(value=0.1)
         self.lowpass_enabled_var = tk.BooleanVar(value=False)
+        self.lowpass_frequency_var = tk.DoubleVar(value=22000.0)
+        self.reverb_enabled_var = tk.BooleanVar(value=False)
+        self.reverb_wet_level_var = tk.DoubleVar(value=0.5)
         self.chorus_enabled_var = tk.BooleanVar(value=False)
         self.chorus_mix_var = tk.DoubleVar(value=0.5)
         self.chorus_mod_depth_var = tk.DoubleVar(value=0.5)
@@ -470,28 +478,35 @@ class SampleSmithApp(tk.Tk):
         ttk.Button(export, text="Generate / update .dspreset", command=self._generate_preset).grid(row=0, column=3, sticky="w", padx=(18, 6), pady=6)
         ttk.Button(export, text="Open output folder", command=self._open_output_folder).grid(row=0, column=4, sticky="w", padx=6, pady=6)
 
-        effects = ttk.LabelFrame(self.decent_sampler_tab, text="Built-in effects")
+        effects = ttk.LabelFrame(self.decent_sampler_tab, text="DS default-style effects")
         effects.pack(fill="x", pady=(10, 0))
-        ttk.Checkbutton(effects, text="Delay", variable=self.delay_enabled_var, command=self._on_output_parameter_changed).grid(row=0, column=0, sticky="w", padx=6, pady=4)
-        ttk.Label(effects, text="time").grid(row=0, column=1, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.delay_time_var, from_=0.0, to=2.0, increment=0.05, width=6).grid(row=0, column=2, sticky="w", padx=3)
-        ttk.Label(effects, text="stereo").grid(row=0, column=3, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.delay_stereo_offset_var, from_=0.0, to=0.5, increment=0.01, width=6).grid(row=0, column=4, sticky="w", padx=3)
-        ttk.Label(effects, text="feedback").grid(row=0, column=5, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.delay_feedback_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=0, column=6, sticky="w", padx=3)
-        ttk.Label(effects, text="wet").grid(row=0, column=7, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.delay_wet_level_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=0, column=8, sticky="w", padx=3)
+        ttk.Checkbutton(effects, text="Tone lowpass_4pl", variable=self.lowpass_enabled_var, command=self._on_output_parameter_changed).grid(row=0, column=0, sticky="w", padx=6, pady=4)
+        ttk.Label(effects, text="frequency").grid(row=0, column=1, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.lowpass_frequency_var, from_=60, to=22000, increment=100, width=8).grid(row=0, column=2, sticky="w", padx=3)
+        ttk.Checkbutton(effects, text="Reverb", variable=self.reverb_enabled_var, command=self._on_output_parameter_changed).grid(row=0, column=3, sticky="w", padx=(18, 6), pady=4)
+        ttk.Label(effects, text="wetLevel").grid(row=0, column=4, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.reverb_wet_level_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=0, column=5, sticky="w", padx=3)
+        ttk.Button(effects, text="Apply effects", command=self._on_output_parameter_changed).grid(row=0, column=6, sticky="w", padx=8, pady=4)
 
-        ttk.Checkbutton(effects, text="Lowpass", variable=self.lowpass_enabled_var, command=self._on_output_parameter_changed).grid(row=1, column=0, sticky="w", padx=6, pady=4)
+        experimental = ttk.LabelFrame(self.decent_sampler_tab, text="Experimental effects")
+        experimental.pack(fill="x", pady=(10, 0))
+        ttk.Checkbutton(experimental, text="Delay", variable=self.delay_enabled_var, command=self._on_output_parameter_changed).grid(row=0, column=0, sticky="w", padx=6, pady=4)
+        ttk.Label(experimental, text="time").grid(row=0, column=1, sticky="w")
+        ttk.Spinbox(experimental, textvariable=self.delay_time_var, from_=0.0, to=2.0, increment=0.05, width=6).grid(row=0, column=2, sticky="w", padx=3)
+        ttk.Label(experimental, text="stereo").grid(row=0, column=3, sticky="w")
+        ttk.Spinbox(experimental, textvariable=self.delay_stereo_offset_var, from_=0.0, to=0.5, increment=0.01, width=6).grid(row=0, column=4, sticky="w", padx=3)
+        ttk.Label(experimental, text="feedback").grid(row=0, column=5, sticky="w")
+        ttk.Spinbox(experimental, textvariable=self.delay_feedback_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=0, column=6, sticky="w", padx=3)
+        ttk.Label(experimental, text="wet").grid(row=0, column=7, sticky="w")
+        ttk.Spinbox(experimental, textvariable=self.delay_wet_level_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=0, column=8, sticky="w", padx=3)
 
-        ttk.Checkbutton(effects, text="Chorus", variable=self.chorus_enabled_var, command=self._on_output_parameter_changed).grid(row=2, column=0, sticky="w", padx=6, pady=4)
-        ttk.Label(effects, text="mix").grid(row=2, column=1, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.chorus_mix_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=2, column=2, sticky="w", padx=3)
-        ttk.Label(effects, text="depth").grid(row=2, column=3, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.chorus_mod_depth_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=2, column=4, sticky="w", padx=3)
-        ttk.Label(effects, text="rate").grid(row=2, column=5, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.chorus_mod_rate_var, from_=0.0, to=10.0, increment=0.05, width=6).grid(row=2, column=6, sticky="w", padx=3)
-        ttk.Button(effects, text="Apply effects", command=self._on_output_parameter_changed).grid(row=2, column=8, sticky="e", padx=8, pady=4)
+        ttk.Checkbutton(experimental, text="Chorus", variable=self.chorus_enabled_var, command=self._on_output_parameter_changed).grid(row=1, column=0, sticky="w", padx=6, pady=4)
+        ttk.Label(experimental, text="mix").grid(row=1, column=1, sticky="w")
+        ttk.Spinbox(experimental, textvariable=self.chorus_mix_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=1, column=2, sticky="w", padx=3)
+        ttk.Label(experimental, text="depth").grid(row=1, column=3, sticky="w")
+        ttk.Spinbox(experimental, textvariable=self.chorus_mod_depth_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=1, column=4, sticky="w", padx=3)
+        ttk.Label(experimental, text="rate").grid(row=1, column=5, sticky="w")
+        ttk.Spinbox(experimental, textvariable=self.chorus_mod_rate_var, from_=0.0, to=10.0, increment=0.05, width=6).grid(row=1, column=6, sticky="w", padx=3)
 
         converb = ttk.LabelFrame(self.decent_sampler_tab, text="Advanced: convolution reverb / IR")
         converb.pack(fill="x", pady=(10, 0))
@@ -567,6 +582,9 @@ class SampleSmithApp(tk.Tk):
             "delay_feedback": self.delay_feedback_var.get(),
             "delay_wet_level": self.delay_wet_level_var.get(),
             "lowpass_enabled": self.lowpass_enabled_var.get(),
+            "lowpass_frequency": self.lowpass_frequency_var.get(),
+            "reverb_enabled": self.reverb_enabled_var.get(),
+            "reverb_wet_level": self.reverb_wet_level_var.get(),
             "chorus_enabled": self.chorus_enabled_var.get(),
             "chorus_mix": self.chorus_mix_var.get(),
             "chorus_mod_depth": self.chorus_mod_depth_var.get(),
@@ -633,6 +651,9 @@ class SampleSmithApp(tk.Tk):
         self.delay_feedback_var.set(float(data.get("delay_feedback", 0.7)))
         self.delay_wet_level_var.set(float(data.get("delay_wet_level", 0.1)))
         self.lowpass_enabled_var.set(bool(data.get("lowpass_enabled", False)))
+        self.lowpass_frequency_var.set(float(data.get("lowpass_frequency", 22000.0)))
+        self.reverb_enabled_var.set(bool(data.get("reverb_enabled", False)))
+        self.reverb_wet_level_var.set(float(data.get("reverb_wet_level", 0.5)))
         self.chorus_enabled_var.set(bool(data.get("chorus_enabled", False)))
         self.chorus_mix_var.set(float(data.get("chorus_mix", 0.5)))
         self.chorus_mod_depth_var.set(float(data.get("chorus_mod_depth", 0.5)))
@@ -926,6 +947,9 @@ class SampleSmithApp(tk.Tk):
             delay_feedback=self.delay_feedback_var.get(),
             delay_wet_level=self.delay_wet_level_var.get(),
             lowpass_enabled=self.lowpass_enabled_var.get(),
+            lowpass_frequency=self.lowpass_frequency_var.get(),
+            reverb_enabled=self.reverb_enabled_var.get(),
+            reverb_wet_level=self.reverb_wet_level_var.get(),
             chorus_enabled=self.chorus_enabled_var.get(),
             chorus_mix=self.chorus_mix_var.get(),
             chorus_mod_depth=self.chorus_mod_depth_var.get(),
