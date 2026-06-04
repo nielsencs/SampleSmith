@@ -387,12 +387,12 @@ def generate_dspreset(
             tab,
             "label",
             {
-                "x": "20",
-                "y": "30",
-                "width": "360",
+                "x": "40",
+                "y": "34",
+                "width": "720",
                 "text": instrument_name,
                 "textColor": "DD330033",
-                "textSize": "42",
+                "textSize": "36",
             },
         )
         effect_positions = {effect_type: position for position, (effect_type, _attrs) in enumerate(effects_to_write)}
@@ -442,8 +442,8 @@ def generate_dspreset(
         def add_effect_knob(effect_type: str, label: str, parameter: str, min_value: str, max_value: str, value: str, default_value: str) -> None:
             nonlocal visible_control_index
             position = effect_positions[effect_type]
-            x_pos = 20 + (visible_control_index % 8) * 95
-            y_pos = 110 + (visible_control_index // 8) * 95
+            x_pos = 40 + (visible_control_index % 7) * 105
+            y_pos = 145 + (visible_control_index // 7) * 110
             visible_control_index += 1
             knob = ET.SubElement(
                 tab,
@@ -451,7 +451,7 @@ def generate_dspreset(
                 {
                     "x": str(x_pos),
                     "y": str(y_pos),
-                    "width": "95",
+                    "width": "100",
                     "label": label,
                     "parameterName": label,
                     "type": "float",
@@ -486,11 +486,11 @@ def generate_dspreset(
                 _include, effect_type, _label, parameter, min_value, max_value, value, default_value = included_specs[0]
                 add_effect_knob(effect_type, title, parameter, min_value, max_value, value, default_value)
                 return
-            if (visible_control_index % 8) + len(included_specs) > 8:
-                visible_control_index += 8 - (visible_control_index % 8)
-            group_x = 20 + (visible_control_index % 8) * 95
-            group_y = 86 + (visible_control_index // 8) * 95
-            group_width = 95 * len(included_specs)
+            if (visible_control_index % 7) + len(included_specs) > 7:
+                visible_control_index += 7 - (visible_control_index % 7)
+            group_x = 36 + (visible_control_index % 7) * 105
+            group_y = 116 + (visible_control_index // 7) * 110
+            group_width = 105 * len(included_specs)
             ET.SubElement(
                 tab,
                 "rectangle",
@@ -498,9 +498,9 @@ def generate_dspreset(
                     "x": str(group_x),
                     "y": str(group_y),
                     "width": str(group_width),
-                    "height": "122",
-                    "fillColor": "#11330033",
-                    "borderColor": "#66330033",
+                    "height": "132",
+                    "fillColor": "#0D330033",
+                    "borderColor": "#55330033",
                     "borderThickness": "1",
                 },
             )
@@ -508,9 +508,9 @@ def generate_dspreset(
                 tab,
                 "label",
                 {
-                    "x": str(group_x + 8),
-                    "y": str(group_y + 4),
-                    "width": str(group_width - 16),
+                    "x": str(group_x + 10),
+                    "y": str(group_y + 8),
+                    "width": str(group_width - 20),
                     "height": "24",
                     "text": title,
                     "textColor": "DD330033",
