@@ -54,7 +54,7 @@ From this folder:
 python samplesmith.py
 ```
 
-The GUI is the intended everyday route: set the name/output folder, choose pitched or pads, then record and generate the `.dspreset`. In pitched mode you can either record-detect the lowest/highest notes or type them manually, e.g. `C2`, `F#3`, or a MIDI number. It shows the key mapping for each recorded note, including MIDI numbers, so octave-label differences between Python/Reaper/Decent Sampler do not hide what is actually mapped.
+The GUI is the intended everyday route: set the name/output folder, choose pitched or pads, then record. Each recording now writes/updates the `.dspreset` automatically; the generate button is there for manual regeneration. In pitched mode you can either record-detect the lowest/highest notes or type them manually, e.g. `C2`, `F#3`, or a MIDI number. It shows the key mapping for each recorded note, including MIDI numbers, so octave-label differences between Python/Reaper/Decent Sampler do not hide what is actually mapped.
 
 ## Run the CLI
 

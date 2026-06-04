@@ -523,7 +523,9 @@ class SampleSmithApp(tk.Tk):
                 self.note_rows[note] = str(path)
                 self._refresh_pitched_mappings()
                 mapped = next(sample for sample in self.samples if sample.mode == "pitched" and sample.root_note == note)
+                preset = self._write_preset()
                 self._log(f"Recorded {note_name}: {path.name} — maps {mapping_text(mapped.lo_note, mapped.hi_note)}")
+                self._log(f"Updated Decent Sampler instrument: {preset.name}")
                 if after:
                     after()
             return apply
@@ -558,7 +560,9 @@ class SampleSmithApp(tk.Tk):
                 self._upsert_sample(info)
                 self.pad_tree.insert("", "end", values=(midi_to_name(midi_note), label, path.name))
                 self.pad_label_var.set("")
+                preset = self._write_preset()
                 self._log(f"Recorded pad {midi_to_name(midi_note)}: {path.name}")
+                self._log(f"Updated Decent Sampler instrument: {preset.name}")
             return apply
 
         self._run_worker(f"Recording pad {label}...", work)
@@ -585,12 +589,15 @@ class SampleSmithApp(tk.Tk):
             file_name = sample.path.name if self.note_rows.get(sample.root_note) else ""
             self.note_tree.item(str(sample.root_note), values=(midi_to_name(sample.root_note), mapping_text(sample.lo_note, sample.hi_note), file_name))
 
+    def _write_preset(self) -> Path:
+        samples = self._spread_recorded_pitched_samples()
+        return generate_dspreset(self.name_var.get(), self._instrument_dir(), samples)
+
     def _generate_preset(self) -> None:
         if not self.samples:
             messagebox.showwarning("SampleSmith", "No recorded samples yet.")
             return
-        samples = self._spread_recorded_pitched_samples()
-        preset = generate_dspreset(self.name_var.get(), self._instrument_dir(), samples)
+        preset = self._write_preset()
         self._log(f"Generated {preset}")
         messagebox.showinfo("SampleSmith", f"Generated:\n{preset}")
 
