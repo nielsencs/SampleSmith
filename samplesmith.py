@@ -263,6 +263,8 @@ def generate_dspreset(
     samples: list[SampleInfo],
     loop_enabled: bool = False,
     root_note_offset: int = 0,
+    reverb_ir_file: str = "",
+    reverb_mix: float = 0.0,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     root = ET.Element("DecentSampler")
@@ -280,6 +282,17 @@ def generate_dspreset(
         if loop_enabled:
             attrs["loopEnabled"] = "true"
         ET.SubElement(group, "sample", attrs)
+    if reverb_ir_file.strip() and reverb_mix > 0:
+        effects = ET.SubElement(root, "effects")
+        ET.SubElement(
+            effects,
+            "effect",
+            {
+                "type": "convolution",
+                "mix": f"{max(0.0, min(1.0, reverb_mix)):.3f}",
+                "irFile": reverb_ir_file.strip(),
+            },
+        )
     tree = ET.ElementTree(root)
     ET.indent(tree, space="  ")
     preset_path = output_dir / f"{slugify(instrument_name)}.dspreset"
@@ -316,6 +329,8 @@ class SampleSmithApp(tk.Tk):
         self.normalise_var = tk.BooleanVar(value=True)
         self.loop_enabled_var = tk.BooleanVar(value=False)
         self.root_note_offset_var = tk.IntVar(value=-12)
+        self.reverb_ir_var = tk.StringVar(value="")
+        self.reverb_mix_var = tk.DoubleVar(value=0.0)
 
         ttk.Label(project, text="Name").grid(row=0, column=0, sticky="w")
         ttk.Entry(project, textvariable=self.name_var, width=28).grid(row=0, column=1, sticky="ew", padx=4)
@@ -414,6 +429,15 @@ class SampleSmithApp(tk.Tk):
         ttk.Button(export, text="Generate / update .dspreset", command=self._generate_preset).grid(row=0, column=3, sticky="w", padx=(18, 6), pady=6)
         ttk.Button(export, text="Open output folder", command=self._open_output_folder).grid(row=0, column=4, sticky="w", padx=6, pady=6)
 
+        reverb = ttk.LabelFrame(self.decent_sampler_tab, text="Convolution reverb")
+        reverb.pack(fill="x", pady=(10, 0))
+        ttk.Label(reverb, text="IR file path in DS instrument").grid(row=0, column=0, sticky="w", padx=6, pady=6)
+        ttk.Entry(reverb, textvariable=self.reverb_ir_var, width=42).grid(row=0, column=1, sticky="ew", padx=4, pady=6)
+        ttk.Label(reverb, text="Mix 0–1").grid(row=0, column=2, sticky="w", padx=(12, 4), pady=6)
+        ttk.Spinbox(reverb, textvariable=self.reverb_mix_var, from_=0.0, to=1.0, increment=0.05, width=6, command=self._on_output_parameter_changed).grid(row=0, column=3, sticky="w", pady=6)
+        ttk.Button(reverb, text="Apply", command=self._on_output_parameter_changed).grid(row=0, column=4, sticky="w", padx=8, pady=6)
+        reverb.columnconfigure(1, weight=1)
+
         mapping = ttk.LabelFrame(self.decent_sampler_tab, text="Effective exported sample mapping")
         mapping.pack(fill="both", expand=True, pady=(10, 0))
         self.export_tree = ttk.Treeview(mapping, columns=("source", "keys", "root", "mode"), show="headings", height=10)
@@ -473,6 +497,8 @@ class SampleSmithApp(tk.Tk):
             "normalise": self.normalise_var.get(),
             "loop_enabled": self.loop_enabled_var.get(),
             "root_note_offset": self.root_note_offset_var.get(),
+            "reverb_ir_file": self.reverb_ir_var.get(),
+            "reverb_mix": self.reverb_mix_var.get(),
             "low_note": self.low_note,
             "high_note": self.high_note,
             "step": self.step_var.get(),
@@ -527,6 +553,8 @@ class SampleSmithApp(tk.Tk):
         self.normalise_var.set(bool(data.get("normalise", True)))
         self.loop_enabled_var.set(bool(data.get("loop_enabled", False)))
         self.root_note_offset_var.set(int(data.get("root_note_offset", 12)))
+        self.reverb_ir_var.set(str(data.get("reverb_ir_file", "")))
+        self.reverb_mix_var.set(float(data.get("reverb_mix", 0.0)))
         self.low_note = int(data["low_note"]) if data.get("low_note") is not None else None
         self.high_note = int(data["high_note"]) if data.get("high_note") is not None else None
         self.low_var.set(midi_to_name(self.low_note) if self.low_note is not None else "not set")
@@ -808,6 +836,8 @@ class SampleSmithApp(tk.Tk):
             samples,
             loop_enabled=self.loop_enabled_var.get(),
             root_note_offset=self.root_note_offset_var.get(),
+            reverb_ir_file=self.reverb_ir_var.get(),
+            reverb_mix=self.reverb_mix_var.get(),
         )
         self._refresh_export_mapping()
         return preset
