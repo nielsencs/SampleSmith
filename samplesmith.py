@@ -264,10 +264,10 @@ def generate_dspreset(
     loop_enabled: bool = False,
     root_note_offset: int = 0,
     delay_enabled: bool = False,
-    delay_time: float = 0.1,
-    delay_stereo_offset: float = 0.01,
-    delay_feedback: float = 0.7,
-    delay_wet_level: float = 0.1,
+    delay_time: float = 0.7,
+    delay_stereo_offset: float = 0.0,
+    delay_feedback: float = 0.2,
+    delay_wet_level: float = 0.5,
     lowpass_enabled: bool = False,
     filter_type: str = "lowpass_4pl",
     lowpass_frequency: float = 22000.0,
@@ -287,8 +287,8 @@ def generate_dspreset(
     reverb_wet_level: float = 0.5,
     chorus_enabled: bool = False,
     chorus_mix: float = 0.5,
-    chorus_mod_depth: float = 0.5,
-    chorus_mod_rate: float = 0.1,
+    chorus_mod_depth: float = 0.2,
+    chorus_mod_rate: float = 0.2,
     phaser_enabled: bool = False,
     phaser_mix: float = 0.5,
     phaser_mod_depth: float = 0.2,
@@ -501,10 +501,10 @@ class SampleSmithApp(tk.Tk):
         self.loop_enabled_var = tk.BooleanVar(value=False)
         self.root_note_offset_var = tk.IntVar(value=-12)
         self.delay_enabled_var = tk.BooleanVar(value=False)
-        self.delay_time_var = tk.DoubleVar(value=0.1)
-        self.delay_stereo_offset_var = tk.DoubleVar(value=0.01)
-        self.delay_feedback_var = tk.DoubleVar(value=0.7)
-        self.delay_wet_level_var = tk.DoubleVar(value=0.1)
+        self.delay_time_var = tk.DoubleVar(value=0.7)
+        self.delay_stereo_offset_var = tk.DoubleVar(value=0.0)
+        self.delay_feedback_var = tk.DoubleVar(value=0.2)
+        self.delay_wet_level_var = tk.DoubleVar(value=0.5)
         self.lowpass_enabled_var = tk.BooleanVar(value=False)
         self.filter_type_var = tk.StringVar(value="lowpass_4pl")
         self.lowpass_frequency_var = tk.DoubleVar(value=22000.0)
@@ -524,8 +524,8 @@ class SampleSmithApp(tk.Tk):
         self.reverb_wet_level_var = tk.DoubleVar(value=0.5)
         self.chorus_enabled_var = tk.BooleanVar(value=False)
         self.chorus_mix_var = tk.DoubleVar(value=0.5)
-        self.chorus_mod_depth_var = tk.DoubleVar(value=0.5)
-        self.chorus_mod_rate_var = tk.DoubleVar(value=0.1)
+        self.chorus_mod_depth_var = tk.DoubleVar(value=0.2)
+        self.chorus_mod_rate_var = tk.DoubleVar(value=0.2)
         self.phaser_enabled_var = tk.BooleanVar(value=False)
         self.phaser_mix_var = tk.DoubleVar(value=0.5)
         self.phaser_mod_depth_var = tk.DoubleVar(value=0.2)
@@ -661,6 +661,7 @@ class SampleSmithApp(tk.Tk):
         ttk.Spinbox(effects, textvariable=self.lowpass_frequency_var, from_=60, to=22000, increment=100, width=8).grid(row=0, column=3, sticky="w", padx=3)
         ttk.Label(effects, text="res").grid(row=0, column=4, sticky="w")
         ttk.Spinbox(effects, textvariable=self.filter_resonance_var, from_=0.001, to=5.0, increment=0.1, width=6).grid(row=0, column=5, sticky="w", padx=3)
+        ttk.Button(effects, text="defaults", command=lambda: self._set_effect_defaults("filter")).grid(row=0, column=8, sticky="w", padx=6)
 
         ttk.Checkbutton(effects, text="Notch", variable=self.notch_enabled_var, command=self._on_output_parameter_changed).grid(row=1, column=0, sticky="w", padx=6, pady=3)
         ttk.Label(effects, text="freq").grid(row=1, column=1, sticky="w")
@@ -670,71 +671,85 @@ class SampleSmithApp(tk.Tk):
         ttk.Checkbutton(effects, text="Peak", variable=self.peak_enabled_var, command=self._on_output_parameter_changed).grid(row=1, column=5, sticky="w", padx=(18, 3), pady=3)
         ttk.Label(effects, text="gain").grid(row=1, column=6, sticky="w")
         ttk.Spinbox(effects, textvariable=self.peak_gain_var, from_=0.0, to=2.0, increment=0.1, width=6).grid(row=1, column=7, sticky="w", padx=3)
+        ttk.Button(effects, text="defaults", command=lambda: self._set_effect_defaults("eq")).grid(row=1, column=8, sticky="w", padx=6)
 
         ttk.Checkbutton(effects, text="Gain", variable=self.gain_enabled_var, command=self._on_output_parameter_changed).grid(row=2, column=0, sticky="w", padx=6, pady=3)
         ttk.Label(effects, text="dB").grid(row=2, column=1, sticky="w")
         ttk.Spinbox(effects, textvariable=self.gain_level_var, from_=-99, to=24, increment=1, width=6).grid(row=2, column=2, sticky="w", padx=3)
-        ttk.Checkbutton(effects, text="Reverb", variable=self.reverb_enabled_var, command=self._on_output_parameter_changed).grid(row=2, column=3, sticky="w", padx=(18, 3), pady=3)
-        ttk.Label(effects, text="wet").grid(row=2, column=4, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.reverb_wet_level_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=2, column=5, sticky="w", padx=3)
-        ttk.Label(effects, text="room").grid(row=2, column=6, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.reverb_room_size_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=2, column=7, sticky="w", padx=3)
+        ttk.Button(effects, text="defaults", command=lambda: self._set_effect_defaults("gain")).grid(row=2, column=8, sticky="w", padx=6)
 
-        ttk.Checkbutton(effects, text="Delay", variable=self.delay_enabled_var, command=self._on_output_parameter_changed).grid(row=3, column=0, sticky="w", padx=6, pady=3)
-        ttk.Label(effects, text="time").grid(row=3, column=1, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.delay_time_var, from_=0.0, to=20.0, increment=0.05, width=6).grid(row=3, column=2, sticky="w", padx=3)
-        ttk.Label(effects, text="feedback").grid(row=3, column=3, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.delay_feedback_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=3, column=4, sticky="w", padx=3)
-        ttk.Label(effects, text="wet").grid(row=3, column=5, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.delay_wet_level_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=3, column=6, sticky="w", padx=3)
+        ttk.Checkbutton(effects, text="Reverb", variable=self.reverb_enabled_var, command=self._on_output_parameter_changed).grid(row=3, column=0, sticky="w", padx=6, pady=3)
+        ttk.Label(effects, text="wet").grid(row=3, column=1, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.reverb_wet_level_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=3, column=2, sticky="w", padx=3)
+        ttk.Label(effects, text="room").grid(row=3, column=3, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.reverb_room_size_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=3, column=4, sticky="w", padx=3)
+        ttk.Label(effects, text="damping").grid(row=3, column=5, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.reverb_damping_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=3, column=6, sticky="w", padx=3)
+        ttk.Button(effects, text="defaults", command=lambda: self._set_effect_defaults("reverb")).grid(row=3, column=8, sticky="w", padx=6)
 
-        ttk.Checkbutton(effects, text="Chorus", variable=self.chorus_enabled_var, command=self._on_output_parameter_changed).grid(row=4, column=0, sticky="w", padx=6, pady=3)
-        ttk.Label(effects, text="mix").grid(row=4, column=1, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.chorus_mix_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=4, column=2, sticky="w", padx=3)
-        ttk.Label(effects, text="depth").grid(row=4, column=3, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.chorus_mod_depth_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=4, column=4, sticky="w", padx=3)
-        ttk.Label(effects, text="rate").grid(row=4, column=5, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.chorus_mod_rate_var, from_=0.0, to=10.0, increment=0.05, width=6).grid(row=4, column=6, sticky="w", padx=3)
+        ttk.Checkbutton(effects, text="Delay", variable=self.delay_enabled_var, command=self._on_output_parameter_changed).grid(row=4, column=0, sticky="w", padx=6, pady=3)
+        ttk.Label(effects, text="time").grid(row=4, column=1, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.delay_time_var, from_=0.0, to=20.0, increment=0.05, width=6).grid(row=4, column=2, sticky="w", padx=3)
+        ttk.Label(effects, text="feedback").grid(row=4, column=3, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.delay_feedback_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=4, column=4, sticky="w", padx=3)
+        ttk.Label(effects, text="wet").grid(row=4, column=5, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.delay_wet_level_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=4, column=6, sticky="w", padx=3)
+        ttk.Button(effects, text="defaults", command=lambda: self._set_effect_defaults("delay")).grid(row=4, column=8, sticky="w", padx=6)
 
-        ttk.Checkbutton(effects, text="Phaser", variable=self.phaser_enabled_var, command=self._on_output_parameter_changed).grid(row=5, column=0, sticky="w", padx=6, pady=3)
+        ttk.Checkbutton(effects, text="Chorus", variable=self.chorus_enabled_var, command=self._on_output_parameter_changed).grid(row=5, column=0, sticky="w", padx=6, pady=3)
         ttk.Label(effects, text="mix").grid(row=5, column=1, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.phaser_mix_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=5, column=2, sticky="w", padx=3)
-        ttk.Label(effects, text="freq").grid(row=5, column=3, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.phaser_center_frequency_var, from_=0.0, to=22000, increment=50, width=8).grid(row=5, column=4, sticky="w", padx=3)
-        ttk.Checkbutton(effects, text="Pitch shift", variable=self.pitch_shift_enabled_var, command=self._on_output_parameter_changed).grid(row=5, column=5, sticky="w", padx=(18, 3), pady=3)
-        ttk.Spinbox(effects, textvariable=self.pitch_shift_var, from_=-24, to=24, increment=1, width=6).grid(row=5, column=6, sticky="w", padx=3)
+        ttk.Spinbox(effects, textvariable=self.chorus_mix_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=5, column=2, sticky="w", padx=3)
+        ttk.Label(effects, text="depth").grid(row=5, column=3, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.chorus_mod_depth_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=5, column=4, sticky="w", padx=3)
+        ttk.Label(effects, text="rate").grid(row=5, column=5, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.chorus_mod_rate_var, from_=0.0, to=10.0, increment=0.05, width=6).grid(row=5, column=6, sticky="w", padx=3)
+        ttk.Button(effects, text="defaults", command=lambda: self._set_effect_defaults("chorus")).grid(row=5, column=8, sticky="w", padx=6)
 
-        ttk.Label(effects, text="Convolution / IR").grid(row=6, column=0, sticky="w", padx=6, pady=3)
-        ttk.Entry(effects, textvariable=self.reverb_ir_var, width=30).grid(row=6, column=1, columnspan=3, sticky="ew", padx=3)
-        ttk.Label(effects, text="mix").grid(row=6, column=4, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.reverb_mix_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=6, column=5, sticky="w", padx=3)
+        ttk.Checkbutton(effects, text="Phaser", variable=self.phaser_enabled_var, command=self._on_output_parameter_changed).grid(row=6, column=0, sticky="w", padx=6, pady=3)
+        ttk.Label(effects, text="mix").grid(row=6, column=1, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.phaser_mix_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=6, column=2, sticky="w", padx=3)
+        ttk.Label(effects, text="freq").grid(row=6, column=3, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.phaser_center_frequency_var, from_=0.0, to=22000, increment=50, width=8).grid(row=6, column=4, sticky="w", padx=3)
+        ttk.Checkbutton(effects, text="Pitch shift", variable=self.pitch_shift_enabled_var, command=self._on_output_parameter_changed).grid(row=6, column=5, sticky="w", padx=(18, 3), pady=3)
+        ttk.Spinbox(effects, textvariable=self.pitch_shift_var, from_=-24, to=24, increment=1, width=6).grid(row=6, column=6, sticky="w", padx=3)
+        ttk.Button(effects, text="defaults", command=lambda: self._set_effect_defaults("modulation")).grid(row=6, column=8, sticky="w", padx=6)
 
-        ttk.Checkbutton(effects, text="Wave folder", variable=self.wave_folder_enabled_var, command=self._on_output_parameter_changed).grid(row=7, column=0, sticky="w", padx=6, pady=3)
-        ttk.Label(effects, text="drive").grid(row=7, column=1, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.wave_folder_drive_var, from_=1, to=100, increment=1, width=6).grid(row=7, column=2, sticky="w", padx=3)
-        ttk.Label(effects, text="threshold").grid(row=7, column=3, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.wave_folder_threshold_var, from_=0, to=10, increment=0.1, width=6).grid(row=7, column=4, sticky="w", padx=3)
+        ttk.Label(effects, text="Convolution / IR").grid(row=7, column=0, sticky="w", padx=6, pady=3)
+        ttk.Entry(effects, textvariable=self.reverb_ir_var, width=30).grid(row=7, column=1, columnspan=3, sticky="ew", padx=3)
+        ttk.Label(effects, text="mix").grid(row=7, column=4, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.reverb_mix_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=7, column=5, sticky="w", padx=3)
+        ttk.Button(effects, text="defaults", command=lambda: self._set_effect_defaults("convolution")).grid(row=7, column=8, sticky="w", padx=6)
 
-        ttk.Checkbutton(effects, text="Wave shaper", variable=self.wave_shaper_enabled_var, command=self._on_output_parameter_changed).grid(row=8, column=0, sticky="w", padx=6, pady=3)
+        ttk.Checkbutton(effects, text="Wave folder", variable=self.wave_folder_enabled_var, command=self._on_output_parameter_changed).grid(row=8, column=0, sticky="w", padx=6, pady=3)
         ttk.Label(effects, text="drive").grid(row=8, column=1, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.wave_shaper_drive_var, from_=1, to=1000, increment=1, width=6).grid(row=8, column=2, sticky="w", padx=3)
-        ttk.Label(effects, text="boost").grid(row=8, column=3, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.wave_shaper_drive_boost_var, from_=0, to=1, increment=0.05, width=6).grid(row=8, column=4, sticky="w", padx=3)
-        ttk.Label(effects, text="out").grid(row=8, column=5, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.wave_shaper_output_level_var, from_=0, to=1, increment=0.05, width=6).grid(row=8, column=6, sticky="w", padx=3)
+        ttk.Spinbox(effects, textvariable=self.wave_folder_drive_var, from_=1, to=100, increment=1, width=6).grid(row=8, column=2, sticky="w", padx=3)
+        ttk.Label(effects, text="threshold").grid(row=8, column=3, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.wave_folder_threshold_var, from_=0, to=10, increment=0.1, width=6).grid(row=8, column=4, sticky="w", padx=3)
+        ttk.Button(effects, text="defaults", command=lambda: self._set_effect_defaults("wave_folder")).grid(row=8, column=8, sticky="w", padx=6)
 
-        ttk.Checkbutton(effects, text="Stereo simulator", variable=self.stereo_simulator_enabled_var, command=self._on_output_parameter_changed).grid(row=9, column=0, sticky="w", padx=6, pady=3)
-        ttk.OptionMenu(effects, self.stereo_simulator_algorithm_var, self.stereo_simulator_algorithm_var.get(), "adt", "lauridsen", "schroeder").grid(row=9, column=1, sticky="w")
-        ttk.Label(effects, text="width").grid(row=9, column=2, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.stereo_simulator_width_var, from_=0, to=1, increment=0.05, width=6).grid(row=9, column=3, sticky="w", padx=3)
+        ttk.Checkbutton(effects, text="Wave shaper", variable=self.wave_shaper_enabled_var, command=self._on_output_parameter_changed).grid(row=9, column=0, sticky="w", padx=6, pady=3)
+        ttk.Label(effects, text="drive").grid(row=9, column=1, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.wave_shaper_drive_var, from_=1, to=1000, increment=1, width=6).grid(row=9, column=2, sticky="w", padx=3)
+        ttk.Label(effects, text="boost").grid(row=9, column=3, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.wave_shaper_drive_boost_var, from_=0, to=1, increment=0.05, width=6).grid(row=9, column=4, sticky="w", padx=3)
+        ttk.Label(effects, text="out").grid(row=9, column=5, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.wave_shaper_output_level_var, from_=0, to=1, increment=0.05, width=6).grid(row=9, column=6, sticky="w", padx=3)
+        ttk.Button(effects, text="defaults", command=lambda: self._set_effect_defaults("wave_shaper")).grid(row=9, column=8, sticky="w", padx=6)
 
-        ttk.Checkbutton(effects, text="Bit crusher", variable=self.bit_crusher_enabled_var, command=self._on_output_parameter_changed).grid(row=10, column=0, sticky="w", padx=6, pady=3)
-        ttk.Label(effects, text="bits").grid(row=10, column=1, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.bit_crusher_bit_depth_var, from_=1, to=24, increment=1, width=6).grid(row=10, column=2, sticky="w", padx=3)
-        ttk.Label(effects, text="rate div").grid(row=10, column=3, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.bit_crusher_sample_rate_reduction_var, from_=1, to=32, increment=1, width=6).grid(row=10, column=4, sticky="w", padx=3)
-        ttk.Label(effects, text="mix").grid(row=10, column=5, sticky="w")
-        ttk.Spinbox(effects, textvariable=self.bit_crusher_mix_var, from_=0, to=1, increment=0.05, width=6).grid(row=10, column=6, sticky="w", padx=3)
+        ttk.Checkbutton(effects, text="Stereo simulator", variable=self.stereo_simulator_enabled_var, command=self._on_output_parameter_changed).grid(row=10, column=0, sticky="w", padx=6, pady=3)
+        ttk.OptionMenu(effects, self.stereo_simulator_algorithm_var, self.stereo_simulator_algorithm_var.get(), "adt", "lauridsen", "schroeder").grid(row=10, column=1, sticky="w")
+        ttk.Label(effects, text="width").grid(row=10, column=2, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.stereo_simulator_width_var, from_=0, to=1, increment=0.05, width=6).grid(row=10, column=3, sticky="w", padx=3)
+        ttk.Button(effects, text="defaults", command=lambda: self._set_effect_defaults("stereo_simulator")).grid(row=10, column=8, sticky="w", padx=6)
+
+        ttk.Checkbutton(effects, text="Bit crusher", variable=self.bit_crusher_enabled_var, command=self._on_output_parameter_changed).grid(row=11, column=0, sticky="w", padx=6, pady=3)
+        ttk.Label(effects, text="bits").grid(row=11, column=1, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.bit_crusher_bit_depth_var, from_=1, to=24, increment=1, width=6).grid(row=11, column=2, sticky="w", padx=3)
+        ttk.Label(effects, text="rate div").grid(row=11, column=3, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.bit_crusher_sample_rate_reduction_var, from_=1, to=32, increment=1, width=6).grid(row=11, column=4, sticky="w", padx=3)
+        ttk.Label(effects, text="mix").grid(row=11, column=5, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.bit_crusher_mix_var, from_=0, to=1, increment=0.05, width=6).grid(row=11, column=6, sticky="w", padx=3)
+        ttk.Button(effects, text="defaults", command=lambda: self._set_effect_defaults("bit_crusher")).grid(row=11, column=8, sticky="w", padx=6)
 
         effects.columnconfigure(3, weight=1)
 
@@ -829,6 +844,60 @@ class SampleSmithApp(tk.Tk):
         if self._output_update_after_id is not None:
             self.after_cancel(self._output_update_after_id)
         self._output_update_after_id = self.after(600, self._on_output_parameter_changed)
+
+    def _set_effect_defaults(self, effect_group: str) -> None:
+        if effect_group == "filter":
+            self.filter_type_var.set("lowpass_4pl")
+            self.lowpass_frequency_var.set(22000.0)
+            self.filter_resonance_var.set(0.7)
+        elif effect_group == "eq":
+            self.notch_frequency_var.set(10000.0)
+            self.notch_q_var.set(0.7)
+            self.peak_frequency_var.set(10000.0)
+            self.peak_q_var.set(0.7)
+            self.peak_gain_var.set(1.0)
+        elif effect_group == "gain":
+            self.gain_level_var.set(0.0)
+        elif effect_group == "reverb":
+            self.reverb_room_size_var.set(0.7)
+            self.reverb_damping_var.set(0.3)
+            self.reverb_wet_level_var.set(0.5)
+        elif effect_group == "delay":
+            self.delay_time_var.set(0.7)
+            self.delay_stereo_offset_var.set(0.0)
+            self.delay_feedback_var.set(0.2)
+            self.delay_wet_level_var.set(0.5)
+        elif effect_group == "chorus":
+            self.chorus_mix_var.set(0.5)
+            self.chorus_mod_depth_var.set(0.2)
+            self.chorus_mod_rate_var.set(0.2)
+        elif effect_group == "modulation":
+            self.phaser_mix_var.set(0.5)
+            self.phaser_mod_depth_var.set(0.2)
+            self.phaser_mod_rate_var.set(0.2)
+            self.phaser_center_frequency_var.set(400.0)
+            self.phaser_feedback_var.set(0.7)
+            self.pitch_shift_var.set(0.0)
+            self.pitch_shift_mix_var.set(0.5)
+        elif effect_group == "convolution":
+            self.reverb_mix_var.set(0.5)
+        elif effect_group == "wave_folder":
+            self.wave_folder_drive_var.set(1.0)
+            self.wave_folder_threshold_var.set(0.25)
+        elif effect_group == "wave_shaper":
+            self.wave_shaper_drive_var.set(1.0)
+            self.wave_shaper_drive_boost_var.set(1.0)
+            self.wave_shaper_output_level_var.set(0.1)
+        elif effect_group == "stereo_simulator":
+            self.stereo_simulator_algorithm_var.set("adt")
+            self.stereo_simulator_width_var.set(0.5)
+            self.stereo_simulator_delay_time_var.set(0.005)
+            self.stereo_simulator_mod_rate_var.set(0.5)
+            self.stereo_simulator_mod_depth_var.set(0.3)
+        elif effect_group == "bit_crusher":
+            self.bit_crusher_bit_depth_var.set(24)
+            self.bit_crusher_sample_rate_reduction_var.set(1)
+            self.bit_crusher_mix_var.set(1.0)
 
     def _audio(self) -> AudioEngine:
         return AudioEngine(
@@ -973,10 +1042,10 @@ class SampleSmithApp(tk.Tk):
         self.loop_enabled_var.set(bool(data.get("loop_enabled", False)))
         self.root_note_offset_var.set(int(data.get("root_note_offset", 12)))
         self.delay_enabled_var.set(bool(data.get("delay_enabled", False)))
-        self.delay_time_var.set(float(data.get("delay_time", 0.1)))
-        self.delay_stereo_offset_var.set(float(data.get("delay_stereo_offset", 0.01)))
-        self.delay_feedback_var.set(float(data.get("delay_feedback", 0.7)))
-        self.delay_wet_level_var.set(float(data.get("delay_wet_level", 0.1)))
+        self.delay_time_var.set(float(data.get("delay_time", 0.7)))
+        self.delay_stereo_offset_var.set(float(data.get("delay_stereo_offset", 0.0)))
+        self.delay_feedback_var.set(float(data.get("delay_feedback", 0.2)))
+        self.delay_wet_level_var.set(float(data.get("delay_wet_level", 0.5)))
         self.lowpass_enabled_var.set(bool(data.get("lowpass_enabled", False)))
         self.filter_type_var.set(str(data.get("filter_type", "lowpass_4pl")))
         self.lowpass_frequency_var.set(float(data.get("lowpass_frequency", 22000.0)))
@@ -996,8 +1065,8 @@ class SampleSmithApp(tk.Tk):
         self.reverb_wet_level_var.set(float(data.get("reverb_wet_level", 0.5)))
         self.chorus_enabled_var.set(bool(data.get("chorus_enabled", False)))
         self.chorus_mix_var.set(float(data.get("chorus_mix", 0.5)))
-        self.chorus_mod_depth_var.set(float(data.get("chorus_mod_depth", 0.5)))
-        self.chorus_mod_rate_var.set(float(data.get("chorus_mod_rate", 0.1)))
+        self.chorus_mod_depth_var.set(float(data.get("chorus_mod_depth", 0.2)))
+        self.chorus_mod_rate_var.set(float(data.get("chorus_mod_rate", 0.2)))
         self.phaser_enabled_var.set(bool(data.get("phaser_enabled", False)))
         self.phaser_mix_var.set(float(data.get("phaser_mix", 0.5)))
         self.phaser_mod_depth_var.set(float(data.get("phaser_mod_depth", 0.2)))
