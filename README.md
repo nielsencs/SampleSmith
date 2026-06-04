@@ -62,7 +62,8 @@ Current Decent Sampler output parameters:
 
 - **Loop samples** — writes `loopEnabled="true"` on generated sample entries. Proper loop start/end editing is still a later feature.
 - **Root offset** — shifts exported `rootNote` values without moving the playable key ranges. Default is `-12` because Carl's first tests came out sounding an octave low; set it back to `0` if your setup does not need that correction.
-- **Convolution reverb** — adds a Decent Sampler `<effect type="convolution">` when you provide an IR file path and mix above zero. The IR file path must be valid from the `.dspreset`, e.g. `Samples/long hall.wav`; SampleSmith does not yet copy/manage IR files for you.
+- **Built-in effects** — delay, lowpass, and chorus controls write ordinary Decent Sampler `<effect>` entries, e.g. `<effect type="delay" ... />`, `<effect type="lowpass" />`, and `<effect type="chorus" ... />`.
+- **Advanced convolution reverb / IR** — adds a Decent Sampler `<effect type="convolution">` when you provide an IR file path and mix above zero. IR means impulse response; the file path must be valid from the `.dspreset`, e.g. `Samples/long hall.wav`. SampleSmith does not yet copy/manage IR files for you.
 
 ## Run the CLI
 

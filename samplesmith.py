@@ -263,6 +263,16 @@ def generate_dspreset(
     samples: list[SampleInfo],
     loop_enabled: bool = False,
     root_note_offset: int = 0,
+    delay_enabled: bool = False,
+    delay_time: float = 0.1,
+    delay_stereo_offset: float = 0.01,
+    delay_feedback: float = 0.7,
+    delay_wet_level: float = 0.1,
+    lowpass_enabled: bool = False,
+    chorus_enabled: bool = False,
+    chorus_mix: float = 0.5,
+    chorus_mod_depth: float = 0.5,
+    chorus_mod_rate: float = 0.1,
     reverb_ir_file: str = "",
     reverb_mix: float = 0.0,
 ) -> Path:
@@ -282,17 +292,38 @@ def generate_dspreset(
         if loop_enabled:
             attrs["loopEnabled"] = "true"
         ET.SubElement(group, "sample", attrs)
-    if reverb_ir_file.strip() and reverb_mix > 0:
-        effects = ET.SubElement(root, "effects")
-        ET.SubElement(
-            effects,
-            "effect",
-            {
-                "type": "convolution",
-                "mix": f"{max(0.0, min(1.0, reverb_mix)):.3f}",
-                "irFile": reverb_ir_file.strip(),
-            },
+    effects_to_write: list[tuple[str, dict[str, str]]] = []
+    if delay_enabled:
+        effects_to_write.append(
+            (
+                "delay",
+                {
+                    "delayTime": f"{delay_time:.3f}",
+                    "stereoOffset": f"{delay_stereo_offset:.3f}",
+                    "feedback": f"{delay_feedback:.3f}",
+                    "wetLevel": f"{delay_wet_level:.3f}",
+                },
+            )
         )
+    if lowpass_enabled:
+        effects_to_write.append(("lowpass", {}))
+    if chorus_enabled:
+        effects_to_write.append(
+            (
+                "chorus",
+                {
+                    "mix": f"{chorus_mix:.3f}",
+                    "modDepth": f"{chorus_mod_depth:.3f}",
+                    "modRate": f"{chorus_mod_rate:.3f}",
+                },
+            )
+        )
+    if reverb_ir_file.strip() and reverb_mix > 0:
+        effects_to_write.append(("convolution", {"mix": f"{max(0.0, min(1.0, reverb_mix)):.3f}", "irFile": reverb_ir_file.strip()}))
+    if effects_to_write:
+        effects = ET.SubElement(root, "effects")
+        for effect_type, attrs in effects_to_write:
+            ET.SubElement(effects, "effect", {"type": effect_type, **attrs})
     tree = ET.ElementTree(root)
     ET.indent(tree, space="  ")
     preset_path = output_dir / f"{slugify(instrument_name)}.dspreset"
@@ -329,6 +360,16 @@ class SampleSmithApp(tk.Tk):
         self.normalise_var = tk.BooleanVar(value=True)
         self.loop_enabled_var = tk.BooleanVar(value=False)
         self.root_note_offset_var = tk.IntVar(value=-12)
+        self.delay_enabled_var = tk.BooleanVar(value=False)
+        self.delay_time_var = tk.DoubleVar(value=0.1)
+        self.delay_stereo_offset_var = tk.DoubleVar(value=0.01)
+        self.delay_feedback_var = tk.DoubleVar(value=0.7)
+        self.delay_wet_level_var = tk.DoubleVar(value=0.1)
+        self.lowpass_enabled_var = tk.BooleanVar(value=False)
+        self.chorus_enabled_var = tk.BooleanVar(value=False)
+        self.chorus_mix_var = tk.DoubleVar(value=0.5)
+        self.chorus_mod_depth_var = tk.DoubleVar(value=0.5)
+        self.chorus_mod_rate_var = tk.DoubleVar(value=0.1)
         self.reverb_ir_var = tk.StringVar(value="")
         self.reverb_mix_var = tk.DoubleVar(value=0.0)
 
@@ -429,14 +470,37 @@ class SampleSmithApp(tk.Tk):
         ttk.Button(export, text="Generate / update .dspreset", command=self._generate_preset).grid(row=0, column=3, sticky="w", padx=(18, 6), pady=6)
         ttk.Button(export, text="Open output folder", command=self._open_output_folder).grid(row=0, column=4, sticky="w", padx=6, pady=6)
 
-        reverb = ttk.LabelFrame(self.decent_sampler_tab, text="Convolution reverb")
-        reverb.pack(fill="x", pady=(10, 0))
-        ttk.Label(reverb, text="IR file path in DS instrument").grid(row=0, column=0, sticky="w", padx=6, pady=6)
-        ttk.Entry(reverb, textvariable=self.reverb_ir_var, width=42).grid(row=0, column=1, sticky="ew", padx=4, pady=6)
-        ttk.Label(reverb, text="Mix 0–1").grid(row=0, column=2, sticky="w", padx=(12, 4), pady=6)
-        ttk.Spinbox(reverb, textvariable=self.reverb_mix_var, from_=0.0, to=1.0, increment=0.05, width=6, command=self._on_output_parameter_changed).grid(row=0, column=3, sticky="w", pady=6)
-        ttk.Button(reverb, text="Apply", command=self._on_output_parameter_changed).grid(row=0, column=4, sticky="w", padx=8, pady=6)
-        reverb.columnconfigure(1, weight=1)
+        effects = ttk.LabelFrame(self.decent_sampler_tab, text="Built-in effects")
+        effects.pack(fill="x", pady=(10, 0))
+        ttk.Checkbutton(effects, text="Delay", variable=self.delay_enabled_var, command=self._on_output_parameter_changed).grid(row=0, column=0, sticky="w", padx=6, pady=4)
+        ttk.Label(effects, text="time").grid(row=0, column=1, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.delay_time_var, from_=0.0, to=2.0, increment=0.05, width=6).grid(row=0, column=2, sticky="w", padx=3)
+        ttk.Label(effects, text="stereo").grid(row=0, column=3, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.delay_stereo_offset_var, from_=0.0, to=0.5, increment=0.01, width=6).grid(row=0, column=4, sticky="w", padx=3)
+        ttk.Label(effects, text="feedback").grid(row=0, column=5, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.delay_feedback_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=0, column=6, sticky="w", padx=3)
+        ttk.Label(effects, text="wet").grid(row=0, column=7, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.delay_wet_level_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=0, column=8, sticky="w", padx=3)
+
+        ttk.Checkbutton(effects, text="Lowpass", variable=self.lowpass_enabled_var, command=self._on_output_parameter_changed).grid(row=1, column=0, sticky="w", padx=6, pady=4)
+
+        ttk.Checkbutton(effects, text="Chorus", variable=self.chorus_enabled_var, command=self._on_output_parameter_changed).grid(row=2, column=0, sticky="w", padx=6, pady=4)
+        ttk.Label(effects, text="mix").grid(row=2, column=1, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.chorus_mix_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=2, column=2, sticky="w", padx=3)
+        ttk.Label(effects, text="depth").grid(row=2, column=3, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.chorus_mod_depth_var, from_=0.0, to=1.0, increment=0.05, width=6).grid(row=2, column=4, sticky="w", padx=3)
+        ttk.Label(effects, text="rate").grid(row=2, column=5, sticky="w")
+        ttk.Spinbox(effects, textvariable=self.chorus_mod_rate_var, from_=0.0, to=10.0, increment=0.05, width=6).grid(row=2, column=6, sticky="w", padx=3)
+        ttk.Button(effects, text="Apply effects", command=self._on_output_parameter_changed).grid(row=2, column=8, sticky="e", padx=8, pady=4)
+
+        converb = ttk.LabelFrame(self.decent_sampler_tab, text="Advanced: convolution reverb / IR")
+        converb.pack(fill="x", pady=(10, 0))
+        ttk.Label(converb, text="IR file path in DS instrument").grid(row=0, column=0, sticky="w", padx=6, pady=6)
+        ttk.Entry(converb, textvariable=self.reverb_ir_var, width=42).grid(row=0, column=1, sticky="ew", padx=4, pady=6)
+        ttk.Label(converb, text="Mix 0–1").grid(row=0, column=2, sticky="w", padx=(12, 4), pady=6)
+        ttk.Spinbox(converb, textvariable=self.reverb_mix_var, from_=0.0, to=1.0, increment=0.05, width=6, command=self._on_output_parameter_changed).grid(row=0, column=3, sticky="w", pady=6)
+        ttk.Button(converb, text="Apply", command=self._on_output_parameter_changed).grid(row=0, column=4, sticky="w", padx=8, pady=6)
+        converb.columnconfigure(1, weight=1)
 
         mapping = ttk.LabelFrame(self.decent_sampler_tab, text="Effective exported sample mapping")
         mapping.pack(fill="both", expand=True, pady=(10, 0))
@@ -497,6 +561,16 @@ class SampleSmithApp(tk.Tk):
             "normalise": self.normalise_var.get(),
             "loop_enabled": self.loop_enabled_var.get(),
             "root_note_offset": self.root_note_offset_var.get(),
+            "delay_enabled": self.delay_enabled_var.get(),
+            "delay_time": self.delay_time_var.get(),
+            "delay_stereo_offset": self.delay_stereo_offset_var.get(),
+            "delay_feedback": self.delay_feedback_var.get(),
+            "delay_wet_level": self.delay_wet_level_var.get(),
+            "lowpass_enabled": self.lowpass_enabled_var.get(),
+            "chorus_enabled": self.chorus_enabled_var.get(),
+            "chorus_mix": self.chorus_mix_var.get(),
+            "chorus_mod_depth": self.chorus_mod_depth_var.get(),
+            "chorus_mod_rate": self.chorus_mod_rate_var.get(),
             "reverb_ir_file": self.reverb_ir_var.get(),
             "reverb_mix": self.reverb_mix_var.get(),
             "low_note": self.low_note,
@@ -553,6 +627,16 @@ class SampleSmithApp(tk.Tk):
         self.normalise_var.set(bool(data.get("normalise", True)))
         self.loop_enabled_var.set(bool(data.get("loop_enabled", False)))
         self.root_note_offset_var.set(int(data.get("root_note_offset", 12)))
+        self.delay_enabled_var.set(bool(data.get("delay_enabled", False)))
+        self.delay_time_var.set(float(data.get("delay_time", 0.1)))
+        self.delay_stereo_offset_var.set(float(data.get("delay_stereo_offset", 0.01)))
+        self.delay_feedback_var.set(float(data.get("delay_feedback", 0.7)))
+        self.delay_wet_level_var.set(float(data.get("delay_wet_level", 0.1)))
+        self.lowpass_enabled_var.set(bool(data.get("lowpass_enabled", False)))
+        self.chorus_enabled_var.set(bool(data.get("chorus_enabled", False)))
+        self.chorus_mix_var.set(float(data.get("chorus_mix", 0.5)))
+        self.chorus_mod_depth_var.set(float(data.get("chorus_mod_depth", 0.5)))
+        self.chorus_mod_rate_var.set(float(data.get("chorus_mod_rate", 0.1)))
         self.reverb_ir_var.set(str(data.get("reverb_ir_file", "")))
         self.reverb_mix_var.set(float(data.get("reverb_mix", 0.0)))
         self.low_note = int(data["low_note"]) if data.get("low_note") is not None else None
@@ -836,6 +920,16 @@ class SampleSmithApp(tk.Tk):
             samples,
             loop_enabled=self.loop_enabled_var.get(),
             root_note_offset=self.root_note_offset_var.get(),
+            delay_enabled=self.delay_enabled_var.get(),
+            delay_time=self.delay_time_var.get(),
+            delay_stereo_offset=self.delay_stereo_offset_var.get(),
+            delay_feedback=self.delay_feedback_var.get(),
+            delay_wet_level=self.delay_wet_level_var.get(),
+            lowpass_enabled=self.lowpass_enabled_var.get(),
+            chorus_enabled=self.chorus_enabled_var.get(),
+            chorus_mix=self.chorus_mix_var.get(),
+            chorus_mod_depth=self.chorus_mod_depth_var.get(),
+            chorus_mod_rate=self.chorus_mod_rate_var.get(),
             reverb_ir_file=self.reverb_ir_var.get(),
             reverb_mix=self.reverb_mix_var.get(),
         )
