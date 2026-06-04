@@ -472,7 +472,7 @@ class SampleSmithApp(tk.Tk):
         self.threshold_var.set(float(data.get("trim_threshold_db", -45.0)))
         self.normalise_var.set(bool(data.get("normalise", True)))
         self.loop_enabled_var.set(bool(data.get("loop_enabled", False)))
-        self.root_note_offset_var.set(int(data.get("root_note_offset", -12)))
+        self.root_note_offset_var.set(int(data.get("root_note_offset", 12)))
         self.low_note = int(data["low_note"]) if data.get("low_note") is not None else None
         self.high_note = int(data["high_note"]) if data.get("high_note") is not None else None
         self.low_var.set(midi_to_name(self.low_note) if self.low_note is not None else "not set")
