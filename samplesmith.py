@@ -482,6 +482,7 @@ class SampleSmithApp(tk.Tk):
         self.high_note: int | None = None
         self.note_rows: dict[int, str] = {}
         self.pad_note = DEFAULT_PAD_START_NOTE
+        self._output_update_after_id: str | None = None
         self._build_ui()
         self.after(100, self._drain_queue)
 
@@ -579,6 +580,7 @@ class SampleSmithApp(tk.Tk):
         self._build_pitched_tab()
         self._build_pads_tab()
         self._build_decent_sampler_tab()
+        self._bind_output_parameter_traces()
 
         bottom = ttk.Frame(outer)
         bottom.pack(fill="both")
@@ -734,7 +736,6 @@ class SampleSmithApp(tk.Tk):
         ttk.Label(effects, text="mix").grid(row=10, column=5, sticky="w")
         ttk.Spinbox(effects, textvariable=self.bit_crusher_mix_var, from_=0, to=1, increment=0.05, width=6).grid(row=10, column=6, sticky="w", padx=3)
 
-        ttk.Button(effects, text="Apply effects", command=self._on_output_parameter_changed).grid(row=11, column=0, sticky="w", padx=6, pady=6)
         effects.columnconfigure(3, weight=1)
 
         mapping = ttk.LabelFrame(self.decent_sampler_tab, text="Effective exported sample mapping")
@@ -761,6 +762,73 @@ class SampleSmithApp(tk.Tk):
             wraplength=820,
             justify="left",
         ).pack(anchor="w", padx=6, pady=6)
+
+    def _bind_output_parameter_traces(self) -> None:
+        output_vars = [
+            self.loop_enabled_var,
+            self.root_note_offset_var,
+            self.delay_enabled_var,
+            self.delay_time_var,
+            self.delay_stereo_offset_var,
+            self.delay_feedback_var,
+            self.delay_wet_level_var,
+            self.lowpass_enabled_var,
+            self.filter_type_var,
+            self.lowpass_frequency_var,
+            self.filter_resonance_var,
+            self.notch_enabled_var,
+            self.notch_frequency_var,
+            self.notch_q_var,
+            self.peak_enabled_var,
+            self.peak_frequency_var,
+            self.peak_q_var,
+            self.peak_gain_var,
+            self.gain_enabled_var,
+            self.gain_level_var,
+            self.reverb_enabled_var,
+            self.reverb_room_size_var,
+            self.reverb_damping_var,
+            self.reverb_wet_level_var,
+            self.chorus_enabled_var,
+            self.chorus_mix_var,
+            self.chorus_mod_depth_var,
+            self.chorus_mod_rate_var,
+            self.phaser_enabled_var,
+            self.phaser_mix_var,
+            self.phaser_mod_depth_var,
+            self.phaser_mod_rate_var,
+            self.phaser_center_frequency_var,
+            self.phaser_feedback_var,
+            self.reverb_ir_var,
+            self.reverb_mix_var,
+            self.pitch_shift_enabled_var,
+            self.pitch_shift_var,
+            self.pitch_shift_mix_var,
+            self.wave_folder_enabled_var,
+            self.wave_folder_drive_var,
+            self.wave_folder_threshold_var,
+            self.wave_shaper_enabled_var,
+            self.wave_shaper_drive_var,
+            self.wave_shaper_drive_boost_var,
+            self.wave_shaper_output_level_var,
+            self.stereo_simulator_enabled_var,
+            self.stereo_simulator_algorithm_var,
+            self.stereo_simulator_width_var,
+            self.stereo_simulator_delay_time_var,
+            self.stereo_simulator_mod_rate_var,
+            self.stereo_simulator_mod_depth_var,
+            self.bit_crusher_enabled_var,
+            self.bit_crusher_bit_depth_var,
+            self.bit_crusher_sample_rate_reduction_var,
+            self.bit_crusher_mix_var,
+        ]
+        for var in output_vars:
+            var.trace_add("write", lambda *_args: self._schedule_output_parameter_changed())
+
+    def _schedule_output_parameter_changed(self) -> None:
+        if self._output_update_after_id is not None:
+            self.after_cancel(self._output_update_after_id)
+        self._output_update_after_id = self.after(600, self._on_output_parameter_changed)
 
     def _audio(self) -> AudioEngine:
         return AudioEngine(
@@ -1298,6 +1366,7 @@ class SampleSmithApp(tk.Tk):
         return preset
 
     def _on_output_parameter_changed(self) -> None:
+        self._output_update_after_id = None
         if not self.samples:
             self._auto_save_project()
             return
