@@ -90,7 +90,7 @@ Open the `.dspreset` in Decent Sampler, including from Reaper.
 
 ## Mapping behaviour
 
-Default pitched behaviour is classic sampler spreading: SampleSmith generates a playable instrument from whatever samples have actually been recorded, even one sample. One recorded pitched sample maps across the whole keyboard. If there are two samples an octave apart, the lower sample maps downward and up to the midpoint, and the higher sample maps from the midpoint upward. This can make strange-but-useful transformed sounds, such as very low growls.
+Default pitched behaviour is classic sampler spreading: SampleSmith generates a playable instrument from whatever samples have actually been recorded, even one sample. One recorded pitched sample maps across the whole keyboard. With multiple pitched samples, each recording maps from the previous recorded root note to the next recorded root note, so neighbouring samples overlap between their home notes. For example, recorded C3/C4 maps C3 from MIDI 0–60 and C4 from MIDI 48–127, giving an overlap/blend zone between them. This can make strange-but-useful transformed sounds, such as very low growls.
 
 Possible later range modes:
 

@@ -84,8 +84,29 @@ def build_key_ranges(notes: list[int]) -> list[tuple[int, int, int]]:
     return ranges
 
 
+def build_overlapping_key_ranges(notes: list[int]) -> list[tuple[int, int, int]]:
+    """Map recorded sample roots with overlap between neighbouring home notes.
+
+    Example: roots C3/C4 become C3 -> MIDI 0-60 and C4 -> MIDI 48-127.
+    The 48-60 overlap is a layered blend zone for now; true key-based crossfades
+    can be added later if/when we add Decent Sampler fade parameters.
+    """
+    sorted_notes = sorted(notes)
+    ranges: list[tuple[int, int, int]] = []
+    for index, root in enumerate(sorted_notes):
+        lo = 0 if index == 0 else sorted_notes[index - 1]
+        hi = 127 if index == len(sorted_notes) - 1 else sorted_notes[index + 1]
+        ranges.append((root, lo, hi))
+    return ranges
+
+
 def mapping_text(lo_note: int, hi_note: int) -> str:
     return f"MIDI {lo_note}–{hi_note} ({midi_to_name(lo_note)} to {midi_to_name(hi_note)})"
+
+
+def exported_root_text(root_note: int, root_note_offset: int) -> str:
+    exported = clamp_midi_note(root_note + root_note_offset)
+    return f"MIDI {exported} ({midi_to_name(exported)})"
 
 
 @dataclass
@@ -393,6 +414,19 @@ class SampleSmithApp(tk.Tk):
         ttk.Button(export, text="Generate / update .dspreset", command=self._generate_preset).grid(row=0, column=3, sticky="w", padx=(18, 6), pady=6)
         ttk.Button(export, text="Open output folder", command=self._open_output_folder).grid(row=0, column=4, sticky="w", padx=6, pady=6)
 
+        mapping = ttk.LabelFrame(self.decent_sampler_tab, text="Effective exported sample mapping")
+        mapping.pack(fill="both", expand=True, pady=(10, 0))
+        self.export_tree = ttk.Treeview(mapping, columns=("source", "keys", "root", "mode"), show="headings", height=10)
+        self.export_tree.heading("source", text="Source WAV")
+        self.export_tree.heading("keys", text="Plays on keys")
+        self.export_tree.heading("root", text="Exported root")
+        self.export_tree.heading("mode", text="Mode")
+        self.export_tree.column("source", width=280)
+        self.export_tree.column("keys", width=230)
+        self.export_tree.column("root", width=160)
+        self.export_tree.column("mode", width=80, stretch=False)
+        self.export_tree.pack(fill="both", expand=True, padx=6, pady=6)
+
         notes = ttk.LabelFrame(self.decent_sampler_tab, text="Notes")
         notes.pack(fill="x", pady=(10, 0))
         ttk.Label(
@@ -524,6 +558,7 @@ class SampleSmithApp(tk.Tk):
         for sample in self.samples:
             if sample.mode == "pad":
                 self.pad_tree.insert("", "end", values=(midi_to_name(sample.root_note), sample.label, sample.path.name))
+        self._refresh_export_mapping()
 
     def _log(self, text: str) -> None:
         self.log.insert("end", text + "\n")
@@ -736,7 +771,7 @@ class SampleSmithApp(tk.Tk):
     def _spread_recorded_pitched_samples(self) -> list[SampleInfo]:
         pitched = [sample for sample in self.samples if sample.mode == "pitched"]
         pads = [sample for sample in self.samples if sample.mode == "pad"]
-        ranges = dict((root, (lo, hi)) for root, lo, hi in build_key_ranges([sample.root_note for sample in pitched]))
+        ranges = dict((root, (lo, hi)) for root, lo, hi in build_overlapping_key_ranges([sample.root_note for sample in pitched]))
         spread = [
             SampleInfo(path=sample.path, root_note=sample.root_note, lo_note=ranges[sample.root_note][0], hi_note=ranges[sample.root_note][1], label=sample.label, mode=sample.mode)
             for sample in pitched
@@ -750,15 +785,32 @@ class SampleSmithApp(tk.Tk):
             file_name = sample.path.name if self.note_rows.get(sample.root_note) else ""
             self.note_tree.item(str(sample.root_note), values=(midi_to_name(sample.root_note), mapping_text(sample.lo_note, sample.hi_note), file_name))
 
+    def _refresh_export_mapping(self) -> None:
+        for item in self.export_tree.get_children():
+            self.export_tree.delete(item)
+        for sample in self._spread_recorded_pitched_samples():
+            self.export_tree.insert(
+                "",
+                "end",
+                values=(
+                    sample.path.name,
+                    mapping_text(sample.lo_note, sample.hi_note),
+                    exported_root_text(sample.root_note, self.root_note_offset_var.get()),
+                    sample.mode,
+                ),
+            )
+
     def _write_preset(self) -> Path:
         samples = self._spread_recorded_pitched_samples()
-        return generate_dspreset(
+        preset = generate_dspreset(
             self.name_var.get(),
             self._instrument_dir(),
             samples,
             loop_enabled=self.loop_enabled_var.get(),
             root_note_offset=self.root_note_offset_var.get(),
         )
+        self._refresh_export_mapping()
+        return preset
 
     def _on_output_parameter_changed(self) -> None:
         if not self.samples:
