@@ -15,6 +15,7 @@ Optional, for better pitch detection:
 
 from __future__ import annotations
 
+import json
 import math
 import queue
 import re
@@ -95,6 +96,27 @@ class SampleInfo:
     hi_note: int
     label: str
     mode: str = "pitched"
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "path": str(self.path),
+            "root_note": self.root_note,
+            "lo_note": self.lo_note,
+            "hi_note": self.hi_note,
+            "label": self.label,
+            "mode": self.mode,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "SampleInfo":
+        return cls(
+            path=Path(str(data["path"])),
+            root_note=int(data["root_note"]),
+            lo_note=int(data["lo_note"]),
+            hi_note=int(data["hi_note"]),
+            label=str(data.get("label", "")),
+            mode=str(data.get("mode", "pitched")),
+        )
 
 
 class AudioEngine:
@@ -210,24 +232,23 @@ def write_silent_wav(path: Path, sample_rate: int = DEFAULT_SAMPLE_RATE) -> None
         handle.writeframes(b"\x00\x00" * int(sample_rate * 0.1))
 
 
-def generate_dspreset(instrument_name: str, output_dir: Path, samples: list[SampleInfo]) -> Path:
+def generate_dspreset(instrument_name: str, output_dir: Path, samples: list[SampleInfo], loop_enabled: bool = False) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     root = ET.Element("DecentSampler")
     groups = ET.SubElement(root, "groups")
     group = ET.SubElement(groups, "group", {"attack": "0.01", "release": "0.8"})
     for sample in samples:
-        ET.SubElement(
-            group,
-            "sample",
-            {
-                "path": sample.path.relative_to(output_dir).as_posix(),
-                "rootNote": str(sample.root_note),
-                "loNote": str(sample.lo_note),
-                "hiNote": str(sample.hi_note),
-                "loVel": "1",
-                "hiVel": "127",
-            },
-        )
+        attrs = {
+            "path": sample.path.relative_to(output_dir).as_posix(),
+            "rootNote": str(sample.root_note),
+            "loNote": str(sample.lo_note),
+            "hiNote": str(sample.hi_note),
+            "loVel": "1",
+            "hiVel": "127",
+        }
+        if loop_enabled:
+            attrs["loopEnabled"] = "true"
+        ET.SubElement(group, "sample", attrs)
     tree = ET.ElementTree(root)
     ET.indent(tree, space="  ")
     preset_path = output_dir / f"{slugify(instrument_name)}.dspreset"
@@ -242,6 +263,7 @@ class SampleSmithApp(tk.Tk):
         self.geometry("920x680")
         self.queue: queue.Queue[tuple[str, object]] = queue.Queue()
         self.samples: list[SampleInfo] = []
+        self.project_path: Path | None = None
         self.low_note: int | None = None
         self.high_note: int | None = None
         self.note_rows: dict[int, str] = {}
@@ -261,6 +283,7 @@ class SampleSmithApp(tk.Tk):
         self.record_seconds_var = tk.DoubleVar(value=4.0)
         self.threshold_var = tk.DoubleVar(value=-45.0)
         self.normalise_var = tk.BooleanVar(value=True)
+        self.loop_enabled_var = tk.BooleanVar(value=False)
 
         ttk.Label(project, text="Name").grid(row=0, column=0, sticky="w")
         ttk.Entry(project, textvariable=self.name_var, width=28).grid(row=0, column=1, sticky="ew", padx=4)
@@ -272,6 +295,9 @@ class SampleSmithApp(tk.Tk):
         ttk.Label(project, text="Trim dB").grid(row=1, column=2, sticky="w")
         ttk.Spinbox(project, textvariable=self.threshold_var, from_=-80, to=-10, increment=1, width=8).grid(row=1, column=3, sticky="w", padx=4)
         ttk.Checkbutton(project, text="Normalise", variable=self.normalise_var).grid(row=1, column=4, sticky="w")
+        ttk.Checkbutton(project, text="Loop samples", variable=self.loop_enabled_var, command=self._on_output_parameter_changed).grid(row=1, column=5, sticky="w", padx=(8, 0))
+        ttk.Button(project, text="Open project", command=self._open_project_dialog).grid(row=2, column=0, sticky="w", pady=(6, 0))
+        ttk.Button(project, text="Save project", command=self._save_project_dialog).grid(row=2, column=1, sticky="w", pady=(6, 0), padx=4)
         project.columnconfigure(3, weight=1)
 
         tabs = ttk.Notebook(outer)
@@ -365,6 +391,104 @@ class SampleSmithApp(tk.Tk):
         chosen = filedialog.askdirectory(initialdir=self.output_var.get() or str(Path.cwd()))
         if chosen:
             self.output_var.set(chosen)
+
+    def _default_project_path(self) -> Path:
+        return self._instrument_dir() / f"{slugify(self.name_var.get())}.samplesmith.json"
+
+    def _project_data(self) -> dict[str, object]:
+        return {
+            "version": 1,
+            "name": self.name_var.get(),
+            "output": self.output_var.get(),
+            "sample_rate": self.sample_rate_var.get(),
+            "record_seconds": self.record_seconds_var.get(),
+            "trim_threshold_db": self.threshold_var.get(),
+            "normalise": self.normalise_var.get(),
+            "loop_enabled": self.loop_enabled_var.get(),
+            "low_note": self.low_note,
+            "high_note": self.high_note,
+            "step": self.step_var.get(),
+            "pad_start": self.pad_start_var.get(),
+            "next_pad_note": self.pad_note,
+            "samples": [sample.to_dict() for sample in self.samples],
+        }
+
+    def _save_project(self, path: Path | None = None) -> Path:
+        target = path or self.project_path or self._default_project_path()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(self._project_data(), indent=2), encoding="utf-8")
+        self.project_path = target
+        return target
+
+    def _save_project_dialog(self) -> None:
+        initial = self.project_path or self._default_project_path()
+        chosen = filedialog.asksaveasfilename(
+            initialdir=str(initial.parent),
+            initialfile=initial.name,
+            defaultextension=".samplesmith.json",
+            filetypes=[("SampleSmith project", "*.samplesmith.json"), ("JSON", "*.json"), ("All files", "*.*")],
+        )
+        if not chosen:
+            return
+        saved = self._save_project(Path(chosen))
+        self._log(f"Saved project: {saved}")
+
+    def _auto_save_project(self) -> None:
+        try:
+            saved = self._save_project()
+            self._log(f"Saved project: {saved.name}")
+        except Exception as exc:
+            self._log(f"Could not save project: {exc}")
+
+    def _open_project_dialog(self) -> None:
+        chosen = filedialog.askopenfilename(
+            initialdir=str(self._instrument_dir()),
+            filetypes=[("SampleSmith project", "*.samplesmith.json"), ("JSON", "*.json"), ("All files", "*.*")],
+        )
+        if chosen:
+            self._open_project(Path(chosen))
+
+    def _open_project(self, path: Path) -> None:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        self.project_path = path
+        self.name_var.set(str(data.get("name", "CarlSampler")))
+        self.output_var.set(str(data.get("output", str(Path.cwd() / "captured-samplers"))))
+        self.sample_rate_var.set(int(data.get("sample_rate", DEFAULT_SAMPLE_RATE)))
+        self.record_seconds_var.set(float(data.get("record_seconds", 4.0)))
+        self.threshold_var.set(float(data.get("trim_threshold_db", -45.0)))
+        self.normalise_var.set(bool(data.get("normalise", True)))
+        self.loop_enabled_var.set(bool(data.get("loop_enabled", False)))
+        self.low_note = int(data["low_note"]) if data.get("low_note") is not None else None
+        self.high_note = int(data["high_note"]) if data.get("high_note") is not None else None
+        self.low_var.set(midi_to_name(self.low_note) if self.low_note is not None else "not set")
+        self.high_var.set(midi_to_name(self.high_note) if self.high_note is not None else "not set")
+        self.low_entry_var.set(midi_to_name(self.low_note) if self.low_note is not None else "")
+        self.high_entry_var.set(midi_to_name(self.high_note) if self.high_note is not None else "")
+        self.step_var.set(int(data.get("step", 1)))
+        self.pad_start_var.set(str(data.get("pad_start", midi_to_name(DEFAULT_PAD_START_NOTE))))
+        self.pad_note = int(data.get("next_pad_note", DEFAULT_PAD_START_NOTE))
+        self.samples = [SampleInfo.from_dict(item) for item in data.get("samples", [])]
+        self._rebuild_trees_from_project()
+        self._log(f"Opened project: {path}")
+
+    def _rebuild_trees_from_project(self) -> None:
+        for item in self.note_tree.get_children():
+            self.note_tree.delete(item)
+        for item in self.pad_tree.get_children():
+            self.pad_tree.delete(item)
+        self.note_rows.clear()
+        if self.low_note is not None and self.high_note is not None:
+            notes = note_range(self.low_note, self.high_note, self.step_var.get())
+            ranges = dict((root, (lo, hi)) for root, lo, hi in build_key_ranges(notes))
+            for note in notes:
+                lo, hi = ranges[note]
+                recorded = next((sample for sample in self.samples if sample.mode == "pitched" and sample.root_note == note), None)
+                self.note_rows[note] = str(recorded.path) if recorded else ""
+                self.note_tree.insert("", "end", iid=str(note), values=(midi_to_name(note), mapping_text(lo, hi), recorded.path.name if recorded else ""))
+            self._refresh_pitched_mappings()
+        for sample in self.samples:
+            if sample.mode == "pad":
+                self.pad_tree.insert("", "end", values=(midi_to_name(sample.root_note), sample.label, sample.path.name))
 
     def _log(self, text: str) -> None:
         self.log.insert("end", text + "\n")
@@ -526,6 +650,7 @@ class SampleSmithApp(tk.Tk):
                 preset = self._write_preset()
                 self._log(f"Recorded {note_name}: {path.name} — maps {mapping_text(mapped.lo_note, mapped.hi_note)}")
                 self._log(f"Updated Decent Sampler instrument: {preset.name}")
+                self._auto_save_project()
                 if after:
                     after()
             return apply
@@ -563,6 +688,7 @@ class SampleSmithApp(tk.Tk):
                 preset = self._write_preset()
                 self._log(f"Recorded pad {midi_to_name(midi_note)}: {path.name}")
                 self._log(f"Updated Decent Sampler instrument: {preset.name}")
+                self._auto_save_project()
             return apply
 
         self._run_worker(f"Recording pad {label}...", work)
@@ -591,7 +717,15 @@ class SampleSmithApp(tk.Tk):
 
     def _write_preset(self) -> Path:
         samples = self._spread_recorded_pitched_samples()
-        return generate_dspreset(self.name_var.get(), self._instrument_dir(), samples)
+        return generate_dspreset(self.name_var.get(), self._instrument_dir(), samples, loop_enabled=self.loop_enabled_var.get())
+
+    def _on_output_parameter_changed(self) -> None:
+        if not self.samples:
+            self._auto_save_project()
+            return
+        preset = self._write_preset()
+        self._log(f"Updated Decent Sampler instrument: {preset.name}")
+        self._auto_save_project()
 
     def _generate_preset(self) -> None:
         if not self.samples:
