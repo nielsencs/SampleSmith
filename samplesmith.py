@@ -403,10 +403,13 @@ def generate_dspreset(
             (ds_knob_delay_wet and "delay" in effect_positions, "delay", "Delay", "FX_WET_LEVEL", "0", "1", f"{delay_wet_level:.3f}", "0.500"),
             (ds_knob_chorus_mix and "chorus" in effect_positions, "chorus", "Chorus", "FX_MIX", "0", "1", f"{chorus_mix:.3f}", "0.500"),
         ]
+        show_reverb_room = ds_knob_reverb_room and "reverb" in effect_positions
+        show_reverb_damping = ds_knob_reverb_damping and "reverb" in effect_positions
+        reverb_amount_label = "Amount" if show_reverb_room or show_reverb_damping else "Reverb"
         reverb_knob_specs = [
-            (ds_knob_reverb_wet and "reverb" in effect_positions, "reverb", "Amount", "FX_REVERB_WET_LEVEL", "0", "1", f"{reverb_wet_level:.3f}", "0.500"),
-            (ds_knob_reverb_room and "reverb" in effect_positions, "reverb", "Room", "FX_REVERB_ROOM_SIZE", "0", "1", f"{reverb_room_size:.3f}", "0.700"),
-            (ds_knob_reverb_damping and "reverb" in effect_positions, "reverb", "Damp", "FX_REVERB_DAMPING", "0", "1", f"{reverb_damping:.3f}", "0.300"),
+            (ds_knob_reverb_wet and "reverb" in effect_positions, "reverb", reverb_amount_label, "FX_REVERB_WET_LEVEL", "0", "1", f"{reverb_wet_level:.3f}", "0.500"),
+            (show_reverb_room, "reverb", "Room", "FX_REVERB_ROOM_SIZE", "0", "1", f"{reverb_room_size:.3f}", "0.700"),
+            (show_reverb_damping, "reverb", "Damp", "FX_REVERB_DAMPING", "0", "1", f"{reverb_damping:.3f}", "0.300"),
         ]
         extra_knob_specs = [
             (ds_knob_delay_time and "delay" in effect_positions, "delay", "Echo Time", "FX_DELAY_TIME", "0", "20", f"{delay_time:.3f}", "0.700"),
