@@ -398,13 +398,17 @@ def generate_dspreset(
         effect_positions = {effect_type: position for position, (effect_type, _attrs) in enumerate(effects_to_write)}
         filter_effect_types = {"lowpass", "lowpass_1pl", "lowpass_4pl", "bandpass", "highpass"}
         filter_effect_type = next((effect_type for effect_type in effect_positions if effect_type in filter_effect_types), "lowpass")
-        knob_specs = [
+        main_knob_specs = [
             (ds_knob_tone and filter_effect_type in effect_positions, filter_effect_type, "Tone", "FX_FILTER_FREQUENCY", "60", "22000", f"{lowpass_frequency:.1f}", "22000.0"),
-            (ds_knob_reverb_wet and "reverb" in effect_positions, "reverb", "Reverb", "FX_REVERB_WET_LEVEL", "0", "1", f"{reverb_wet_level:.3f}", "0.500"),
             (ds_knob_delay_wet and "delay" in effect_positions, "delay", "Delay", "FX_WET_LEVEL", "0", "1", f"{delay_wet_level:.3f}", "0.500"),
             (ds_knob_chorus_mix and "chorus" in effect_positions, "chorus", "Chorus", "FX_MIX", "0", "1", f"{chorus_mix:.3f}", "0.500"),
+        ]
+        reverb_knob_specs = [
+            (ds_knob_reverb_wet and "reverb" in effect_positions, "reverb", "Amount", "FX_REVERB_WET_LEVEL", "0", "1", f"{reverb_wet_level:.3f}", "0.500"),
             (ds_knob_reverb_room and "reverb" in effect_positions, "reverb", "Room", "FX_REVERB_ROOM_SIZE", "0", "1", f"{reverb_room_size:.3f}", "0.700"),
             (ds_knob_reverb_damping and "reverb" in effect_positions, "reverb", "Damp", "FX_REVERB_DAMPING", "0", "1", f"{reverb_damping:.3f}", "0.300"),
+        ]
+        extra_knob_specs = [
             (ds_knob_delay_time and "delay" in effect_positions, "delay", "Echo Time", "FX_DELAY_TIME", "0", "20", f"{delay_time:.3f}", "0.700"),
             (ds_knob_delay_feedback and "delay" in effect_positions, "delay", "Feedback", "FX_FEEDBACK", "0", "1", f"{delay_feedback:.3f}", "0.200"),
             ("notch" in effect_positions, "notch", "Notch", "FX_FILTER_FREQUENCY", "60", "22000", f"{notch_frequency:.1f}", "10000.0"),
@@ -418,9 +422,9 @@ def generate_dspreset(
             ("bit_crusher" in effect_positions, "bit_crusher", "Bits", "FX_BIT_DEPTH", "1", "24", str(bit_crusher_bit_depth), "24"),
         ]
         visible_control_index = 0
-        for include_knob, effect_type, label, parameter, min_value, max_value, value, default_value in knob_specs:
-            if not include_knob:
-                continue
+
+        def add_effect_knob(effect_type: str, label: str, parameter: str, min_value: str, max_value: str, value: str, default_value: str) -> None:
+            nonlocal visible_control_index
             position = effect_positions[effect_type]
             x_pos = 20 + (visible_control_index % 8) * 95
             y_pos = 110 + (visible_control_index // 8) * 95
@@ -456,6 +460,51 @@ def generate_dspreset(
                     "parameter": parameter,
                 },
             )
+
+        for include_knob, effect_type, label, parameter, min_value, max_value, value, default_value in main_knob_specs[:1]:
+            if include_knob:
+                add_effect_knob(effect_type, label, parameter, min_value, max_value, value, default_value)
+
+        included_reverb_knobs = [spec for spec in reverb_knob_specs if spec[0]]
+        if included_reverb_knobs:
+            if (visible_control_index % 8) + len(included_reverb_knobs) > 8:
+                visible_control_index += 8 - (visible_control_index % 8)
+            group_x = 20 + (visible_control_index % 8) * 95
+            group_y = 86 + (visible_control_index // 8) * 95
+            group_width = 95 * len(included_reverb_knobs)
+            ET.SubElement(
+                tab,
+                "rectangle",
+                {
+                    "x": str(group_x),
+                    "y": str(group_y),
+                    "width": str(group_width),
+                    "height": "122",
+                    "fillColor": "#11330033",
+                    "borderColor": "#66330033",
+                    "borderThickness": "1",
+                },
+            )
+            ET.SubElement(
+                tab,
+                "label",
+                {
+                    "x": str(group_x + 8),
+                    "y": str(group_y + 4),
+                    "width": str(group_width - 16),
+                    "height": "24",
+                    "text": "Reverb",
+                    "textColor": "DD330033",
+                    "textSize": "18",
+                    "hAlign": "left",
+                },
+            )
+            for _include_knob, effect_type, label, parameter, min_value, max_value, value, default_value in included_reverb_knobs:
+                add_effect_knob(effect_type, label, parameter, min_value, max_value, value, default_value)
+
+        for include_knob, effect_type, label, parameter, min_value, max_value, value, default_value in main_knob_specs[1:] + extra_knob_specs:
+            if include_knob:
+                add_effect_knob(effect_type, label, parameter, min_value, max_value, value, default_value)
 
     groups = ET.SubElement(root, "groups")
     group = ET.SubElement(groups, "group", {"attack": "0.01", "release": "0.8"})
