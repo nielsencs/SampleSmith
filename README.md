@@ -58,7 +58,10 @@ The GUI is the intended everyday route: set the name/output folder, choose pitch
 
 In pitched mode you can either record-detect the lowest/highest notes or type them manually, e.g. `C2`, `F#3`, or a MIDI number. It shows the key mapping for each recorded note, including MIDI numbers, so octave-label differences between Python/Reaper/Decent Sampler do not hide what is actually mapped.
 
-The first Decent Sampler output parameter is **Loop samples**. When enabled, SampleSmith writes `loopEnabled="true"` on generated sample entries. Proper loop start/end editing is still a later feature.
+Current Decent Sampler output parameters:
+
+- **Loop samples** — writes `loopEnabled="true"` on generated sample entries. Proper loop start/end editing is still a later feature.
+- **Root offset** — shifts exported `rootNote` values without moving the playable key ranges. Default is `-12` because Carl's first tests came out sounding an octave low; set it back to `0` if your setup does not need that correction.
 
 ## Run the CLI
 

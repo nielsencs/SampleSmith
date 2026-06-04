@@ -232,7 +232,17 @@ def write_silent_wav(path: Path, sample_rate: int = DEFAULT_SAMPLE_RATE) -> None
         handle.writeframes(b"\x00\x00" * int(sample_rate * 0.1))
 
 
-def generate_dspreset(instrument_name: str, output_dir: Path, samples: list[SampleInfo], loop_enabled: bool = False) -> Path:
+def clamp_midi_note(midi_note: int) -> int:
+    return max(0, min(127, midi_note))
+
+
+def generate_dspreset(
+    instrument_name: str,
+    output_dir: Path,
+    samples: list[SampleInfo],
+    loop_enabled: bool = False,
+    root_note_offset: int = 0,
+) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     root = ET.Element("DecentSampler")
     groups = ET.SubElement(root, "groups")
@@ -240,7 +250,7 @@ def generate_dspreset(instrument_name: str, output_dir: Path, samples: list[Samp
     for sample in samples:
         attrs = {
             "path": sample.path.relative_to(output_dir).as_posix(),
-            "rootNote": str(sample.root_note),
+            "rootNote": str(clamp_midi_note(sample.root_note + root_note_offset)),
             "loNote": str(sample.lo_note),
             "hiNote": str(sample.hi_note),
             "loVel": "1",
@@ -284,6 +294,7 @@ class SampleSmithApp(tk.Tk):
         self.threshold_var = tk.DoubleVar(value=-45.0)
         self.normalise_var = tk.BooleanVar(value=True)
         self.loop_enabled_var = tk.BooleanVar(value=False)
+        self.root_note_offset_var = tk.IntVar(value=-12)
 
         ttk.Label(project, text="Name").grid(row=0, column=0, sticky="w")
         ttk.Entry(project, textvariable=self.name_var, width=28).grid(row=0, column=1, sticky="ew", padx=4)
@@ -296,6 +307,8 @@ class SampleSmithApp(tk.Tk):
         ttk.Spinbox(project, textvariable=self.threshold_var, from_=-80, to=-10, increment=1, width=8).grid(row=1, column=3, sticky="w", padx=4)
         ttk.Checkbutton(project, text="Normalise", variable=self.normalise_var).grid(row=1, column=4, sticky="w")
         ttk.Checkbutton(project, text="Loop samples", variable=self.loop_enabled_var, command=self._on_output_parameter_changed).grid(row=1, column=5, sticky="w", padx=(8, 0))
+        ttk.Label(project, text="Root offset").grid(row=2, column=2, sticky="w", pady=(6, 0))
+        ttk.Spinbox(project, textvariable=self.root_note_offset_var, from_=-36, to=36, increment=12, width=6, command=self._on_output_parameter_changed).grid(row=2, column=3, sticky="w", pady=(6, 0), padx=4)
         ttk.Button(project, text="Open project", command=self._open_project_dialog).grid(row=2, column=0, sticky="w", pady=(6, 0))
         ttk.Button(project, text="Save project", command=self._save_project_dialog).grid(row=2, column=1, sticky="w", pady=(6, 0), padx=4)
         project.columnconfigure(3, weight=1)
@@ -405,6 +418,7 @@ class SampleSmithApp(tk.Tk):
             "trim_threshold_db": self.threshold_var.get(),
             "normalise": self.normalise_var.get(),
             "loop_enabled": self.loop_enabled_var.get(),
+            "root_note_offset": self.root_note_offset_var.get(),
             "low_note": self.low_note,
             "high_note": self.high_note,
             "step": self.step_var.get(),
@@ -458,6 +472,7 @@ class SampleSmithApp(tk.Tk):
         self.threshold_var.set(float(data.get("trim_threshold_db", -45.0)))
         self.normalise_var.set(bool(data.get("normalise", True)))
         self.loop_enabled_var.set(bool(data.get("loop_enabled", False)))
+        self.root_note_offset_var.set(int(data.get("root_note_offset", -12)))
         self.low_note = int(data["low_note"]) if data.get("low_note") is not None else None
         self.high_note = int(data["high_note"]) if data.get("high_note") is not None else None
         self.low_var.set(midi_to_name(self.low_note) if self.low_note is not None else "not set")
@@ -717,7 +732,13 @@ class SampleSmithApp(tk.Tk):
 
     def _write_preset(self) -> Path:
         samples = self._spread_recorded_pitched_samples()
-        return generate_dspreset(self.name_var.get(), self._instrument_dir(), samples, loop_enabled=self.loop_enabled_var.get())
+        return generate_dspreset(
+            self.name_var.get(),
+            self._instrument_dir(),
+            samples,
+            loop_enabled=self.loop_enabled_var.get(),
+            root_note_offset=self.root_note_offset_var.get(),
+        )
 
     def _on_output_parameter_changed(self) -> None:
         if not self.samples:
