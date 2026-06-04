@@ -1,28 +1,30 @@
 # SampleSmith
 
-A first-pass helper for building Decent Sampler instruments from sounds you can make.
+SampleSmith is a GUI tool for turning recorded sounds into playable Decent Sampler instruments.
 
-It now has two entry points:
+It is built for the practical Reaper / Decent Sampler / Audacity sort of workflow: make a sound, record it, map it sensibly, and get a `.dspreset` plus WAV samples that can be opened in Decent Sampler.
 
-- `samplesmith.py` — GUI prototype. This is the main Carl-friendly route.
-- `sampler_capture.py` — original CLI prototype, still useful for dry-runs and automation.
+The aim is classic sampler usefulness rather than laboratory purity. If you only record one pitched sample, SampleSmith spreads it across the keyboard. If you record several, it maps them into overlapping ranges so each sample keeps its home note while still giving you the transformed low/high sampler sounds that can be musically useful.
 
-It is designed for two workflows:
+## What it does
 
-1. **Pitched mode** — for voice, whistles, single-note instruments, etc.
-   - asks for an instrument name
-   - records the lowest usable note and detects the pitch
-   - records the highest usable note and detects the pitch
-   - plays each reference note in the range
-   - records you copying that note
-   - trims/normalises the WAV
-   - creates a basic Decent Sampler `.dspreset`
+SampleSmith currently supports two main workflows:
 
-2. **Unpitched / pad mode** — for hits, breaths, mouth noises, objects, scrapes, claps, etc.
-   - asks for a kit/instrument name
-   - records labelled sounds
-   - maps each sound to consecutive MIDI notes/pads
-   - creates a basic Decent Sampler `.dspreset`
+1. **Pitched instruments** — for voice, whistles, single-note instruments, growls, drones, etc.
+   - detect or manually enter the lowest and highest notes
+   - build a note list across the range
+   - play reference notes
+   - record matching samples
+   - trim and normalise the WAVs
+   - map the recorded samples across the keyboard
+   - generate a Decent Sampler `.dspreset`
+
+2. **Unpitched / pad instruments** — for hits, breaths, mouth noises, objects, scrapes, claps, one-shots, etc.
+   - record labelled sounds
+   - map each sound to consecutive MIDI notes/pads
+   - generate a Decent Sampler `.dspreset`
+
+SampleSmith also saves a `.samplesmith.json` project file so an instrument can be reopened and extended later.
 
 ## Install dependencies
 
@@ -44,9 +46,9 @@ Optional, for better pitch detection:
 python -m pip install librosa
 ```
 
-Without `librosa`, the script uses a simpler built-in autocorrelation pitch detector. That may be fine for clear monophonic sounds, but it will be less reliable for breathy/noisy notes.
+Without `librosa`, SampleSmith uses a simpler built-in autocorrelation pitch detector. That may be fine for clear monophonic sounds, but it will be less reliable for breathy/noisy notes.
 
-## Run the GUI
+## Run SampleSmith
 
 From this folder:
 
@@ -54,36 +56,16 @@ From this folder:
 python samplesmith.py
 ```
 
-The GUI is the intended everyday route: set the name/output folder, choose pitched or pads, then record. Each recording now writes/updates both the `.dspreset` and a `.samplesmith.json` project file automatically; the generate/save buttons are there for manual regeneration. Use **Open project** to return to an existing SampleSmith project. Decent Sampler export settings live on their own **Decent Sampler** tab so loop and playback controls can grow there.
+Set the instrument name and output folder, choose **Pitched** or **Unpitched / Pads**, then record. Each recording writes/updates both the `.dspreset` and the `.samplesmith.json` project file automatically; the generate/save buttons are there for manual regeneration.
 
-In pitched mode you can either record-detect the lowest/highest notes or type them manually, e.g. `C2`, `F#3`, or a MIDI number. It shows the key mapping for each recorded note, including MIDI numbers, so octave-label differences between Python/Reaper/Decent Sampler do not hide what is actually mapped.
-
-Current Decent Sampler output parameters:
-
-- **Loop samples** — writes `loopEnabled="true"` on generated sample entries. Proper loop start/end editing is still a later feature.
-- **Root offset** — shifts exported `rootNote` values without moving the playable key ranges. Default is `-12` because Carl's first tests came out sounding an octave low; set it back to `0` if your setup does not need that correction.
-- **DS default-style effects** — tone writes `<effect type="lowpass_4pl" frequency="..." />`; reverb writes `<effect type="reverb" wetLevel="..." />`, matching the style used by Decent Sampler's default piano preset.
-- **Experimental effects** — delay and chorus controls write ordinary Decent Sampler `<effect>` entries, but these are less verified than the default-style tone/reverb controls.
-- **Advanced convolution reverb / IR** — adds a Decent Sampler `<effect type="convolution">` when you provide an IR file path and mix above zero. IR means impulse response; the file path must be valid from the `.dspreset`, e.g. `Samples/long hall.wav`. SampleSmith does not yet copy/manage IR files for you.
-
-## Run the CLI
-
-```bash
-python sampler_capture.py
-```
-
-Or choose a mode directly:
-
-```bash
-python sampler_capture.py --mode pitched --name VoiceAh
-python sampler_capture.py --mode pads --name MouthPercussion
-```
+Use **Open project** to return to an existing SampleSmith project.
 
 Output defaults to:
 
 ```text
 captured-samplers/<InstrumentName>/
   <InstrumentName>.dspreset
+  <InstrumentName>.samplesmith.json
   Samples/
     <InstrumentName>_C3.wav
     ...
@@ -91,9 +73,15 @@ captured-samplers/<InstrumentName>/
 
 Open the `.dspreset` in Decent Sampler, including from Reaper.
 
-## Mapping behaviour
+## Pitched mapping behaviour
 
-Default pitched behaviour is classic sampler spreading: SampleSmith generates a playable instrument from whatever samples have actually been recorded, even one sample. One recorded pitched sample maps across the whole keyboard. With multiple pitched samples, each recording maps from the previous recorded root note to the next recorded root note, so neighbouring samples overlap between their home notes. For example, recorded C3/C4 maps C3 from MIDI 0–60 and C4 from MIDI 48–127, giving an overlap/blend zone between them. This can make strange-but-useful transformed sounds, such as very low growls.
+Default pitched behaviour is classic sampler spreading: SampleSmith generates a playable instrument from whatever samples have actually been recorded, even one sample.
+
+- One recorded pitched sample maps across the whole keyboard.
+- Multiple pitched samples map from the previous recorded root note to the next recorded root note.
+- Neighbouring samples overlap between their home notes.
+
+For example, recorded C3/C4 maps C3 from MIDI `0–60` and C4 from MIDI `48–127`, giving an overlap/blend zone between them. This can make strange-but-useful transformed sounds, such as very low growls.
 
 Possible later range modes:
 
@@ -101,19 +89,23 @@ Possible later range modes:
 - captured range only
 - custom low/high playable range
 
-## Test without audio hardware
+## Decent Sampler settings
 
-This creates silent dummy WAVs and a preset, useful for checking the flow:
+Decent Sampler export settings live on their own **Decent Sampler** tab so loop, tone, reverb, and playback controls can keep growing without cluttering the recording workflow.
 
-```bash
-python sampler_capture.py --mode pads --name TestPads --dry-run
-```
+Current Decent Sampler output parameters:
 
-For the dry-run pad test, enter one or two labels, then blank to finish.
+- **Loop samples** — writes `loopEnabled="true"` on generated sample entries. Proper loop start/end editing is still a later feature.
+- **Root offset** — shifts exported `rootNote` values without moving the playable key ranges. Default is `-12` because early tests came out sounding an octave low; set it back to `0` if your setup does not need that correction.
+- **DS default-style effects** — tone writes `<effect type="lowpass_4pl" frequency="..." />`; reverb writes `<effect type="reverb" wetLevel="..." />`, matching the style used by Decent Sampler's default piano preset.
+- **Experimental effects** — delay and chorus controls write ordinary Decent Sampler `<effect>` entries, but these are less verified than the default-style tone/reverb controls.
+- **Advanced convolution reverb / IR** — adds a Decent Sampler `<effect type="convolution">` when you provide an IR file path and mix above zero. IR means impulse response; the file path must be valid from the `.dspreset`, e.g. `Samples/long hall.wav`. SampleSmith does not yet copy/manage IR files for you.
+
+The **Effective exported sample mapping** table shows which WAV will play on which MIDI keys, including exported root notes, so octave-label differences between Python/Reaper/Decent Sampler do not hide what is actually mapped.
 
 ## Current limits / next improvements
 
-This is an MVP, not the finished musical tool.
+SampleSmith is useful now, but still growing.
 
 Likely next steps:
 

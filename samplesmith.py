@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""SampleSmith - a small GUI helper for building Decent Sampler instruments.
+"""SampleSmith - GUI tool for building Decent Sampler instruments.
 
-This is an MVP. It gives Carl a visual workflow for:
-- pitched sampling: detect sung/played lowest and highest notes, build a note list,
-  play references, record/trim samples, and generate a .dspreset;
+SampleSmith gives a visual workflow for:
+- pitched sampling: detect or enter note ranges, play references, record/trim
+  samples, map them across the keyboard, and generate a .dspreset;
 - unpitched/pad sampling: record labelled sounds onto consecutive MIDI pads and
   generate a .dspreset.
 
