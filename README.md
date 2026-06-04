@@ -97,8 +97,8 @@ Current Decent Sampler output parameters:
 
 - **Loop samples** — writes `loopEnabled="true"` on generated sample entries. Proper loop start/end editing is still a later feature.
 - **Root offset** — shifts exported `rootNote` values without moving the playable key ranges. Default is `-12` because early tests came out sounding an octave low; set it back to `0` if your setup does not need that correction.
-- **DS default-style effects** — tone writes `<effect type="lowpass_4pl" frequency="..." />`; reverb writes `<effect type="reverb" wetLevel="..." />`, matching the style used by Decent Sampler's default piano preset.
-- **Experimental effects** — delay and chorus controls write ordinary Decent Sampler `<effect>` entries, but these are less verified than the default-style tone/reverb controls.
+- **DS default-style effects** — tone writes `<effect type="lowpass_4pl" frequency="..." />`; reverb writes `<effect type="reverb" wetLevel="..." />`, matching the style used by Decent Sampler's default piano preset. When effects are enabled, SampleSmith also writes a simple Decent Sampler `<ui>` tab with visible knobs bound to the correct effect positions.
+- **Experimental effects** — delay and chorus controls write ordinary Decent Sampler `<effect>` entries and visible bound knobs, but these are less verified than the default-style tone/reverb controls.
 - **Advanced convolution reverb / IR** — adds a Decent Sampler `<effect type="convolution">` when you provide an IR file path and mix above zero. IR means impulse response; the file path must be valid from the `.dspreset`, e.g. `Samples/long hall.wav`. SampleSmith does not yet copy/manage IR files for you.
 
 The **Effective exported sample mapping** table shows which WAV will play on which MIDI keys, including exported root notes, so octave-label differences between Python/Reaper/Decent Sampler do not hide what is actually mapped.

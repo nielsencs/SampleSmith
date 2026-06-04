@@ -280,21 +280,6 @@ def generate_dspreset(
     reverb_mix: float = 0.0,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    root = ET.Element("DecentSampler", {"pluginVersion": "1"})
-    groups = ET.SubElement(root, "groups")
-    group = ET.SubElement(groups, "group", {"attack": "0.01", "release": "0.8"})
-    for sample in samples:
-        attrs = {
-            "path": sample.path.relative_to(output_dir).as_posix(),
-            "rootNote": str(clamp_midi_note(sample.root_note + root_note_offset)),
-            "loNote": str(sample.lo_note),
-            "hiNote": str(sample.hi_note),
-            "loVel": "1",
-            "hiVel": "127",
-        }
-        if loop_enabled:
-            attrs["loopEnabled"] = "true"
-        ET.SubElement(group, "sample", attrs)
     effects_to_write: list[tuple[str, dict[str, str]]] = []
     if delay_enabled:
         effects_to_write.append(
@@ -325,6 +310,79 @@ def generate_dspreset(
         )
     if reverb_ir_file.strip() and reverb_mix > 0:
         effects_to_write.append(("convolution", {"mix": f"{max(0.0, min(1.0, reverb_mix)):.3f}", "irFile": reverb_ir_file.strip()}))
+
+    root = ET.Element("DecentSampler", {"pluginVersion": "1"})
+    if effects_to_write:
+        ui = ET.SubElement(root, "ui", {"width": "812", "height": "375"})
+        tab = ET.SubElement(ui, "tab", {"name": "main"})
+        ET.SubElement(
+            tab,
+            "label",
+            {
+                "x": "20",
+                "y": "30",
+                "width": "360",
+                "text": instrument_name,
+                "textColor": "DD330033",
+                "textSize": "42",
+            },
+        )
+        control_specs = {
+            "delay": ("Echo", "FX_WET_LEVEL", "0", "1", f"{delay_wet_level:.3f}"),
+            "lowpass_4pl": ("Tone", "FX_FILTER_FREQUENCY", "60", "22000", f"{lowpass_frequency:.1f}"),
+            "reverb": ("Reverb", "FX_REVERB_WET_LEVEL", "0", "1", f"{reverb_wet_level:.3f}"),
+            "chorus": ("Chorus", "FX_MIX", "0", "1", f"{chorus_mix:.3f}"),
+            "convolution": ("IR Verb", "FX_MIX", "0", "1", f"{reverb_mix:.3f}"),
+        }
+        for position, (effect_type, _attrs) in enumerate(effects_to_write):
+            if effect_type not in control_specs:
+                continue
+            label, parameter, min_value, max_value, value = control_specs[effect_type]
+            knob = ET.SubElement(
+                tab,
+                "labeled-knob",
+                {
+                    "x": str(400 + position * 95),
+                    "y": "30",
+                    "width": "95",
+                    "label": label,
+                    "parameterName": label,
+                    "type": "float",
+                    "minValue": min_value,
+                    "maxValue": max_value,
+                    "value": value,
+                    "textColor": "DD330033",
+                    "textSize": "24",
+                    "style": "rotary",
+                    "trackForegroundColor": "EEFFFFFF",
+                    "trackBackgroundColor": "77330033",
+                },
+            )
+            ET.SubElement(
+                knob,
+                "binding",
+                {
+                    "type": "effect",
+                    "level": "instrument",
+                    "position": str(position),
+                    "parameter": parameter,
+                },
+            )
+
+    groups = ET.SubElement(root, "groups")
+    group = ET.SubElement(groups, "group", {"attack": "0.01", "release": "0.8"})
+    for sample in samples:
+        attrs = {
+            "path": sample.path.relative_to(output_dir).as_posix(),
+            "rootNote": str(clamp_midi_note(sample.root_note + root_note_offset)),
+            "loNote": str(sample.lo_note),
+            "hiNote": str(sample.hi_note),
+            "loVel": "1",
+            "hiVel": "127",
+        }
+        if loop_enabled:
+            attrs["loopEnabled"] = "true"
+        ET.SubElement(group, "sample", attrs)
     if effects_to_write:
         effects = ET.SubElement(root, "effects")
         for effect_type, attrs in effects_to_write:
