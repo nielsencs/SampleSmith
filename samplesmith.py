@@ -295,6 +295,7 @@ def generate_dspreset(
     phaser_mod_rate: float = 0.2,
     phaser_center_frequency: float = 400.0,
     phaser_feedback: float = 0.7,
+    convolution_enabled: bool = False,
     reverb_ir_file: str = "",
     reverb_mix: float = 0.0,
     pitch_shift_enabled: bool = False,
@@ -318,13 +319,39 @@ def generate_dspreset(
     bit_crusher_sample_rate_reduction: int = 1,
     bit_crusher_mix: float = 1.0,
     ds_knob_tone: bool = True,
+    ds_knob_filter_resonance: bool = False,
+    ds_knob_notch_frequency: bool = False,
+    ds_knob_notch_q: bool = False,
+    ds_knob_peak_frequency: bool = False,
+    ds_knob_peak_q: bool = False,
+    ds_knob_peak_gain: bool = False,
+    ds_knob_gain_level: bool = False,
     ds_knob_reverb_wet: bool = True,
     ds_knob_reverb_room: bool = False,
     ds_knob_reverb_damping: bool = False,
     ds_knob_delay_wet: bool = True,
     ds_knob_delay_time: bool = False,
+    ds_knob_delay_stereo_offset: bool = False,
     ds_knob_delay_feedback: bool = False,
     ds_knob_chorus_mix: bool = True,
+    ds_knob_chorus_depth: bool = False,
+    ds_knob_chorus_rate: bool = False,
+    ds_knob_phaser_mix: bool = False,
+    ds_knob_phaser_depth: bool = False,
+    ds_knob_phaser_rate: bool = False,
+    ds_knob_phaser_frequency: bool = False,
+    ds_knob_phaser_feedback: bool = False,
+    ds_knob_convolution_mix: bool = False,
+    ds_knob_pitch_shift: bool = False,
+    ds_knob_pitch_shift_mix: bool = False,
+    ds_knob_wave_folder_drive: bool = False,
+    ds_knob_wave_folder_threshold: bool = False,
+    ds_knob_wave_shaper_drive: bool = False,
+    ds_knob_wave_shaper_boost: bool = False,
+    ds_knob_wave_shaper_output: bool = False,
+    ds_knob_stereo_width: bool = False,
+    ds_knob_bit_depth: bool = False,
+    ds_knob_bit_crusher_mix: bool = False,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     effects_to_write: list[tuple[str, dict[str, str]]] = []
@@ -366,7 +393,7 @@ def generate_dspreset(
         )
     if phaser_enabled:
         effects_to_write.append(("phaser", {"mix": f"{phaser_mix:.3f}", "modDepth": f"{phaser_mod_depth:.3f}", "modRate": f"{phaser_mod_rate:.3f}", "centerFrequency": f"{phaser_center_frequency:.1f}", "feedback": f"{phaser_feedback:.3f}"}))
-    if reverb_ir_file.strip() and reverb_mix > 0:
+    if convolution_enabled and reverb_ir_file.strip() and reverb_mix > 0:
         effects_to_write.append(("convolution", {"mix": f"{max(0.0, min(1.0, reverb_mix)):.3f}", "irFile": reverb_ir_file.strip()}))
     if pitch_shift_enabled:
         effects_to_write.append(("pitch_shift", {"pitchShift": f"{pitch_shift:.3f}", "mix": f"{pitch_shift_mix:.3f}"}))
@@ -403,8 +430,25 @@ def generate_dspreset(
                 "Tone",
                 [
                     (ds_knob_tone and filter_effect_type in effect_positions, filter_effect_type, "Frequency", "FX_FILTER_FREQUENCY", "60", "22000", f"{lowpass_frequency:.1f}", "22000.0"),
+                    (ds_knob_filter_resonance and filter_effect_type in effect_positions and filter_effect_type != "lowpass_1pl", filter_effect_type, "Res", "FX_FILTER_RESONANCE", "0", "5", f"{filter_resonance:.3f}", "0.700"),
                 ],
             ),
+            (
+                "Notch",
+                [
+                    (ds_knob_notch_frequency and "notch" in effect_positions, "notch", "Frequency", "FX_FILTER_FREQUENCY", "60", "22000", f"{notch_frequency:.1f}", "10000.0"),
+                    (ds_knob_notch_q and "notch" in effect_positions, "notch", "Q", "FX_FILTER_Q", "0.01", "18", f"{notch_q:.3f}", "0.700"),
+                ],
+            ),
+            (
+                "Peak",
+                [
+                    (ds_knob_peak_frequency and "peak" in effect_positions, "peak", "Frequency", "FX_FILTER_FREQUENCY", "60", "22000", f"{peak_frequency:.1f}", "10000.0"),
+                    (ds_knob_peak_q and "peak" in effect_positions, "peak", "Q", "FX_FILTER_Q", "0.01", "18", f"{peak_q:.3f}", "0.700"),
+                    (ds_knob_peak_gain and "peak" in effect_positions, "peak", "Gain", "FX_FILTER_GAIN", "0", "10", f"{peak_gain:.3f}", "1.000"),
+                ],
+            ),
+            ("Gain", [(ds_knob_gain_level and "gain" in effect_positions, "gain", "Level", "LEVEL", "-99", "24", f"{gain_level:.1f}", "0.0")]),
             (
                 "Reverb",
                 [
@@ -418,6 +462,7 @@ def generate_dspreset(
                 [
                     (ds_knob_delay_wet and "delay" in effect_positions, "delay", "Amount", "FX_WET_LEVEL", "0", "1", f"{delay_wet_level:.3f}", "0.500"),
                     (ds_knob_delay_time and "delay" in effect_positions, "delay", "Time", "FX_DELAY_TIME", "0", "20", f"{delay_time:.3f}", "0.700"),
+                    (ds_knob_delay_stereo_offset and "delay" in effect_positions, "delay", "Offset", "FX_STEREO_OFFSET", "0", "1", f"{delay_stereo_offset:.3f}", "0.000"),
                     (ds_knob_delay_feedback and "delay" in effect_positions, "delay", "Feedback", "FX_FEEDBACK", "0", "1", f"{delay_feedback:.3f}", "0.200"),
                 ],
             ),
@@ -425,17 +470,51 @@ def generate_dspreset(
                 "Chorus",
                 [
                     (ds_knob_chorus_mix and "chorus" in effect_positions, "chorus", "Amount", "FX_MIX", "0", "1", f"{chorus_mix:.3f}", "0.500"),
+                    (ds_knob_chorus_depth and "chorus" in effect_positions, "chorus", "Depth", "FX_MOD_DEPTH", "0", "1", f"{chorus_mod_depth:.3f}", "0.200"),
+                    (ds_knob_chorus_rate and "chorus" in effect_positions, "chorus", "Rate", "FX_MOD_RATE", "0", "10", f"{chorus_mod_rate:.3f}", "0.200"),
                 ],
             ),
-            ("Notch", [("notch" in effect_positions, "notch", "Frequency", "FX_FILTER_FREQUENCY", "60", "22000", f"{notch_frequency:.1f}", "10000.0")]),
-            ("Peak", [("peak" in effect_positions, "peak", "Frequency", "FX_FILTER_FREQUENCY", "60", "22000", f"{peak_frequency:.1f}", "10000.0")]),
-            ("Phaser", [("phaser" in effect_positions, "phaser", "Amount", "FX_MIX", "0", "1", f"{phaser_mix:.3f}", "0.500")]),
-            ("IR Verb", [("convolution" in effect_positions, "convolution", "Amount", "FX_MIX", "0", "1", f"{reverb_mix:.3f}", "0.500")]),
-            ("Pitch", [("pitch_shift" in effect_positions, "pitch_shift", "Semitones", "FX_PITCH_SHIFT", "-24", "24", f"{pitch_shift:.3f}", "0.000")]),
-            ("Folder", [("wave_folder" in effect_positions, "wave_folder", "Drive", "FX_DRIVE", "1", "100", f"{wave_folder_drive:.3f}", "1.000")]),
-            ("Shaper", [("wave_shaper" in effect_positions, "wave_shaper", "Drive", "FX_DRIVE", "1", "1000", f"{wave_shaper_drive:.3f}", "1.000")]),
-            ("Stereo", [("stereo_simulator" in effect_positions, "stereo_simulator", "Width", "FX_WIDTH", "0", "1", f"{stereo_simulator_width:.3f}", "0.500")]),
-            ("Bits", [("bit_crusher" in effect_positions, "bit_crusher", "Depth", "FX_BIT_DEPTH", "1", "24", str(bit_crusher_bit_depth), "24")]),
+            (
+                "Phaser",
+                [
+                    (ds_knob_phaser_mix and "phaser" in effect_positions, "phaser", "Amount", "FX_MIX", "0", "1", f"{phaser_mix:.3f}", "0.500"),
+                    (ds_knob_phaser_depth and "phaser" in effect_positions, "phaser", "Depth", "FX_MOD_DEPTH", "0", "1", f"{phaser_mod_depth:.3f}", "0.200"),
+                    (ds_knob_phaser_rate and "phaser" in effect_positions, "phaser", "Rate", "FX_MOD_RATE", "0", "10", f"{phaser_mod_rate:.3f}", "0.200"),
+                    (ds_knob_phaser_frequency and "phaser" in effect_positions, "phaser", "Freq", "FX_CENTER_FREQUENCY", "0", "22000", f"{phaser_center_frequency:.1f}", "400.0"),
+                    (ds_knob_phaser_feedback and "phaser" in effect_positions, "phaser", "Feedback", "FX_FEEDBACK", "0", "1", f"{phaser_feedback:.3f}", "0.700"),
+                ],
+            ),
+            ("IR Verb", [(ds_knob_convolution_mix and "convolution" in effect_positions, "convolution", "Amount", "FX_MIX", "0", "1", f"{reverb_mix:.3f}", "0.500")]),
+            (
+                "Pitch",
+                [
+                    (ds_knob_pitch_shift and "pitch_shift" in effect_positions, "pitch_shift", "Semitones", "FX_PITCH_SHIFT", "-24", "24", f"{pitch_shift:.3f}", "0.000"),
+                    (ds_knob_pitch_shift_mix and "pitch_shift" in effect_positions, "pitch_shift", "Mix", "FX_MIX", "0", "1", f"{pitch_shift_mix:.3f}", "0.500"),
+                ],
+            ),
+            (
+                "Folder",
+                [
+                    (ds_knob_wave_folder_drive and "wave_folder" in effect_positions, "wave_folder", "Drive", "FX_DRIVE", "1", "100", f"{wave_folder_drive:.3f}", "1.000"),
+                    (ds_knob_wave_folder_threshold and "wave_folder" in effect_positions, "wave_folder", "Threshold", "FX_THRESHOLD", "0", "10", f"{wave_folder_threshold:.3f}", "0.250"),
+                ],
+            ),
+            (
+                "Shaper",
+                [
+                    (ds_knob_wave_shaper_drive and "wave_shaper" in effect_positions, "wave_shaper", "Drive", "FX_DRIVE", "1", "1000", f"{wave_shaper_drive:.3f}", "1.000"),
+                    (ds_knob_wave_shaper_boost and "wave_shaper" in effect_positions, "wave_shaper", "Boost", "FX_DRIVE_BOOST", "0", "1", f"{wave_shaper_drive_boost:.3f}", "1.000"),
+                    (ds_knob_wave_shaper_output and "wave_shaper" in effect_positions, "wave_shaper", "Out", "FX_OUTPUT_LEVEL", "0", "8", f"{wave_shaper_output_level:.3f}", "0.100"),
+                ],
+            ),
+            ("Stereo", [(ds_knob_stereo_width and "stereo_simulator" in effect_positions, "stereo_simulator", "Width", "FX_WIDTH", "0", "1", f"{stereo_simulator_width:.3f}", "0.500")]),
+            (
+                "Bits",
+                [
+                    (ds_knob_bit_depth and "bit_crusher" in effect_positions, "bit_crusher", "Depth", "FX_BIT_DEPTH", "1", "24", str(bit_crusher_bit_depth), "24"),
+                    (ds_knob_bit_crusher_mix and "bit_crusher" in effect_positions, "bit_crusher", "Mix", "FX_MIX", "0", "1", f"{bit_crusher_mix:.3f}", "1.000"),
+                ],
+            ),
         ]
         visible_control_index = 0
 
@@ -611,6 +690,7 @@ class SampleSmithApp(tk.Tk):
         self.phaser_mod_rate_var = tk.DoubleVar(value=0.2)
         self.phaser_center_frequency_var = tk.DoubleVar(value=400.0)
         self.phaser_feedback_var = tk.DoubleVar(value=0.7)
+        self.convolution_enabled_var = tk.BooleanVar(value=False)
         self.reverb_ir_var = tk.StringVar(value="")
         self.reverb_mix_var = tk.DoubleVar(value=0.0)
         self.pitch_shift_enabled_var = tk.BooleanVar(value=False)
@@ -634,13 +714,39 @@ class SampleSmithApp(tk.Tk):
         self.bit_crusher_sample_rate_reduction_var = tk.IntVar(value=1)
         self.bit_crusher_mix_var = tk.DoubleVar(value=1.0)
         self.ds_knob_tone_var = tk.BooleanVar(value=True)
+        self.ds_knob_filter_resonance_var = tk.BooleanVar(value=False)
+        self.ds_knob_notch_frequency_var = tk.BooleanVar(value=False)
+        self.ds_knob_notch_q_var = tk.BooleanVar(value=False)
+        self.ds_knob_peak_frequency_var = tk.BooleanVar(value=False)
+        self.ds_knob_peak_q_var = tk.BooleanVar(value=False)
+        self.ds_knob_peak_gain_var = tk.BooleanVar(value=False)
+        self.ds_knob_gain_level_var = tk.BooleanVar(value=False)
         self.ds_knob_reverb_wet_var = tk.BooleanVar(value=True)
         self.ds_knob_reverb_room_var = tk.BooleanVar(value=False)
         self.ds_knob_reverb_damping_var = tk.BooleanVar(value=False)
         self.ds_knob_delay_wet_var = tk.BooleanVar(value=True)
         self.ds_knob_delay_time_var = tk.BooleanVar(value=False)
+        self.ds_knob_delay_stereo_offset_var = tk.BooleanVar(value=False)
         self.ds_knob_delay_feedback_var = tk.BooleanVar(value=False)
         self.ds_knob_chorus_mix_var = tk.BooleanVar(value=True)
+        self.ds_knob_chorus_depth_var = tk.BooleanVar(value=False)
+        self.ds_knob_chorus_rate_var = tk.BooleanVar(value=False)
+        self.ds_knob_phaser_mix_var = tk.BooleanVar(value=False)
+        self.ds_knob_phaser_depth_var = tk.BooleanVar(value=False)
+        self.ds_knob_phaser_rate_var = tk.BooleanVar(value=False)
+        self.ds_knob_phaser_frequency_var = tk.BooleanVar(value=False)
+        self.ds_knob_phaser_feedback_var = tk.BooleanVar(value=False)
+        self.ds_knob_convolution_mix_var = tk.BooleanVar(value=False)
+        self.ds_knob_pitch_shift_var = tk.BooleanVar(value=False)
+        self.ds_knob_pitch_shift_mix_var = tk.BooleanVar(value=False)
+        self.ds_knob_wave_folder_drive_var = tk.BooleanVar(value=False)
+        self.ds_knob_wave_folder_threshold_var = tk.BooleanVar(value=False)
+        self.ds_knob_wave_shaper_drive_var = tk.BooleanVar(value=False)
+        self.ds_knob_wave_shaper_boost_var = tk.BooleanVar(value=False)
+        self.ds_knob_wave_shaper_output_var = tk.BooleanVar(value=False)
+        self.ds_knob_stereo_width_var = tk.BooleanVar(value=False)
+        self.ds_knob_bit_depth_var = tk.BooleanVar(value=False)
+        self.ds_knob_bit_crusher_mix_var = tk.BooleanVar(value=False)
 
         ttk.Label(project, text="Name").grid(row=0, column=0, sticky="w")
         ttk.Entry(project, textvariable=self.name_var, width=28).grid(row=0, column=1, sticky="ew", padx=4)
@@ -776,28 +882,28 @@ class SampleSmithApp(tk.Tk):
         frame = params_frame(row)
         ttk.OptionMenu(frame, self.filter_type_var, self.filter_type_var.get(), "lowpass", "lowpass_1pl", "lowpass_4pl", "bandpass", "highpass").pack(side="left", padx=(0, 10))
         spin_param(frame, "freq", self.lowpass_frequency_var, 60, 22000, 100, width=8, k_var=self.ds_knob_tone_var)
-        spin_param(frame, "res", self.filter_resonance_var, 0.001, 5.0, 0.1)
+        spin_param(frame, "res", self.filter_resonance_var, 0.001, 5.0, 0.1, k_var=self.ds_knob_filter_resonance_var)
         defaults_button(row, "filter")
 
         row += 1
         title_check(row, "Notch", self.notch_enabled_var)
         frame = params_frame(row)
-        spin_param(frame, "freq", self.notch_frequency_var, 60, 22000, 100, width=8)
-        spin_param(frame, "Q", self.notch_q_var, 0.01, 18.0, 0.1)
+        spin_param(frame, "freq", self.notch_frequency_var, 60, 22000, 100, width=8, k_var=self.ds_knob_notch_frequency_var)
+        spin_param(frame, "Q", self.notch_q_var, 0.01, 18.0, 0.1, k_var=self.ds_knob_notch_q_var)
         defaults_button(row, "eq")
 
         row += 1
         title_check(row, "Peak", self.peak_enabled_var)
         frame = params_frame(row)
-        spin_param(frame, "freq", self.peak_frequency_var, 60, 22000, 100, width=8)
-        spin_param(frame, "Q", self.peak_q_var, 0.01, 18.0, 0.1)
-        spin_param(frame, "gain", self.peak_gain_var, 0.0, 2.0, 0.1)
+        spin_param(frame, "freq", self.peak_frequency_var, 60, 22000, 100, width=8, k_var=self.ds_knob_peak_frequency_var)
+        spin_param(frame, "Q", self.peak_q_var, 0.01, 18.0, 0.1, k_var=self.ds_knob_peak_q_var)
+        spin_param(frame, "gain", self.peak_gain_var, 0.0, 2.0, 0.1, k_var=self.ds_knob_peak_gain_var)
         defaults_button(row, "eq")
 
         row += 1
         title_check(row, "Gain", self.gain_enabled_var)
         frame = params_frame(row)
-        spin_param(frame, "dB", self.gain_level_var, -99, 24, 1)
+        spin_param(frame, "dB", self.gain_level_var, -99, 24, 1, k_var=self.ds_knob_gain_level_var)
         defaults_button(row, "gain")
 
         row += 1
@@ -812,6 +918,7 @@ class SampleSmithApp(tk.Tk):
         title_check(row, "Delay", self.delay_enabled_var)
         frame = params_frame(row)
         spin_param(frame, "time", self.delay_time_var, 0.0, 20.0, 0.05, k_var=self.ds_knob_delay_time_var)
+        spin_param(frame, "offset", self.delay_stereo_offset_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_delay_stereo_offset_var)
         spin_param(frame, "feedback", self.delay_feedback_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_delay_feedback_var)
         spin_param(frame, "wet", self.delay_wet_level_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_delay_wet_var)
         defaults_button(row, "delay")
@@ -820,58 +927,62 @@ class SampleSmithApp(tk.Tk):
         title_check(row, "Chorus", self.chorus_enabled_var)
         frame = params_frame(row)
         spin_param(frame, "mix", self.chorus_mix_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_chorus_mix_var)
-        spin_param(frame, "depth", self.chorus_mod_depth_var, 0.0, 1.0, 0.05)
-        spin_param(frame, "rate", self.chorus_mod_rate_var, 0.0, 10.0, 0.05)
+        spin_param(frame, "depth", self.chorus_mod_depth_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_chorus_depth_var)
+        spin_param(frame, "rate", self.chorus_mod_rate_var, 0.0, 10.0, 0.05, k_var=self.ds_knob_chorus_rate_var)
         defaults_button(row, "chorus")
 
         row += 1
         title_check(row, "Phaser", self.phaser_enabled_var)
         frame = params_frame(row)
-        spin_param(frame, "mix", self.phaser_mix_var, 0.0, 1.0, 0.05)
-        spin_param(frame, "freq", self.phaser_center_frequency_var, 0.0, 22000, 50, width=8)
+        spin_param(frame, "mix", self.phaser_mix_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_phaser_mix_var)
+        spin_param(frame, "depth", self.phaser_mod_depth_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_phaser_depth_var)
+        spin_param(frame, "rate", self.phaser_mod_rate_var, 0.0, 10.0, 0.05, k_var=self.ds_knob_phaser_rate_var)
+        spin_param(frame, "freq", self.phaser_center_frequency_var, 0.0, 22000, 50, width=8, k_var=self.ds_knob_phaser_frequency_var)
+        spin_param(frame, "feedback", self.phaser_feedback_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_phaser_feedback_var)
         defaults_button(row, "modulation")
 
         row += 1
         title_check(row, "Pitch shift", self.pitch_shift_enabled_var)
         frame = params_frame(row)
-        spin_param(frame, "semitones", self.pitch_shift_var, -24, 24, 1)
+        spin_param(frame, "semitones", self.pitch_shift_var, -24, 24, 1, k_var=self.ds_knob_pitch_shift_var)
+        spin_param(frame, "mix", self.pitch_shift_mix_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_pitch_shift_mix_var)
         defaults_button(row, "modulation")
 
         row += 1
-        title_label(row, "Convolution / IR")
+        title_check(row, "Convolution / IR", self.convolution_enabled_var)
         frame = params_frame(row)
         ttk.Entry(frame, textvariable=self.reverb_ir_var, width=30).pack(side="left", padx=(0, 10))
-        spin_param(frame, "mix", self.reverb_mix_var, 0.0, 1.0, 0.05)
+        spin_param(frame, "mix", self.reverb_mix_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_convolution_mix_var)
         defaults_button(row, "convolution")
 
         row += 1
         title_check(row, "Wave folder", self.wave_folder_enabled_var)
         frame = params_frame(row)
-        spin_param(frame, "drive", self.wave_folder_drive_var, 1, 100, 1)
-        spin_param(frame, "threshold", self.wave_folder_threshold_var, 0, 10, 0.1)
+        spin_param(frame, "drive", self.wave_folder_drive_var, 1, 100, 1, k_var=self.ds_knob_wave_folder_drive_var)
+        spin_param(frame, "threshold", self.wave_folder_threshold_var, 0, 10, 0.1, k_var=self.ds_knob_wave_folder_threshold_var)
         defaults_button(row, "wave_folder")
 
         row += 1
         title_check(row, "Wave shaper", self.wave_shaper_enabled_var)
         frame = params_frame(row)
-        spin_param(frame, "drive", self.wave_shaper_drive_var, 1, 1000, 1)
-        spin_param(frame, "boost", self.wave_shaper_drive_boost_var, 0, 1, 0.05)
-        spin_param(frame, "out", self.wave_shaper_output_level_var, 0, 1, 0.05)
+        spin_param(frame, "drive", self.wave_shaper_drive_var, 1, 1000, 1, k_var=self.ds_knob_wave_shaper_drive_var)
+        spin_param(frame, "boost", self.wave_shaper_drive_boost_var, 0, 1, 0.05, k_var=self.ds_knob_wave_shaper_boost_var)
+        spin_param(frame, "out", self.wave_shaper_output_level_var, 0, 1, 0.05, k_var=self.ds_knob_wave_shaper_output_var)
         defaults_button(row, "wave_shaper")
 
         row += 1
         title_check(row, "Stereo simulator", self.stereo_simulator_enabled_var)
         frame = params_frame(row)
         ttk.OptionMenu(frame, self.stereo_simulator_algorithm_var, self.stereo_simulator_algorithm_var.get(), "adt", "lauridsen", "schroeder").pack(side="left", padx=(0, 10))
-        spin_param(frame, "width", self.stereo_simulator_width_var, 0, 1, 0.05)
+        spin_param(frame, "width", self.stereo_simulator_width_var, 0, 1, 0.05, k_var=self.ds_knob_stereo_width_var)
         defaults_button(row, "stereo_simulator")
 
         row += 1
         title_check(row, "Bit crusher", self.bit_crusher_enabled_var)
         frame = params_frame(row)
-        spin_param(frame, "bits", self.bit_crusher_bit_depth_var, 1, 24, 1)
+        spin_param(frame, "bits", self.bit_crusher_bit_depth_var, 1, 24, 1, k_var=self.ds_knob_bit_depth_var)
         spin_param(frame, "rate div", self.bit_crusher_sample_rate_reduction_var, 1, 32, 1)
-        spin_param(frame, "mix", self.bit_crusher_mix_var, 0, 1, 0.05)
+        spin_param(frame, "mix", self.bit_crusher_mix_var, 0, 1, 0.05, k_var=self.ds_knob_bit_crusher_mix_var)
         defaults_button(row, "bit_crusher")
 
         effects.columnconfigure(1, weight=1)
@@ -937,6 +1048,7 @@ class SampleSmithApp(tk.Tk):
             self.phaser_mod_rate_var,
             self.phaser_center_frequency_var,
             self.phaser_feedback_var,
+            self.convolution_enabled_var,
             self.reverb_ir_var,
             self.reverb_mix_var,
             self.pitch_shift_enabled_var,
@@ -960,13 +1072,39 @@ class SampleSmithApp(tk.Tk):
             self.bit_crusher_sample_rate_reduction_var,
             self.bit_crusher_mix_var,
             self.ds_knob_tone_var,
+            self.ds_knob_filter_resonance_var,
+            self.ds_knob_notch_frequency_var,
+            self.ds_knob_notch_q_var,
+            self.ds_knob_peak_frequency_var,
+            self.ds_knob_peak_q_var,
+            self.ds_knob_peak_gain_var,
+            self.ds_knob_gain_level_var,
             self.ds_knob_reverb_wet_var,
             self.ds_knob_reverb_room_var,
             self.ds_knob_reverb_damping_var,
             self.ds_knob_delay_wet_var,
             self.ds_knob_delay_time_var,
+            self.ds_knob_delay_stereo_offset_var,
             self.ds_knob_delay_feedback_var,
             self.ds_knob_chorus_mix_var,
+            self.ds_knob_chorus_depth_var,
+            self.ds_knob_chorus_rate_var,
+            self.ds_knob_phaser_mix_var,
+            self.ds_knob_phaser_depth_var,
+            self.ds_knob_phaser_rate_var,
+            self.ds_knob_phaser_frequency_var,
+            self.ds_knob_phaser_feedback_var,
+            self.ds_knob_convolution_mix_var,
+            self.ds_knob_pitch_shift_var,
+            self.ds_knob_pitch_shift_mix_var,
+            self.ds_knob_wave_folder_drive_var,
+            self.ds_knob_wave_folder_threshold_var,
+            self.ds_knob_wave_shaper_drive_var,
+            self.ds_knob_wave_shaper_boost_var,
+            self.ds_knob_wave_shaper_output_var,
+            self.ds_knob_stereo_width_var,
+            self.ds_knob_bit_depth_var,
+            self.ds_knob_bit_crusher_mix_var,
         ]
         for var in output_vars:
             var.trace_add("write", lambda *_args: self._schedule_output_parameter_changed())
@@ -1096,6 +1234,7 @@ class SampleSmithApp(tk.Tk):
             "phaser_mod_rate": self.phaser_mod_rate_var.get(),
             "phaser_center_frequency": self.phaser_center_frequency_var.get(),
             "phaser_feedback": self.phaser_feedback_var.get(),
+            "convolution_enabled": self.convolution_enabled_var.get(),
             "reverb_ir_file": self.reverb_ir_var.get(),
             "reverb_mix": self.reverb_mix_var.get(),
             "pitch_shift_enabled": self.pitch_shift_enabled_var.get(),
@@ -1119,13 +1258,39 @@ class SampleSmithApp(tk.Tk):
             "bit_crusher_sample_rate_reduction": self.bit_crusher_sample_rate_reduction_var.get(),
             "bit_crusher_mix": self.bit_crusher_mix_var.get(),
             "ds_knob_tone": self.ds_knob_tone_var.get(),
+            "ds_knob_filter_resonance": self.ds_knob_filter_resonance_var.get(),
+            "ds_knob_notch_frequency": self.ds_knob_notch_frequency_var.get(),
+            "ds_knob_notch_q": self.ds_knob_notch_q_var.get(),
+            "ds_knob_peak_frequency": self.ds_knob_peak_frequency_var.get(),
+            "ds_knob_peak_q": self.ds_knob_peak_q_var.get(),
+            "ds_knob_peak_gain": self.ds_knob_peak_gain_var.get(),
+            "ds_knob_gain_level": self.ds_knob_gain_level_var.get(),
             "ds_knob_reverb_wet": self.ds_knob_reverb_wet_var.get(),
             "ds_knob_reverb_room": self.ds_knob_reverb_room_var.get(),
             "ds_knob_reverb_damping": self.ds_knob_reverb_damping_var.get(),
             "ds_knob_delay_wet": self.ds_knob_delay_wet_var.get(),
             "ds_knob_delay_time": self.ds_knob_delay_time_var.get(),
+            "ds_knob_delay_stereo_offset": self.ds_knob_delay_stereo_offset_var.get(),
             "ds_knob_delay_feedback": self.ds_knob_delay_feedback_var.get(),
             "ds_knob_chorus_mix": self.ds_knob_chorus_mix_var.get(),
+            "ds_knob_chorus_depth": self.ds_knob_chorus_depth_var.get(),
+            "ds_knob_chorus_rate": self.ds_knob_chorus_rate_var.get(),
+            "ds_knob_phaser_mix": self.ds_knob_phaser_mix_var.get(),
+            "ds_knob_phaser_depth": self.ds_knob_phaser_depth_var.get(),
+            "ds_knob_phaser_rate": self.ds_knob_phaser_rate_var.get(),
+            "ds_knob_phaser_frequency": self.ds_knob_phaser_frequency_var.get(),
+            "ds_knob_phaser_feedback": self.ds_knob_phaser_feedback_var.get(),
+            "ds_knob_convolution_mix": self.ds_knob_convolution_mix_var.get(),
+            "ds_knob_pitch_shift": self.ds_knob_pitch_shift_var.get(),
+            "ds_knob_pitch_shift_mix": self.ds_knob_pitch_shift_mix_var.get(),
+            "ds_knob_wave_folder_drive": self.ds_knob_wave_folder_drive_var.get(),
+            "ds_knob_wave_folder_threshold": self.ds_knob_wave_folder_threshold_var.get(),
+            "ds_knob_wave_shaper_drive": self.ds_knob_wave_shaper_drive_var.get(),
+            "ds_knob_wave_shaper_boost": self.ds_knob_wave_shaper_boost_var.get(),
+            "ds_knob_wave_shaper_output": self.ds_knob_wave_shaper_output_var.get(),
+            "ds_knob_stereo_width": self.ds_knob_stereo_width_var.get(),
+            "ds_knob_bit_depth": self.ds_knob_bit_depth_var.get(),
+            "ds_knob_bit_crusher_mix": self.ds_knob_bit_crusher_mix_var.get(),
             "low_note": self.low_note,
             "high_note": self.high_note,
             "step": self.step_var.get(),
@@ -1212,6 +1377,7 @@ class SampleSmithApp(tk.Tk):
         self.phaser_mod_rate_var.set(float(data.get("phaser_mod_rate", 0.2)))
         self.phaser_center_frequency_var.set(float(data.get("phaser_center_frequency", 400.0)))
         self.phaser_feedback_var.set(float(data.get("phaser_feedback", 0.7)))
+        self.convolution_enabled_var.set(bool(data.get("convolution_enabled", False)))
         self.reverb_ir_var.set(str(data.get("reverb_ir_file", "")))
         self.reverb_mix_var.set(float(data.get("reverb_mix", 0.0)))
         self.pitch_shift_enabled_var.set(bool(data.get("pitch_shift_enabled", False)))
@@ -1235,13 +1401,39 @@ class SampleSmithApp(tk.Tk):
         self.bit_crusher_sample_rate_reduction_var.set(int(data.get("bit_crusher_sample_rate_reduction", 1)))
         self.bit_crusher_mix_var.set(float(data.get("bit_crusher_mix", 1.0)))
         self.ds_knob_tone_var.set(bool(data.get("ds_knob_tone", True)))
+        self.ds_knob_filter_resonance_var.set(bool(data.get("ds_knob_filter_resonance", False)))
+        self.ds_knob_notch_frequency_var.set(bool(data.get("ds_knob_notch_frequency", False)))
+        self.ds_knob_notch_q_var.set(bool(data.get("ds_knob_notch_q", False)))
+        self.ds_knob_peak_frequency_var.set(bool(data.get("ds_knob_peak_frequency", False)))
+        self.ds_knob_peak_q_var.set(bool(data.get("ds_knob_peak_q", False)))
+        self.ds_knob_peak_gain_var.set(bool(data.get("ds_knob_peak_gain", False)))
+        self.ds_knob_gain_level_var.set(bool(data.get("ds_knob_gain_level", False)))
         self.ds_knob_reverb_wet_var.set(bool(data.get("ds_knob_reverb_wet", True)))
         self.ds_knob_reverb_room_var.set(bool(data.get("ds_knob_reverb_room", False)))
         self.ds_knob_reverb_damping_var.set(bool(data.get("ds_knob_reverb_damping", False)))
         self.ds_knob_delay_wet_var.set(bool(data.get("ds_knob_delay_wet", True)))
         self.ds_knob_delay_time_var.set(bool(data.get("ds_knob_delay_time", False)))
+        self.ds_knob_delay_stereo_offset_var.set(bool(data.get("ds_knob_delay_stereo_offset", False)))
         self.ds_knob_delay_feedback_var.set(bool(data.get("ds_knob_delay_feedback", False)))
         self.ds_knob_chorus_mix_var.set(bool(data.get("ds_knob_chorus_mix", True)))
+        self.ds_knob_chorus_depth_var.set(bool(data.get("ds_knob_chorus_depth", False)))
+        self.ds_knob_chorus_rate_var.set(bool(data.get("ds_knob_chorus_rate", False)))
+        self.ds_knob_phaser_mix_var.set(bool(data.get("ds_knob_phaser_mix", False)))
+        self.ds_knob_phaser_depth_var.set(bool(data.get("ds_knob_phaser_depth", False)))
+        self.ds_knob_phaser_rate_var.set(bool(data.get("ds_knob_phaser_rate", False)))
+        self.ds_knob_phaser_frequency_var.set(bool(data.get("ds_knob_phaser_frequency", False)))
+        self.ds_knob_phaser_feedback_var.set(bool(data.get("ds_knob_phaser_feedback", False)))
+        self.ds_knob_convolution_mix_var.set(bool(data.get("ds_knob_convolution_mix", False)))
+        self.ds_knob_pitch_shift_var.set(bool(data.get("ds_knob_pitch_shift", False)))
+        self.ds_knob_pitch_shift_mix_var.set(bool(data.get("ds_knob_pitch_shift_mix", False)))
+        self.ds_knob_wave_folder_drive_var.set(bool(data.get("ds_knob_wave_folder_drive", False)))
+        self.ds_knob_wave_folder_threshold_var.set(bool(data.get("ds_knob_wave_folder_threshold", False)))
+        self.ds_knob_wave_shaper_drive_var.set(bool(data.get("ds_knob_wave_shaper_drive", False)))
+        self.ds_knob_wave_shaper_boost_var.set(bool(data.get("ds_knob_wave_shaper_boost", False)))
+        self.ds_knob_wave_shaper_output_var.set(bool(data.get("ds_knob_wave_shaper_output", False)))
+        self.ds_knob_stereo_width_var.set(bool(data.get("ds_knob_stereo_width", False)))
+        self.ds_knob_bit_depth_var.set(bool(data.get("ds_knob_bit_depth", False)))
+        self.ds_knob_bit_crusher_mix_var.set(bool(data.get("ds_knob_bit_crusher_mix", False)))
         self.low_note = int(data["low_note"]) if data.get("low_note") is not None else None
         self.high_note = int(data["high_note"]) if data.get("high_note") is not None else None
         self.low_var.set(midi_to_name(self.low_note) if self.low_note is not None else "not set")
@@ -1555,6 +1747,7 @@ class SampleSmithApp(tk.Tk):
             phaser_mod_rate=self.phaser_mod_rate_var.get(),
             phaser_center_frequency=self.phaser_center_frequency_var.get(),
             phaser_feedback=self.phaser_feedback_var.get(),
+            convolution_enabled=self.convolution_enabled_var.get(),
             reverb_ir_file=self.reverb_ir_var.get(),
             reverb_mix=self.reverb_mix_var.get(),
             pitch_shift_enabled=self.pitch_shift_enabled_var.get(),
@@ -1578,13 +1771,39 @@ class SampleSmithApp(tk.Tk):
             bit_crusher_sample_rate_reduction=self.bit_crusher_sample_rate_reduction_var.get(),
             bit_crusher_mix=self.bit_crusher_mix_var.get(),
             ds_knob_tone=self.ds_knob_tone_var.get(),
+            ds_knob_filter_resonance=self.ds_knob_filter_resonance_var.get(),
+            ds_knob_notch_frequency=self.ds_knob_notch_frequency_var.get(),
+            ds_knob_notch_q=self.ds_knob_notch_q_var.get(),
+            ds_knob_peak_frequency=self.ds_knob_peak_frequency_var.get(),
+            ds_knob_peak_q=self.ds_knob_peak_q_var.get(),
+            ds_knob_peak_gain=self.ds_knob_peak_gain_var.get(),
+            ds_knob_gain_level=self.ds_knob_gain_level_var.get(),
             ds_knob_reverb_wet=self.ds_knob_reverb_wet_var.get(),
             ds_knob_reverb_room=self.ds_knob_reverb_room_var.get(),
             ds_knob_reverb_damping=self.ds_knob_reverb_damping_var.get(),
             ds_knob_delay_wet=self.ds_knob_delay_wet_var.get(),
             ds_knob_delay_time=self.ds_knob_delay_time_var.get(),
+            ds_knob_delay_stereo_offset=self.ds_knob_delay_stereo_offset_var.get(),
             ds_knob_delay_feedback=self.ds_knob_delay_feedback_var.get(),
             ds_knob_chorus_mix=self.ds_knob_chorus_mix_var.get(),
+            ds_knob_chorus_depth=self.ds_knob_chorus_depth_var.get(),
+            ds_knob_chorus_rate=self.ds_knob_chorus_rate_var.get(),
+            ds_knob_phaser_mix=self.ds_knob_phaser_mix_var.get(),
+            ds_knob_phaser_depth=self.ds_knob_phaser_depth_var.get(),
+            ds_knob_phaser_rate=self.ds_knob_phaser_rate_var.get(),
+            ds_knob_phaser_frequency=self.ds_knob_phaser_frequency_var.get(),
+            ds_knob_phaser_feedback=self.ds_knob_phaser_feedback_var.get(),
+            ds_knob_convolution_mix=self.ds_knob_convolution_mix_var.get(),
+            ds_knob_pitch_shift=self.ds_knob_pitch_shift_var.get(),
+            ds_knob_pitch_shift_mix=self.ds_knob_pitch_shift_mix_var.get(),
+            ds_knob_wave_folder_drive=self.ds_knob_wave_folder_drive_var.get(),
+            ds_knob_wave_folder_threshold=self.ds_knob_wave_folder_threshold_var.get(),
+            ds_knob_wave_shaper_drive=self.ds_knob_wave_shaper_drive_var.get(),
+            ds_knob_wave_shaper_boost=self.ds_knob_wave_shaper_boost_var.get(),
+            ds_knob_wave_shaper_output=self.ds_knob_wave_shaper_output_var.get(),
+            ds_knob_stereo_width=self.ds_knob_stereo_width_var.get(),
+            ds_knob_bit_depth=self.ds_knob_bit_depth_var.get(),
+            ds_knob_bit_crusher_mix=self.ds_knob_bit_crusher_mix_var.get(),
         )
         self._refresh_export_mapping()
         return preset
