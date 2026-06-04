@@ -94,6 +94,7 @@ class SampleInfo:
     lo_note: int
     hi_note: int
     label: str
+    mode: str = "pitched"
 
 
 class AudioEngine:
@@ -296,11 +297,17 @@ class SampleSmithApp(tk.Tk):
         controls.pack(fill="x")
         ttk.Button(controls, text="Record lowest note", command=lambda: self._detect_note("low")).pack(side="left")
         self.low_var = tk.StringVar(value="not set")
-        ttk.Label(controls, textvariable=self.low_var, width=14).pack(side="left", padx=5)
-        ttk.Button(controls, text="Record highest note", command=lambda: self._detect_note("high")).pack(side="left", padx=(12, 0))
+        ttk.Label(controls, textvariable=self.low_var, width=10).pack(side="left", padx=3)
+        self.low_entry_var = tk.StringVar()
+        ttk.Entry(controls, textvariable=self.low_entry_var, width=7).pack(side="left")
+        ttk.Button(controls, text="Set", command=lambda: self._set_note_from_entry("low")).pack(side="left", padx=(2, 8))
+        ttk.Button(controls, text="Record highest note", command=lambda: self._detect_note("high")).pack(side="left")
         self.high_var = tk.StringVar(value="not set")
-        ttk.Label(controls, textvariable=self.high_var, width=14).pack(side="left", padx=5)
-        ttk.Label(controls, text="Step").pack(side="left", padx=(12, 2))
+        ttk.Label(controls, textvariable=self.high_var, width=10).pack(side="left", padx=3)
+        self.high_entry_var = tk.StringVar()
+        ttk.Entry(controls, textvariable=self.high_entry_var, width=7).pack(side="left")
+        ttk.Button(controls, text="Set", command=lambda: self._set_note_from_entry("high")).pack(side="left", padx=(2, 8))
+        ttk.Label(controls, text="Step").pack(side="left", padx=(4, 2))
         self.step_var = tk.IntVar(value=1)
         ttk.Spinbox(controls, textvariable=self.step_var, from_=1, to=12, width=4).pack(side="left")
         ttk.Button(controls, text="Build note list", command=self._build_note_list).pack(side="left", padx=8)
@@ -390,6 +397,35 @@ class SampleSmithApp(tk.Tk):
             pass
         self.after(100, self._drain_queue)
 
+    def _parse_note_entry(self, text: str) -> int:
+        text = text.strip()
+        if not text:
+            raise ValueError("Enter a note, e.g. C2, F#3, or a MIDI number.")
+        try:
+            midi_note = int(text)
+        except ValueError:
+            midi_note = name_to_midi(text)
+        if not 0 <= midi_note <= 127:
+            raise ValueError("MIDI note must be between 0 and 127.")
+        return midi_note
+
+    def _set_note_from_entry(self, which: str) -> None:
+        try:
+            midi_note = self._parse_note_entry(self.low_entry_var.get() if which == "low" else self.high_entry_var.get())
+        except ValueError as exc:
+            messagebox.showerror("SampleSmith", str(exc))
+            return
+        note_name = midi_to_name(midi_note)
+        if which == "low":
+            self.low_note = midi_note
+            self.low_var.set(note_name)
+            self.low_entry_var.set(note_name)
+        else:
+            self.high_note = midi_note
+            self.high_var.set(note_name)
+            self.high_entry_var.set(note_name)
+        self._log(f"Set {which} note to {note_name}")
+
     def _detect_note(self, which: str) -> None:
         if not messagebox.askokcancel("SampleSmith", f"After pressing OK, sing/play your {which} usable note for 2.5 seconds."):
             return
@@ -408,9 +444,11 @@ class SampleSmithApp(tk.Tk):
                     if which == "low":
                         self.low_note = midi
                         self.low_var.set(name)
+                        self.low_entry_var.set(name)
                     else:
                         self.high_note = midi
                         self.high_var.set(name)
+                        self.high_entry_var.set(name)
                     self._log(f"Set {which} note to {name}")
             return apply
 
@@ -478,13 +516,14 @@ class SampleSmithApp(tk.Tk):
             audio.write_wav(path, trimmed)
             ranges = dict((root, (lo, hi)) for root, lo, hi in build_key_ranges([int(i) for i in self.note_tree.get_children()]))
             lo, hi = ranges[note]
-            info = SampleInfo(path=path, root_note=note, lo_note=lo, hi_note=hi, label=note_name)
+            info = SampleInfo(path=path, root_note=note, lo_note=lo, hi_note=hi, label=note_name, mode="pitched")
 
             def apply():
                 self._upsert_sample(info)
                 self.note_rows[note] = str(path)
-                self.note_tree.item(str(note), values=(note_name, mapping_text(lo, hi), str(path.name)))
-                self._log(f"Recorded {note_name}: {path.name} — maps {mapping_text(lo, hi)}")
+                self._refresh_pitched_mappings()
+                mapped = next(sample for sample in self.samples if sample.mode == "pitched" and sample.root_note == note)
+                self._log(f"Recorded {note_name}: {path.name} — maps {mapping_text(mapped.lo_note, mapped.hi_note)}")
                 if after:
                     after()
             return apply
@@ -513,7 +552,7 @@ class SampleSmithApp(tk.Tk):
             raw = audio.record(self.record_seconds_var.get())
             trimmed = audio.trim(raw)
             audio.write_wav(path, trimmed)
-            info = SampleInfo(path=path, root_note=midi_note, lo_note=midi_note, hi_note=midi_note, label=label)
+            info = SampleInfo(path=path, root_note=midi_note, lo_note=midi_note, hi_note=midi_note, label=label, mode="pad")
 
             def apply():
                 self._upsert_sample(info)
@@ -525,15 +564,33 @@ class SampleSmithApp(tk.Tk):
         self._run_worker(f"Recording pad {label}...", work)
 
     def _upsert_sample(self, info: SampleInfo) -> None:
-        self.samples = [sample for sample in self.samples if not (sample.root_note == info.root_note and sample.lo_note == info.lo_note and sample.hi_note == info.hi_note)]
+        self.samples = [sample for sample in self.samples if not (sample.mode == info.mode and sample.root_note == info.root_note)]
         self.samples.append(info)
-        self.samples.sort(key=lambda sample: (sample.root_note, sample.path.name))
+        self.samples.sort(key=lambda sample: (sample.mode, sample.root_note, sample.path.name))
+
+    def _spread_recorded_pitched_samples(self) -> list[SampleInfo]:
+        pitched = [sample for sample in self.samples if sample.mode == "pitched"]
+        pads = [sample for sample in self.samples if sample.mode == "pad"]
+        ranges = dict((root, (lo, hi)) for root, lo, hi in build_key_ranges([sample.root_note for sample in pitched]))
+        spread = [
+            SampleInfo(path=sample.path, root_note=sample.root_note, lo_note=ranges[sample.root_note][0], hi_note=ranges[sample.root_note][1], label=sample.label, mode=sample.mode)
+            for sample in pitched
+        ]
+        return sorted(spread + pads, key=lambda sample: (sample.mode, sample.root_note, sample.path.name))
+
+    def _refresh_pitched_mappings(self) -> None:
+        for sample in self._spread_recorded_pitched_samples():
+            if sample.mode != "pitched" or str(sample.root_note) not in self.note_tree.get_children():
+                continue
+            file_name = sample.path.name if self.note_rows.get(sample.root_note) else ""
+            self.note_tree.item(str(sample.root_note), values=(midi_to_name(sample.root_note), mapping_text(sample.lo_note, sample.hi_note), file_name))
 
     def _generate_preset(self) -> None:
         if not self.samples:
             messagebox.showwarning("SampleSmith", "No recorded samples yet.")
             return
-        preset = generate_dspreset(self.name_var.get(), self._instrument_dir(), self.samples)
+        samples = self._spread_recorded_pitched_samples()
+        preset = generate_dspreset(self.name_var.get(), self._instrument_dir(), samples)
         self._log(f"Generated {preset}")
         messagebox.showinfo("SampleSmith", f"Generated:\n{preset}")
 
