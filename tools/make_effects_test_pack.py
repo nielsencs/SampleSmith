@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Build a local Decent Sampler effects listening test pack for SampleSmith.
 
-The generated pack is intentionally not committed. It creates one dry control
-preset plus one deliberately exaggerated preset per supported Decent Sampler
-effect/filter so a human can open them locally and listen for whether each
-exported effect behaves as expected inside Decent Sampler.
+The generated pack is intentionally not committed. It creates one shared
+Samples/ folder plus one deliberately exaggerated preset per supported Decent
+Sampler effect/filter so a human can open them locally and listen for whether
+each exported effect behaves as expected inside Decent Sampler.
 """
 
 from __future__ import annotations
@@ -89,7 +89,8 @@ def _make_ir_sample(path: Path) -> None:
 
 def _sample_for(output_dir: Path) -> SampleInfo:
     sample_path = output_dir / "Samples" / "effects_test_C3.wav"
-    _make_source_sample(sample_path)
+    if not sample_path.exists():
+        _make_source_sample(sample_path)
     return SampleInfo(path=sample_path, root_note=ROOT_NOTE, lo_note=0, hi_note=127, label="C3")
 
 
@@ -97,8 +98,8 @@ def _write_notes(path: Path, rows: list[tuple[str, str, str]]) -> None:
     lines = [
         "# SampleSmith Decent Sampler effects listening test pack",
         "",
-        "Open each `.dspreset` in Decent Sampler and play around middle C / C3.",
-        "The presets are deliberately exaggerated. The goal is not taste; it is to hear whether Decent Sampler applies the exported effect at all.",
+        "Open each `.dspreset` in this folder in Decent Sampler and play around middle C / C3.",
+        "All presets share `Samples/effects_test_C3.wav`. The presets are deliberately exaggerated; the goal is not taste, but to hear whether Decent Sampler applies the exported effect at all.",
         "",
         "If the dry control works but an effect preset sounds unchanged, note the Decent Sampler version and the preset name.",
         "",
@@ -138,21 +139,20 @@ def build_pack(output_root: Path) -> None:
         {"name": "18_Bit_Crusher", "effect": "bit_crusher", "expected": "Crunchy/lo-fi digital degradation.", "kwargs": {"bit_crusher_enabled": True, "bit_crusher_bit_depth": 5, "bit_crusher_sample_rate_reduction": 8, "bit_crusher_mix": 1.0, "ds_knob_bit_depth": True, "ds_knob_bit_crusher_rate": True, "ds_knob_bit_crusher_mix": True}},
     ]
 
+    sample = _sample_for(output_root)
+    _make_ir_sample(output_root / "Samples" / "test_ir.wav")
+
     rows: list[tuple[str, str, str]] = []
     for test in tests:
         name = str(test["name"])
-        preset_dir = output_root / name
-        sample = _sample_for(preset_dir)
-        if test.get("needs_ir"):
-            _make_ir_sample(preset_dir / "Samples" / "test_ir.wav")
         preset = generate_dspreset(
             name,
-            preset_dir,
+            output_root,
             [sample],
             root_note_offset=0,
             **test.get("kwargs", {}),
         )
-        rows.append((str(preset.relative_to(output_root)), str(test["effect"]), str(test["expected"])))
+        rows.append((preset.name, str(test["effect"]), str(test["expected"])))
 
     _write_notes(output_root / "LISTENING_CHECKLIST.md", rows)
 

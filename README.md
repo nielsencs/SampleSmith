@@ -86,7 +86,7 @@ To audibly check Decent Sampler effect support on a local machine with audio, ge
 python tools/make_effects_test_pack.py
 ```
 
-This recreates `effects-test-pack/` with a dry control preset, one exaggerated `.dspreset` per supported effect/filter, generated WAV samples, and `LISTENING_CHECKLIST.md`. Open the checklist, then open each preset in Decent Sampler and play around C3/middle C. The generated pack is ignored by Git.
+This recreates `effects-test-pack/` with one shared `Samples/` folder, a dry control preset, one exaggerated `.dspreset` per supported effect/filter, and `LISTENING_CHECKLIST.md`. Open the checklist, then open each preset in Decent Sampler and play around C3/middle C. The generated pack is ignored by Git.
 
 ## Pitched mapping behaviour
 
