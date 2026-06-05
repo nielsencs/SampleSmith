@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Build a small Decent Sampler octave/MIDI diagnostic pack.
 
-This is for checking host octave-label confusion. Decent Sampler's rootNote,
-loNote, and hiNote are MIDI note numbers. Different hosts may label MIDI 60 as
-C3, C4, or C5. This pack lets a human hear which MIDI key plays an unshifted
-C4 tone in their Decent Sampler/Reaper setup.
+This is for checking octave-label confusion. Decent Sampler's rootNote,
+loNote, and hiNote are MIDI note numbers. Decent Sampler standalone and MIDI
+controllers may label MIDI 60 differently. This pack lets a human hear which
+MIDI key plays an unshifted C4 tone in Decent Sampler standalone.
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ def _write_readme(path: Path) -> None:
             [
                 "# SampleSmith octave/MIDI diagnostic pack",
                 "",
-                "This pack tests octave-label confusion between SampleSmith, Decent Sampler, Reaper, and your MIDI keyboard/controller.",
+                "This pack tests octave-label confusion between SampleSmith, Decent Sampler standalone, and your MIDI keyboard/controller.",
                 "",
                 "The WAV is a generated C4 tone at about 261.63 Hz.",
                 "Decent Sampler `rootNote`, `loNote`, and `hiNote` are MIDI note numbers, not note-name strings.",
@@ -73,9 +73,9 @@ def _write_readme(path: Path) -> None:
                 "| Preset | rootNote | What it means if your C4 key sounds unshifted |",
                 "| --- | ---: | --- |",
                 "| `Root_60_MIDI_C4.dspreset` | 60 | Your C4 key sends MIDI 60; SampleSmith should export literal roots. |",
-                "| `Root_72_MIDI_C5.dspreset` | 72 | Your C4 key sends MIDI 72; the problem is host/controller octave labelling, not Decent Sampler parsing names. |",
+                "| `Root_72_MIDI_C5.dspreset` | 72 | Your C4 key sends MIDI 72; the problem is controller/octave labelling, not Decent Sampler parsing names. |",
                 "",
-                "If both sound shifted, check which MIDI note Reaper says is arriving when you press the key labelled C4.",
+                "If both sound shifted, check which MIDI note Decent Sampler is receiving when you press the key labelled C4.",
                 "",
             ]
         ),

@@ -90,7 +90,7 @@ def decent_sampler_root_note(root_note: int) -> int:
 def exported_root_text(root_note: int, root_note_offset: int = 0) -> str:
     # root_note_offset is kept only for compatibility with older call sites.
     # Decent Sampler rootNote is a MIDI note number, so export the stored root
-    # literally and let host octave-label differences be diagnosed separately.
+    # literally and let octave-label differences be diagnosed separately.
     exported = decent_sampler_root_note(root_note)
     return f"MIDI {exported} ({midi_to_name(exported)})"
 
