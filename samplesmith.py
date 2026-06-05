@@ -484,18 +484,20 @@ def generate_dspreset(
     root = ET.Element("DecentSampler", {"pluginVersion": "1"})
     has_amp_env_knobs = amp_env_enabled and ds_knob_amp_env
     if effects_to_write or has_amp_env_knobs:
-        ui = ET.SubElement(root, "ui", {"width": "812", "height": "375"})
+        ui = ET.SubElement(root, "ui", {"width": "812", "height": "475"})
         tab = ET.SubElement(ui, "tab", {"name": "main"})
         ET.SubElement(
             tab,
             "label",
             {
-                "x": "40",
+                "x": "30",
                 "y": "12",
-                "width": "720",
+                "width": "752",
+                "height": "28",
                 "text": instrument_name,
                 "textColor": "DD330033",
-                "textSize": "24",
+                "textSize": "22",
+                "hAlign": "center",
             },
         )
         effect_positions = {effect_type: position for position, (effect_type, _attrs) in enumerate(effects_to_write)}
@@ -593,12 +595,21 @@ def generate_dspreset(
             ),
         ]
         visible_control_index = 0
+        knob_columns = 8
+        knob_step_x = 94
+        knob_step_y = 98
+        knob_width = 76
+        knob_start_x = 34
+        knob_start_y = 78
+        group_title_height = 20
+
+        def knob_position(index: int) -> tuple[int, int]:
+            return knob_start_x + (index % knob_columns) * knob_step_x, knob_start_y + (index // knob_columns) * knob_step_y
 
         def add_effect_knob(effect_type: str, label: str, parameter: str, min_value: str, max_value: str, value: str, default_value: str) -> None:
             nonlocal visible_control_index
             position = effect_positions[effect_type]
-            x_pos = 20 + (visible_control_index % 18) * 43
-            y_pos = 56 + (visible_control_index // 18) * 64
+            x_pos, y_pos = knob_position(visible_control_index)
             visible_control_index += 1
             knob = ET.SubElement(
                 tab,
@@ -606,7 +617,7 @@ def generate_dspreset(
                 {
                     "x": str(x_pos),
                     "y": str(y_pos),
-                    "width": "38",
+                    "width": str(knob_width),
                     "label": label,
                     "parameterName": label,
                     "type": "float",
@@ -615,7 +626,7 @@ def generate_dspreset(
                     "value": value,
                     "defaultValue": default_value,
                     "textColor": "DD330033",
-                    "textSize": "12",
+                    "textSize": "14",
                     "style": "rotary",
                     "trackForegroundColor": "EEFFFFFF",
                     "trackBackgroundColor": "77330033",
@@ -634,8 +645,7 @@ def generate_dspreset(
 
         def add_amp_knob(label: str, parameter: str, min_value: str, max_value: str, value: str, default_value: str) -> None:
             nonlocal visible_control_index
-            x_pos = 20 + (visible_control_index % 18) * 43
-            y_pos = 56 + (visible_control_index // 18) * 64
+            x_pos, y_pos = knob_position(visible_control_index)
             visible_control_index += 1
             knob = ET.SubElement(
                 tab,
@@ -643,7 +653,7 @@ def generate_dspreset(
                 {
                     "x": str(x_pos),
                     "y": str(y_pos),
-                    "width": "38",
+                    "width": str(knob_width),
                     "label": label,
                     "parameterName": label,
                     "type": "float",
@@ -652,7 +662,7 @@ def generate_dspreset(
                     "value": value,
                     "defaultValue": default_value,
                     "textColor": "DD330033",
-                    "textSize": "12",
+                    "textSize": "14",
                     "style": "rotary",
                     "trackForegroundColor": "EEFFFFFF",
                     "trackBackgroundColor": "77330033",
@@ -689,11 +699,12 @@ def generate_dspreset(
                 _include, effect_type, _label, parameter, min_value, max_value, value, default_value = included_specs[0]
                 add_effect_knob(effect_type, title, parameter, min_value, max_value, value, default_value)
                 return
-            if (visible_control_index % 18) + len(included_specs) > 18:
-                visible_control_index += 18 - (visible_control_index % 18)
-            group_x = 17 + (visible_control_index % 18) * 43
-            group_y = 36 + (visible_control_index // 18) * 64
-            group_width = 43 * len(included_specs)
+            if (visible_control_index % knob_columns) + len(included_specs) > knob_columns:
+                visible_control_index += knob_columns - (visible_control_index % knob_columns)
+            first_x, first_y = knob_position(visible_control_index)
+            group_x = first_x - 10
+            group_y = first_y - group_title_height - 8
+            group_width = knob_step_x * len(included_specs) - 8
             ET.SubElement(
                 tab,
                 "rectangle",
@@ -701,7 +712,7 @@ def generate_dspreset(
                     "x": str(group_x),
                     "y": str(group_y),
                     "width": str(group_width),
-                    "height": "74",
+                    "height": "104",
                     "fillColor": "#0D330033",
                     "borderColor": "#55330033",
                     "borderThickness": "1",
@@ -717,8 +728,8 @@ def generate_dspreset(
                     "height": "18",
                     "text": title,
                     "textColor": "DD330033",
-                    "textSize": "12",
-                    "hAlign": "left",
+                    "textSize": "14",
+                    "hAlign": "center",
                 },
             )
             for _include, effect_type, label, parameter, min_value, max_value, value, default_value in included_specs:
