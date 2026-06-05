@@ -257,11 +257,77 @@ def clamp_midi_note(midi_note: int) -> int:
     return max(0, min(127, midi_note))
 
 
+def clamp_float(value: float, low: float, high: float) -> float:
+    return max(low, min(high, float(value)))
+
+
+def optional_non_negative_int(value: int | float | str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        parsed = int(float(value))
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def valid_loop_points(loop_start: int | None, loop_end: int | None) -> tuple[int | None, int | None]:
+    if loop_start is None or loop_end is None or loop_end <= loop_start:
+        return None, None
+    return loop_start, loop_end
+
+
+def read_wav_smpl_loop_points(path: Path) -> tuple[int, int] | None:
+    """Read the first WAV smpl-loop start/end pair if present.
+
+    Decent Sampler can use embedded WAV loop markers when explicit loopStart /
+    loopEnd attributes are absent. SampleSmith keeps this small parser as a safe
+    dependency-free first step toward importing those markers into the GUI.
+    """
+    try:
+        with path.open("rb") as handle:
+            if handle.read(4) != b"RIFF":
+                return None
+            handle.seek(8)
+            if handle.read(4) != b"WAVE":
+                return None
+            while True:
+                chunk_id = handle.read(4)
+                if len(chunk_id) < 4:
+                    return None
+                size_bytes = handle.read(4)
+                if len(size_bytes) < 4:
+                    return None
+                chunk_size = int.from_bytes(size_bytes, "little", signed=False)
+                chunk_data_start = handle.tell()
+                if chunk_id == b"smpl" and chunk_size >= 60:
+                    data = handle.read(chunk_size)
+                    loop_count = int.from_bytes(data[28:32], "little", signed=False)
+                    if loop_count < 1 or len(data) < 60:
+                        return None
+                    start = int.from_bytes(data[44:48], "little", signed=False)
+                    end = int.from_bytes(data[48:52], "little", signed=False)
+                    return (start, end) if end > start else None
+                handle.seek(chunk_data_start + chunk_size + (chunk_size % 2))
+    except OSError:
+        return None
+
+
 def generate_dspreset(
     instrument_name: str,
     output_dir: Path,
     samples: list[SampleInfo],
     loop_enabled: bool = False,
+    loop_start: int | None = None,
+    loop_end: int | None = None,
+    loop_crossfade: float = 0.0,
+    loop_crossfade_mode: str = "equal_power",
+    amp_env_enabled: bool = False,
+    amp_attack: float = 0.01,
+    amp_decay: float = 0.0,
+    amp_sustain: float = 1.0,
+    amp_release: float = 0.8,
+    ds_knob_amp_env: bool = True,
     root_note_offset: int = 0,
     delay_enabled: bool = False,
     delay_time: float = 0.7,
@@ -406,8 +472,18 @@ def generate_dspreset(
     if bit_crusher_enabled:
         effects_to_write.append(("bit_crusher", {"bitDepth": str(bit_crusher_bit_depth), "sampleRateReduction": str(bit_crusher_sample_rate_reduction), "mix": f"{bit_crusher_mix:.3f}"}))
 
+    loop_start, loop_end = valid_loop_points(loop_start, loop_end)
+    loop_crossfade = clamp_float(loop_crossfade, 0.0, 60000.0)
+    if loop_crossfade_mode not in {"linear", "equal_power"}:
+        loop_crossfade_mode = "equal_power"
+    amp_attack = clamp_float(amp_attack, 0.0, 10.0)
+    amp_decay = clamp_float(amp_decay, 0.0, 25.0)
+    amp_sustain = clamp_float(amp_sustain, 0.0, 1.0)
+    amp_release = clamp_float(amp_release, 0.0, 25.0)
+
     root = ET.Element("DecentSampler", {"pluginVersion": "1"})
-    if effects_to_write:
+    has_amp_env_knobs = amp_env_enabled and ds_knob_amp_env
+    if effects_to_write or has_amp_env_knobs:
         ui = ET.SubElement(root, "ui", {"width": "812", "height": "375"})
         tab = ET.SubElement(ui, "tab", {"name": "main"})
         ET.SubElement(
@@ -556,6 +632,54 @@ def generate_dspreset(
                 },
             )
 
+        def add_amp_knob(label: str, parameter: str, min_value: str, max_value: str, value: str, default_value: str) -> None:
+            nonlocal visible_control_index
+            x_pos = 20 + (visible_control_index % 18) * 43
+            y_pos = 56 + (visible_control_index // 18) * 64
+            visible_control_index += 1
+            knob = ET.SubElement(
+                tab,
+                "labeled-knob",
+                {
+                    "x": str(x_pos),
+                    "y": str(y_pos),
+                    "width": "38",
+                    "label": label,
+                    "parameterName": label,
+                    "type": "float",
+                    "minValue": min_value,
+                    "maxValue": max_value,
+                    "value": value,
+                    "defaultValue": default_value,
+                    "textColor": "DD330033",
+                    "textSize": "12",
+                    "style": "rotary",
+                    "trackForegroundColor": "EEFFFFFF",
+                    "trackBackgroundColor": "77330033",
+                },
+            )
+            ET.SubElement(
+                knob,
+                "binding",
+                {
+                    "type": "amp",
+                    "level": "group",
+                    "position": "0",
+                    "parameter": parameter,
+                },
+            )
+
+        def add_amp_env_knobs() -> None:
+            if not has_amp_env_knobs:
+                return
+            for label, parameter, min_value, max_value, value, default_value in [
+                ("Attack", "ENV_ATTACK", "0", "10", f"{amp_attack:.3f}", "0.010"),
+                ("Decay", "ENV_DECAY", "0", "25", f"{amp_decay:.3f}", "0.000"),
+                ("Sustain", "ENV_SUSTAIN", "0", "1", f"{amp_sustain:.3f}", "1.000"),
+                ("Release", "ENV_RELEASE", "0", "25", f"{amp_release:.3f}", "0.800"),
+            ]:
+                add_amp_knob(label, parameter, min_value, max_value, value, default_value)
+
         def add_knob_group(title: str, specs: list[tuple[bool, str, str, str, str, str, str, str]]) -> None:
             nonlocal visible_control_index
             included_specs = [spec for spec in specs if spec[0]]
@@ -600,11 +724,21 @@ def generate_dspreset(
             for _include, effect_type, label, parameter, min_value, max_value, value, default_value in included_specs:
                 add_effect_knob(effect_type, label, parameter, min_value, max_value, value, default_value)
 
+        add_amp_env_knobs()
         for title, specs in knob_groups:
             add_knob_group(title, specs)
 
     groups = ET.SubElement(root, "groups")
-    group = ET.SubElement(groups, "group", {"attack": "0.01", "release": "0.8"})
+    group_attrs = {"attack": f"{amp_attack:.3f}", "release": f"{amp_release:.3f}"}
+    if amp_env_enabled:
+        group_attrs.update(
+            {
+                "ampEnvEnabled": "true",
+                "decay": f"{amp_decay:.3f}",
+                "sustain": f"{amp_sustain:.3f}",
+            }
+        )
+    group = ET.SubElement(groups, "group", group_attrs)
     for sample in samples:
         attrs = {
             "path": sample.path.relative_to(output_dir).as_posix(),
@@ -616,6 +750,12 @@ def generate_dspreset(
         }
         if loop_enabled:
             attrs["loopEnabled"] = "true"
+            if loop_start is not None and loop_end is not None:
+                attrs["loopStart"] = str(loop_start)
+                attrs["loopEnd"] = str(loop_end)
+                if loop_crossfade > 0:
+                    attrs["loopCrossfade"] = f"{loop_crossfade:.1f}"
+                    attrs["loopCrossfadeMode"] = loop_crossfade_mode
         ET.SubElement(group, "sample", attrs)
     if effects_to_write:
         effects = ET.SubElement(root, "effects")
@@ -657,6 +797,16 @@ class SampleSmithApp(tk.Tk):
         self.threshold_var = tk.DoubleVar(value=-45.0)
         self.normalise_var = tk.BooleanVar(value=True)
         self.loop_enabled_var = tk.BooleanVar(value=False)
+        self.loop_start_var = tk.StringVar(value="")
+        self.loop_end_var = tk.StringVar(value="")
+        self.loop_crossfade_var = tk.DoubleVar(value=0.0)
+        self.loop_crossfade_mode_var = tk.StringVar(value="equal_power")
+        self.amp_env_enabled_var = tk.BooleanVar(value=False)
+        self.amp_attack_var = tk.DoubleVar(value=0.01)
+        self.amp_decay_var = tk.DoubleVar(value=0.0)
+        self.amp_sustain_var = tk.DoubleVar(value=1.0)
+        self.amp_release_var = tk.DoubleVar(value=0.8)
+        self.ds_knob_amp_env_var = tk.BooleanVar(value=True)
         self.root_note_offset_var = tk.IntVar(value=-12)
         self.delay_enabled_var = tk.BooleanVar(value=False)
         self.delay_time_var = tk.DoubleVar(value=0.7)
@@ -846,6 +996,31 @@ class SampleSmithApp(tk.Tk):
         ttk.Button(export, text="Generate / update .dspreset", command=self._generate_preset).grid(row=0, column=3, sticky="w", padx=(18, 6), pady=6)
         ttk.Button(export, text="Open output folder", command=self._open_output_folder).grid(row=0, column=4, sticky="w", padx=6, pady=6)
 
+        loop = ttk.LabelFrame(self.decent_sampler_tab, text="Loop points")
+        loop.pack(fill="x", pady=(10, 0))
+        ttk.Label(loop, text="start sample").pack(side="left", padx=(6, 2), pady=6)
+        ttk.Entry(loop, textvariable=self.loop_start_var, width=10).pack(side="left", padx=(0, 10), pady=6)
+        ttk.Label(loop, text="end sample").pack(side="left", padx=(0, 2), pady=6)
+        ttk.Entry(loop, textvariable=self.loop_end_var, width=10).pack(side="left", padx=(0, 10), pady=6)
+        ttk.Label(loop, text="crossfade").pack(side="left", padx=(0, 2), pady=6)
+        ttk.Spinbox(loop, textvariable=self.loop_crossfade_var, from_=0, to=60000, increment=10, width=8).pack(side="left", padx=(0, 10), pady=6)
+        ttk.OptionMenu(loop, self.loop_crossfade_mode_var, self.loop_crossfade_mode_var.get(), "equal_power", "linear").pack(side="left", padx=(0, 10), pady=6)
+        ttk.Button(loop, text="Use first WAV marker", command=self._import_first_wav_loop_marker).pack(side="left", padx=(0, 6), pady=6)
+
+        envelope = ttk.LabelFrame(self.decent_sampler_tab, text="Amp envelope")
+        envelope.pack(fill="x", pady=(10, 0))
+        ttk.Checkbutton(envelope, text="Enable ADSR", variable=self.amp_env_enabled_var, command=self._on_output_parameter_changed).pack(side="left", padx=6, pady=6)
+        ttk.Label(envelope, text="attack").pack(side="left", padx=(6, 2), pady=6)
+        ttk.Spinbox(envelope, textvariable=self.amp_attack_var, from_=0, to=10, increment=0.01, width=7).pack(side="left", padx=(0, 6), pady=6)
+        ttk.Label(envelope, text="decay").pack(side="left", padx=(0, 2), pady=6)
+        ttk.Spinbox(envelope, textvariable=self.amp_decay_var, from_=0, to=25, increment=0.01, width=7).pack(side="left", padx=(0, 6), pady=6)
+        ttk.Label(envelope, text="sustain").pack(side="left", padx=(0, 2), pady=6)
+        ttk.Spinbox(envelope, textvariable=self.amp_sustain_var, from_=0, to=1, increment=0.05, width=6).pack(side="left", padx=(0, 6), pady=6)
+        ttk.Label(envelope, text="release").pack(side="left", padx=(0, 2), pady=6)
+        ttk.Spinbox(envelope, textvariable=self.amp_release_var, from_=0, to=25, increment=0.05, width=7).pack(side="left", padx=(0, 6), pady=6)
+        ttk.Checkbutton(envelope, text="K", variable=self.ds_knob_amp_env_var, command=self._on_output_parameter_changed).pack(side="left", padx=(4, 6), pady=6)
+        ttk.Button(envelope, text="defaults", command=lambda: self._set_effect_defaults("amp_env")).pack(side="left", padx=(0, 6), pady=6)
+
         effects = ttk.LabelFrame(self.decent_sampler_tab, text="Decent Sampler effects")
         effects.pack(fill="x", pady=(10, 0))
         ttk.Label(effects, text="Effect").grid(row=0, column=0, sticky="w", padx=6, pady=(3, 2))
@@ -1006,7 +1181,7 @@ class SampleSmithApp(tk.Tk):
             notes,
             text=(
                 "This tab is for Decent Sampler generation settings. "
-                "Loop start/end, sample start/end, envelopes, and other export controls can grow here later."
+                "Manual loop start/end, loop crossfade, ADSR envelope, effects, and visible DS knobs live here."
             ),
             wraplength=820,
             justify="left",
@@ -1015,6 +1190,16 @@ class SampleSmithApp(tk.Tk):
     def _bind_output_parameter_traces(self) -> None:
         output_vars = [
             self.loop_enabled_var,
+            self.loop_start_var,
+            self.loop_end_var,
+            self.loop_crossfade_var,
+            self.loop_crossfade_mode_var,
+            self.amp_env_enabled_var,
+            self.amp_attack_var,
+            self.amp_decay_var,
+            self.amp_sustain_var,
+            self.amp_release_var,
+            self.ds_knob_amp_env_var,
             self.root_note_offset_var,
             self.delay_enabled_var,
             self.delay_time_var,
@@ -1167,6 +1352,11 @@ class SampleSmithApp(tk.Tk):
             self.bit_crusher_bit_depth_var.set(24)
             self.bit_crusher_sample_rate_reduction_var.set(1)
             self.bit_crusher_mix_var.set(1.0)
+        elif effect_group == "amp_env":
+            self.amp_attack_var.set(0.01)
+            self.amp_decay_var.set(0.0)
+            self.amp_sustain_var.set(1.0)
+            self.amp_release_var.set(0.8)
 
     def _audio(self) -> AudioEngine:
         return AudioEngine(
@@ -1201,6 +1391,16 @@ class SampleSmithApp(tk.Tk):
             "trim_threshold_db": self.threshold_var.get(),
             "normalise": self.normalise_var.get(),
             "loop_enabled": self.loop_enabled_var.get(),
+            "loop_start": self.loop_start_var.get(),
+            "loop_end": self.loop_end_var.get(),
+            "loop_crossfade": self.loop_crossfade_var.get(),
+            "loop_crossfade_mode": self.loop_crossfade_mode_var.get(),
+            "amp_env_enabled": self.amp_env_enabled_var.get(),
+            "amp_attack": self.amp_attack_var.get(),
+            "amp_decay": self.amp_decay_var.get(),
+            "amp_sustain": self.amp_sustain_var.get(),
+            "amp_release": self.amp_release_var.get(),
+            "ds_knob_amp_env": self.ds_knob_amp_env_var.get(),
             "root_note_offset": self.root_note_offset_var.get(),
             "delay_enabled": self.delay_enabled_var.get(),
             "delay_time": self.delay_time_var.get(),
@@ -1344,7 +1544,17 @@ class SampleSmithApp(tk.Tk):
         self.threshold_var.set(float(data.get("trim_threshold_db", -45.0)))
         self.normalise_var.set(bool(data.get("normalise", True)))
         self.loop_enabled_var.set(bool(data.get("loop_enabled", False)))
-        self.root_note_offset_var.set(int(data.get("root_note_offset", 12)))
+        self.loop_start_var.set(str(data.get("loop_start", "") or ""))
+        self.loop_end_var.set(str(data.get("loop_end", "") or ""))
+        self.loop_crossfade_var.set(float(data.get("loop_crossfade", 0.0)))
+        self.loop_crossfade_mode_var.set(str(data.get("loop_crossfade_mode", "equal_power")))
+        self.amp_env_enabled_var.set(bool(data.get("amp_env_enabled", False)))
+        self.amp_attack_var.set(float(data.get("amp_attack", 0.01)))
+        self.amp_decay_var.set(float(data.get("amp_decay", 0.0)))
+        self.amp_sustain_var.set(float(data.get("amp_sustain", 1.0)))
+        self.amp_release_var.set(float(data.get("amp_release", 0.8)))
+        self.ds_knob_amp_env_var.set(bool(data.get("ds_knob_amp_env", True)))
+        self.root_note_offset_var.set(int(data.get("root_note_offset", -12)))
         self.delay_enabled_var.set(bool(data.get("delay_enabled", False)))
         self.delay_time_var.set(float(data.get("delay_time", 0.7)))
         self.delay_stereo_offset_var.set(float(data.get("delay_stereo_offset", 0.0)))
@@ -1707,6 +1917,23 @@ class SampleSmithApp(tk.Tk):
                 ),
             )
 
+    def _import_first_wav_loop_marker(self) -> None:
+        for sample in self.samples:
+            marker = read_wav_smpl_loop_points(sample.path)
+            if marker is None:
+                continue
+            start, end = marker
+            self.loop_start_var.set(str(start))
+            self.loop_end_var.set(str(end))
+            self.loop_enabled_var.set(True)
+            self._log(f"Imported WAV loop marker from {sample.path.name}: {start}–{end}")
+            self._on_output_parameter_changed()
+            return
+        messagebox.showinfo(
+            "SampleSmith",
+            "No embedded WAV smpl loop markers found in the recorded samples. Enter loop start/end manually.",
+        )
+
     def _write_preset(self) -> Path:
         samples = self._spread_recorded_pitched_samples()
         preset = generate_dspreset(
@@ -1714,6 +1941,16 @@ class SampleSmithApp(tk.Tk):
             self._instrument_dir(),
             samples,
             loop_enabled=self.loop_enabled_var.get(),
+            loop_start=optional_non_negative_int(self.loop_start_var.get()),
+            loop_end=optional_non_negative_int(self.loop_end_var.get()),
+            loop_crossfade=self.loop_crossfade_var.get(),
+            loop_crossfade_mode=self.loop_crossfade_mode_var.get(),
+            amp_env_enabled=self.amp_env_enabled_var.get(),
+            amp_attack=self.amp_attack_var.get(),
+            amp_decay=self.amp_decay_var.get(),
+            amp_sustain=self.amp_sustain_var.get(),
+            amp_release=self.amp_release_var.get(),
+            ds_knob_amp_env=self.ds_knob_amp_env_var.get(),
             root_note_offset=self.root_note_offset_var.get(),
             delay_enabled=self.delay_enabled_var.get(),
             delay_time=self.delay_time_var.get(),

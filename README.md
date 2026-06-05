@@ -95,7 +95,8 @@ Decent Sampler export settings live on their own **Decent Sampler** tab so loop,
 
 Current Decent Sampler output parameters:
 
-- **Loop samples** — writes `loopEnabled="true"` on generated sample entries. Proper loop start/end editing is still a later feature.
+- **Loop samples** — writes `loopEnabled="true"` on generated sample entries. You can now enter manual `loopStart` / `loopEnd` sample positions plus `loopCrossfade` and `loopCrossfadeMode` (`equal_power` or `linear`). If loop is enabled but no valid manual start/end is entered, SampleSmith leaves the explicit points out so Decent Sampler can still use embedded WAV loop markers when present. The Decent Sampler tab also has a first-pass “Use first WAV marker” helper for importing the first `smpl` loop marker it finds in the recorded WAVs.
+- **Amp ADSR envelope** — optional group-level amp envelope export using documented Decent Sampler attributes: `ampEnvEnabled`, `attack`, `decay`, `sustain`, and `release`. When enabled, SampleSmith can also write visible Decent Sampler knobs bound to the documented group amp parameters `ENV_ATTACK`, `ENV_DECAY`, `ENV_SUSTAIN`, and `ENV_RELEASE`.
 - **Root offset** — shifts exported `rootNote` values without moving the playable key ranges. Default is `-12` because early tests came out sounding an octave low; set it back to `0` if your setup does not need that correction.
 - **Decent Sampler effects** — SampleSmith includes the documented DS effect types: filters (`lowpass`, `lowpass_1pl`, legacy `lowpass_4pl`, `bandpass`, `highpass`), `notch`, `peak`, `gain`, `reverb`, `delay`, `chorus`, `phaser`, `convolution`, `pitch_shift`, `wave_folder`, `wave_shaper`, `stereo_simulator`, and `bit_crusher`.
 - **Visible DS controls** — when effects are enabled, SampleSmith also writes a simple Decent Sampler `<ui>` tab with visible knobs bound to the correct effect positions where the binding parameter is known. `K` checkboxes decide which main controls appear as DS knobs. If one knob is selected for an effect, it uses the effect title, e.g. Reverb or Delay; if two or more are selected, SampleSmith creates a boxed section with the effect title and parameter labels such as Amount, Room, Damp, Time, and Feedback. Knobs include Decent Sampler `defaultValue` settings, and each SampleSmith effect row has a small defaults button for restoring sensible documented/example defaults.
@@ -112,7 +113,8 @@ Likely next steps:
 - add a small GUI or single-key controls for keep/redo/skip
 - add velocity layers
 - add round-robin takes
-- add loop-point detection for sustained notes
+- improve loop-point detection/preview for sustained notes
+- add per-sample loop overrides instead of only project-wide loop settings
 - improve Decent Sampler UI controls
 - add Reaper-specific helper/export workflow
 - support manual note correction more elegantly
