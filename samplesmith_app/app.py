@@ -1625,12 +1625,15 @@ class LoopEditorDialog(tk.Toplevel):
         self.sample = sample
         self.on_apply = on_apply
         self.title(f"Loop editor — {sample.path.name}")
-        self.geometry("940x430")
+        self.geometry("940x590")
         self.canvas_width = 880
         self.canvas_height = 220
+        self.zoom_width = 420
+        self.zoom_height = 120
+        self.zoom_half_frames = 1200
         self.dragging: str | None = None
         try:
-            self.frames, self.sample_rate, self.peaks = self._load_waveform(sample.path, self.canvas_width)
+            self.frames, self.sample_rate, self.peaks, self.waveform = self._load_waveform(sample.path, self.canvas_width)
         except RuntimeError:
             self.destroy()
             raise
@@ -1653,6 +1656,21 @@ class LoopEditorDialog(tk.Toplevel):
         self.canvas.bind("<Button-1>", self._start_drag)
         self.canvas.bind("<B1-Motion>", self._drag)
         self.canvas.bind("<ButtonRelease-1>", self._end_drag)
+
+        zooms = ttk.Frame(outer)
+        zooms.pack(fill="x", pady=(8, 0))
+        start_zoom = ttk.LabelFrame(zooms, text=f"Loop start close-up (±{self.zoom_half_frames:,} frames)")
+        start_zoom.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        end_zoom = ttk.LabelFrame(zooms, text=f"Loop end close-up (±{self.zoom_half_frames:,} frames)")
+        end_zoom.pack(side="left", fill="x", expand=True, padx=(6, 0))
+        self.start_zoom_canvas = tk.Canvas(start_zoom, width=self.zoom_width, height=self.zoom_height, bg="#101010", highlightthickness=1, highlightbackground="#666666")
+        self.start_zoom_canvas.pack(fill="x", padx=6, pady=6)
+        self.end_zoom_canvas = tk.Canvas(end_zoom, width=self.zoom_width, height=self.zoom_height, bg="#101010", highlightthickness=1, highlightbackground="#666666")
+        self.end_zoom_canvas.pack(fill="x", padx=6, pady=6)
+        self.start_zoom_canvas.bind("<Button-1>", lambda event: self._set_zoom_frame("start", event.x))
+        self.start_zoom_canvas.bind("<B1-Motion>", lambda event: self._set_zoom_frame("start", event.x))
+        self.end_zoom_canvas.bind("<Button-1>", lambda event: self._set_zoom_frame("end", event.x))
+        self.end_zoom_canvas.bind("<B1-Motion>", lambda event: self._set_zoom_frame("end", event.x))
 
         controls = ttk.Frame(outer)
         controls.pack(fill="x", pady=10)
@@ -1678,7 +1696,7 @@ class LoopEditorDialog(tk.Toplevel):
         self._draw()
         self.wait_window(self)
 
-    def _load_waveform(self, path: Path, buckets: int) -> tuple[int, int, list[float]]:
+    def _load_waveform(self, path: Path, buckets: int) -> tuple[int, int, list[float], list[float]]:
         try:
             import numpy as np
             import soundfile as sf
@@ -1690,15 +1708,19 @@ class LoopEditorDialog(tk.Toplevel):
             raise RuntimeError(f"Could not read WAV for loop editing: {path}") from exc
         if audio.size == 0:
             raise RuntimeError(f"Cannot edit an empty WAV: {path}")
-        mono = np.max(np.abs(audio), axis=1)
-        frames = int(mono.shape[0])
+        mono = np.mean(audio, axis=1)
+        abs_mono = np.abs(mono)
+        frames = int(abs_mono.shape[0])
         bucket_size = max(1, math.ceil(frames / buckets))
-        padded = np.pad(mono, (0, bucket_size * buckets - frames), mode="constant")
+        padded = np.pad(abs_mono, (0, bucket_size * buckets - frames), mode="constant")
         peaks = padded.reshape(buckets, bucket_size).max(axis=1)
         max_peak = float(peaks.max()) if peaks.size else 0.0
         if max_peak > 0:
             peaks = peaks / max_peak
-        return frames, int(sample_rate), [float(value) for value in peaks]
+        max_wave = float(np.max(np.abs(mono))) if mono.size else 0.0
+        if max_wave > 0:
+            mono = mono / max_wave
+        return frames, int(sample_rate), [float(value) for value in peaks], [float(value) for value in mono]
 
     def _parse_frame(self, text: str | None, fallback: int) -> int:
         try:
@@ -1725,6 +1747,18 @@ class LoopEditorDialog(tk.Toplevel):
             return 0
         return int(round(x / (self.canvas_width - 1) * (self.frames - 1)))
 
+    def _zoom_window(self, center_frame: int) -> tuple[int, int]:
+        left = max(0, center_frame - self.zoom_half_frames)
+        right = min(self.frames - 1, center_frame + self.zoom_half_frames)
+        if right <= left:
+            right = min(self.frames - 1, left + 1)
+        return left, right
+
+    def _zoom_frame_for_x(self, center_frame: int, x: int) -> int:
+        left, right = self._zoom_window(center_frame)
+        x = max(0, min(self.zoom_width - 1, x))
+        return int(round(left + (x / (self.zoom_width - 1)) * (right - left)))
+
     def _draw(self) -> None:
         if not hasattr(self, "canvas"):
             return
@@ -1743,6 +1777,42 @@ class LoopEditorDialog(tk.Toplevel):
         self.canvas.create_line(end_x, 0, end_x, self.canvas_height, fill="#ff453a", width=3, tags=("end",))
         self.canvas.create_text(start_x + 4, 12, text=f"start {start}", anchor="w", fill="#30d158")
         self.canvas.create_text(end_x - 4, self.canvas_height - 12, text=f"end {end}", anchor="e", fill="#ff453a")
+        if hasattr(self, "start_zoom_canvas"):
+            self._draw_zoom(self.start_zoom_canvas, start, "#30d158", "start")
+            self._draw_zoom(self.end_zoom_canvas, end, "#ff453a", "end")
+
+    def _draw_zoom(self, canvas: tk.Canvas, center_frame: int, color: str, label: str) -> None:
+        canvas.delete("all")
+        mid = self.zoom_height // 2
+        scale = (self.zoom_height // 2) - 12
+        canvas.create_line(0, mid, self.zoom_width, mid, fill="#555555")
+        left, right = self._zoom_window(center_frame)
+        span = max(1, right - left)
+        for x in range(self.zoom_width):
+            start = left + int((x / self.zoom_width) * span)
+            end = left + int(((x + 1) / self.zoom_width) * span)
+            if end <= start:
+                end = start + 1
+            segment = self.waveform[start:min(end, self.frames)]
+            if not segment:
+                continue
+            lo = min(segment)
+            hi = max(segment)
+            canvas.create_line(x, mid - int(hi * scale), x, mid - int(lo * scale), fill="#72b7ff")
+        center_x = int(round((center_frame - left) / span * (self.zoom_width - 1)))
+        canvas.create_line(center_x, 0, center_x, self.zoom_height, fill=color, width=3)
+        canvas.create_text(6, 12, text=f"{label} {center_frame}", anchor="w", fill=color)
+        canvas.create_text(self.zoom_width - 6, self.zoom_height - 12, text=f"{left}–{right}", anchor="e", fill="#bbbbbb")
+
+    def _set_zoom_frame(self, which: str, x: int) -> None:
+        start, end = self._loop_points()
+        center = start if which == "start" else end
+        frame = self._zoom_frame_for_x(center, x)
+        self.loop_enabled_var.set(True)
+        if which == "start":
+            self.loop_start_var.set(str(max(0, min(frame, end - 1))))
+        else:
+            self.loop_end_var.set(str(min(self.frames - 1, max(frame, start + 1))))
 
     def _start_drag(self, event) -> None:
         start, end = self._loop_points()
