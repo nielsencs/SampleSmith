@@ -437,15 +437,17 @@ class SampleSmithApp(tk.Tk):
 
         mapping = ttk.LabelFrame(mapping_tab, text="Effective exported sample mapping")
         mapping.pack(fill="both", expand=True)
-        self.export_tree = ttk.Treeview(mapping, columns=("source", "keys", "root", "mode"), show="headings", height=10)
+        self.export_tree = ttk.Treeview(mapping, columns=("source", "keys", "root", "mode", "loop"), show="headings", height=10)
         self.export_tree.heading("source", text="Source WAV")
         self.export_tree.heading("keys", text="Plays on keys")
         self.export_tree.heading("root", text="Exported root")
         self.export_tree.heading("mode", text="Mode")
-        self.export_tree.column("source", width=280)
-        self.export_tree.column("keys", width=230)
-        self.export_tree.column("root", width=160)
+        self.export_tree.heading("loop", text="Loop")
+        self.export_tree.column("source", width=250)
+        self.export_tree.column("keys", width=220)
+        self.export_tree.column("root", width=150)
         self.export_tree.column("mode", width=80, stretch=False)
+        self.export_tree.column("loop", width=150, stretch=False)
         self.export_tree.pack(fill="both", expand=True, padx=6, pady=6)
         self.export_tree.bind("<Double-1>", lambda _event: self._edit_selected_sample_loop())
         mapping_buttons = ttk.Frame(mapping)
@@ -458,7 +460,7 @@ class SampleSmithApp(tk.Tk):
             notes,
             text=(
                 "Decent Sampler settings are split into sub-tabs. Loop controls here are fallback/default values; "
-                "project files can now carry per-WAV loop fields ready for a later graphical editor. "
+                "per-WAV loop edits are shown in the mapping table and take priority during export. "
                 "Generated bridge WAVs are marked provisional/derived in the mapping table and saved under Samples/generated."
             ),
             wraplength=820,
@@ -1400,6 +1402,17 @@ class SampleSmithApp(tk.Tk):
                 self.note_rows[sample.root_note] = "" if is_generated else str(sample.path)
                 self.note_tree.insert("", "end", iid=iid, values=values, tags=("generated",) if is_generated else ())
 
+    def _sample_loop_text(self, sample: SampleInfo) -> str:
+        if not sample.loop_enabled:
+            return "—"
+        start, end = optional_non_negative_int(sample.loop_start), optional_non_negative_int(sample.loop_end)
+        if start is None or end is None or end <= start:
+            return "on"
+        text = f"{start}–{end}"
+        if sample.loop_crossfade and sample.loop_crossfade > 0:
+            text += f" / xfade {sample.loop_crossfade:g}"
+        return text
+
     def _refresh_export_mapping(self) -> None:
         for item in self.export_tree.get_children():
             self.export_tree.delete(item)
@@ -1416,6 +1429,7 @@ class SampleSmithApp(tk.Tk):
                     mapping_text(sample.lo_note, sample.hi_note),
                     exported_root_text(sample.root_note, self.root_note_offset_var.get()),
                     "bridge" if sample.generated or sample.provisional else sample.mode,
+                    self._sample_loop_text(sample),
                 ),
             )
 
@@ -1740,6 +1754,7 @@ class LoopEditorDialog(tk.Toplevel):
     def _drag(self, event) -> None:
         if self.dragging is None:
             return
+        self.loop_enabled_var.set(True)
         start, end = self._loop_points()
         frame = self._frame_for_x(event.x)
         if self.dragging == "start":
@@ -1777,8 +1792,20 @@ class LoopEditorDialog(tk.Toplevel):
         self.loop_crossfade_mode_var.set("equal_power")
         self._draw()
 
+    def _has_typed_loop_points(self) -> bool:
+        start_text = self.loop_start_var.get().strip()
+        end_text = self.loop_end_var.get().strip()
+        if not start_text or not end_text:
+            return False
+        try:
+            start = int(float(start_text))
+            end = int(float(end_text))
+        except ValueError:
+            return False
+        return 0 <= start < end
+
     def _apply(self) -> None:
-        if self.loop_enabled_var.get():
+        if self.loop_enabled_var.get() or self._has_typed_loop_points():
             start, end = self._loop_points()
             self.sample.loop_enabled = True
             self.sample.loop_start = start
