@@ -61,7 +61,7 @@ python samplesmith.py
 
 Set the instrument name and output folder, choose **Pitched** or **Unpitched / Pads**, then record. Each recording writes/updates both the `.dspreset` and the `.samplesmith.json` project file automatically; the generate/save buttons are there for manual regeneration.
 
-Use **Open project** to return to an existing SampleSmith project.
+Use **New project** to clear the current app state and start a blank unsaved project; it does not delete saved projects or WAV files. Use **Open project** to return to an existing SampleSmith project.
 
 Use **Review stray WAVs** if you have copied or recorded WAV files into the instrument/project folders outside SampleSmith. SampleSmith only checks the current project/instrument/sample folders, never the whole filesystem, and it asks before importing anything into the mapping.
 

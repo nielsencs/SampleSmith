@@ -45,6 +45,7 @@ class SampleSmithApp(tk.Tk):
         self.pad_note = DEFAULT_PAD_START_NOTE
         self._output_update_after_id: str | None = None
         self._build_ui()
+        self.blank_project_data = self._project_data()
         self.after(100, self._drain_queue)
 
     def _build_ui(self) -> None:
@@ -173,9 +174,10 @@ class SampleSmithApp(tk.Tk):
         ttk.Label(project, text="Trim dB").grid(row=1, column=2, sticky="w")
         ttk.Spinbox(project, textvariable=self.threshold_var, from_=-80, to=-10, increment=1, width=8).grid(row=1, column=3, sticky="w", padx=4)
         ttk.Checkbutton(project, text="Normalise", variable=self.normalise_var).grid(row=1, column=4, sticky="w")
-        ttk.Button(project, text="Open project", command=self._open_project_dialog).grid(row=2, column=0, sticky="w", pady=(6, 0))
-        ttk.Button(project, text="Save project", command=self._save_project_dialog).grid(row=2, column=1, sticky="w", pady=(6, 0), padx=4)
-        ttk.Button(project, text="Review stray WAVs", command=self._review_stray_wavs).grid(row=2, column=2, sticky="w", pady=(6, 0), padx=4)
+        ttk.Button(project, text="New project", command=self._new_project).grid(row=2, column=0, sticky="w", pady=(6, 0))
+        ttk.Button(project, text="Open project", command=self._open_project_dialog).grid(row=2, column=1, sticky="w", pady=(6, 0), padx=4)
+        ttk.Button(project, text="Save project", command=self._save_project_dialog).grid(row=2, column=2, sticky="w", pady=(6, 0), padx=4)
+        ttk.Button(project, text="Review stray WAVs", command=self._review_stray_wavs).grid(row=2, column=3, sticky="w", pady=(6, 0), padx=4)
         project.columnconfigure(3, weight=1)
 
         tabs = ttk.Notebook(outer)
@@ -797,6 +799,27 @@ class SampleSmithApp(tk.Tk):
         self.project_path = target
         return target
 
+    def _new_project_data(self) -> dict[str, object]:
+        data = dict(self.blank_project_data)
+        data["output"] = self.output_var.get()
+        return data
+
+    def _current_project_differs_from_blank(self) -> bool:
+        current = self._project_data()
+        blank = self._new_project_data()
+        blank["output"] = current.get("output", blank.get("output"))
+        return current != blank or self.project_path is not None
+
+    def _new_project(self) -> None:
+        if self._current_project_differs_from_blank() and not messagebox.askyesno(
+            "SampleSmith",
+            "Start a new blank project?\n\nThis clears the current SampleSmith app state, but does not delete saved projects or WAV files.",
+        ):
+            return
+        self._load_project_data(self._new_project_data(), None)
+        self.log.delete("1.0", "end")
+        self._log("Started new blank project.")
+
     def _save_project_dialog(self) -> None:
         initial = self.project_path or self._default_project_path()
         chosen = filedialog.asksaveasfilename(
@@ -907,9 +930,8 @@ class SampleSmithApp(tk.Tk):
         if chosen:
             self._open_project(Path(chosen))
 
-    def _open_project(self, path: Path) -> None:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        self.project_path = path
+    def _load_project_data(self, data: dict[str, object], project_path: Path | None) -> None:
+        self.project_path = project_path
         self.name_var.set(str(data.get("name", "CarlSampler")))
         self.output_var.set(str(data.get("output", str(Path.cwd() / "captured-samplers"))))
         self.sample_rate_var.set(int(data.get("sample_rate", DEFAULT_SAMPLE_RATE)))
@@ -1030,6 +1052,11 @@ class SampleSmithApp(tk.Tk):
         self.pad_note = int(data.get("next_pad_note", DEFAULT_PAD_START_NOTE))
         self.samples = [SampleInfo.from_dict(item) for item in data.get("samples", [])]
         self._rebuild_trees_from_project()
+
+
+    def _open_project(self, path: Path) -> None:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        self._load_project_data(data, path)
         self._log(f"Opened project: {path}")
         self.after_idle(self._prompt_for_stray_wavs_if_any)
 
