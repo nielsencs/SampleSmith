@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-from .models import SampleInfo, clamp_float, clamp_midi_note, slugify, valid_loop_points
+from .models import SampleInfo, clamp_float, decent_sampler_root_note, slugify, valid_loop_points
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 OFFICIAL_BOILERPLATE_PATH = ASSETS_DIR / "official-boilerplate.dspreset"
@@ -516,10 +516,10 @@ def generate_dspreset(
         sample_loop_enabled = loop_enabled if sample.loop_enabled is None else sample.loop_enabled
         attrs = {
             "path": sample.path.relative_to(output_dir).as_posix(),
-            # Keep note names literal: a mapped C4 exports as C4. The
-            # root_note_offset argument is ignored for compatibility with older
-            # SampleSmith project/export callers that may still pass it.
-            "rootNote": str(clamp_midi_note(sample.root_note)),
+            # Carl's DS/Reaper octave convention needs displayed C4 to export
+            # as rootNote 72. root_note_offset is ignored; keep this fixed and
+            # explicit rather than exposing a pitch-shift kludge.
+            "rootNote": str(decent_sampler_root_note(sample.root_note)),
             "loNote": str(sample.lo_note),
             "hiNote": str(sample.hi_note),
             "loVel": "1",
