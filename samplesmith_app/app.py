@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import queue
 import threading
 import time
@@ -40,6 +41,7 @@ class SampleSmithApp(tk.Tk):
         self.low_note: int | None = None
         self.high_note: int | None = None
         self.note_rows: dict[int, str] = {}
+        self.export_samples_by_iid: dict[str, SampleInfo] = {}
         self.pad_note = DEFAULT_PAD_START_NOTE
         self._output_update_after_id: str | None = None
         self._build_ui()
@@ -445,6 +447,10 @@ class SampleSmithApp(tk.Tk):
         self.export_tree.column("root", width=160)
         self.export_tree.column("mode", width=80, stretch=False)
         self.export_tree.pack(fill="both", expand=True, padx=6, pady=6)
+        self.export_tree.bind("<Double-1>", lambda _event: self._edit_selected_sample_loop())
+        mapping_buttons = ttk.Frame(mapping)
+        mapping_buttons.pack(fill="x", padx=6, pady=(0, 6))
+        ttk.Button(mapping_buttons, text="Edit selected WAV loop…", command=self._edit_selected_sample_loop).pack(side="left")
 
         notes = ttk.LabelFrame(mapping_tab, text="Notes")
         notes.pack(fill="x", pady=(10, 0))
@@ -1397,10 +1403,14 @@ class SampleSmithApp(tk.Tk):
     def _refresh_export_mapping(self) -> None:
         for item in self.export_tree.get_children():
             self.export_tree.delete(item)
-        for sample in self._spread_recorded_pitched_samples():
+        self.export_samples_by_iid.clear()
+        for index, sample in enumerate(self._spread_recorded_pitched_samples()):
+            iid = f"export-{index}"
+            self.export_samples_by_iid[iid] = sample
             self.export_tree.insert(
                 "",
                 "end",
+                iid=iid,
                 values=(
                     f"[GENERATED provisional] {sample.path.name}" if sample.generated or sample.provisional else sample.path.name,
                     mapping_text(sample.lo_note, sample.hi_note),
@@ -1408,6 +1418,42 @@ class SampleSmithApp(tk.Tk):
                     "bridge" if sample.generated or sample.provisional else sample.mode,
                 ),
             )
+
+    def _editable_sample_for_exported(self, exported: SampleInfo) -> SampleInfo | None:
+        for sample in self.samples:
+            if sample.mode == exported.mode and sample.root_note == exported.root_note and sample.path == exported.path:
+                return sample
+        return None
+
+    def _edit_selected_sample_loop(self) -> None:
+        selected = self.export_tree.selection()
+        if not selected:
+            messagebox.showwarning("SampleSmith", "Select a WAV in the exported mapping first.")
+            return
+        exported = self.export_samples_by_iid.get(selected[0])
+        if exported is None:
+            messagebox.showwarning("SampleSmith", "Could not find that exported sample. Try refreshing the mapping.")
+            return
+        sample = self._editable_sample_for_exported(exported)
+        if sample is None:
+            messagebox.showinfo(
+                "SampleSmith",
+                "That row is generated/provisional. Record or import a real replacement first, then edit its loop points.",
+            )
+            return
+        if not sample.path.exists():
+            messagebox.showwarning("SampleSmith", f"WAV file not found:\n{sample.path}")
+            return
+        try:
+            LoopEditorDialog(self, sample, self._apply_sample_loop_edit)
+        except RuntimeError as exc:
+            messagebox.showerror("SampleSmith", str(exc))
+
+    def _apply_sample_loop_edit(self, sample: SampleInfo) -> None:
+        self._refresh_pitched_mappings()
+        preset = self._write_preset()
+        self._auto_save_project()
+        self._log(f"Updated loop settings for {sample.path.name}; regenerated {preset.name}")
 
     def _import_first_wav_loop_marker(self) -> None:
         for sample in self.samples:
@@ -1556,6 +1602,198 @@ class SampleSmithApp(tk.Tk):
         preset = self._write_preset()
         self._log(f"Generated {preset}")
         messagebox.showinfo("SampleSmith", f"Generated:\n{preset}")
+
+
+class LoopEditorDialog(tk.Toplevel):
+    def __init__(self, parent: SampleSmithApp, sample: SampleInfo, on_apply) -> None:
+        super().__init__(parent)
+        self.parent = parent
+        self.sample = sample
+        self.on_apply = on_apply
+        self.title(f"Loop editor — {sample.path.name}")
+        self.geometry("940x430")
+        self.canvas_width = 880
+        self.canvas_height = 220
+        self.dragging: str | None = None
+        try:
+            self.frames, self.sample_rate, self.peaks = self._load_waveform(sample.path, self.canvas_width)
+        except RuntimeError:
+            self.destroy()
+            raise
+        self.transient(parent)
+        self.grab_set()
+
+        self.loop_enabled_var = tk.BooleanVar(value=bool(sample.loop_enabled))
+        self.loop_start_var = tk.StringVar(value="" if sample.loop_start is None else str(sample.loop_start))
+        self.loop_end_var = tk.StringVar(value="" if sample.loop_end is None else str(sample.loop_end))
+        self.loop_crossfade_var = tk.DoubleVar(value=0.0 if sample.loop_crossfade is None else sample.loop_crossfade)
+        self.loop_crossfade_mode_var = tk.StringVar(value=sample.loop_crossfade_mode or "equal_power")
+
+        outer = ttk.Frame(self, padding=10)
+        outer.pack(fill="both", expand=True)
+        ttk.Label(outer, text=str(sample.path), wraplength=900).pack(anchor="w")
+        ttk.Label(outer, text=f"{self.frames:,} frames at {self.sample_rate:,} Hz").pack(anchor="w", pady=(2, 8))
+
+        self.canvas = tk.Canvas(outer, width=self.canvas_width, height=self.canvas_height, bg="#101010", highlightthickness=1, highlightbackground="#666666")
+        self.canvas.pack(fill="x")
+        self.canvas.bind("<Button-1>", self._start_drag)
+        self.canvas.bind("<B1-Motion>", self._drag)
+        self.canvas.bind("<ButtonRelease-1>", self._end_drag)
+
+        controls = ttk.Frame(outer)
+        controls.pack(fill="x", pady=10)
+        ttk.Checkbutton(controls, text="Loop this WAV", variable=self.loop_enabled_var, command=self._draw).grid(row=0, column=0, sticky="w", padx=(0, 12))
+        ttk.Label(controls, text="start").grid(row=0, column=1, sticky="w")
+        ttk.Entry(controls, textvariable=self.loop_start_var, width=12).grid(row=0, column=2, sticky="w", padx=(3, 12))
+        ttk.Label(controls, text="end").grid(row=0, column=3, sticky="w")
+        ttk.Entry(controls, textvariable=self.loop_end_var, width=12).grid(row=0, column=4, sticky="w", padx=(3, 12))
+        ttk.Label(controls, text="crossfade").grid(row=0, column=5, sticky="w")
+        ttk.Spinbox(controls, textvariable=self.loop_crossfade_var, from_=0, to=60000, increment=10, width=9).grid(row=0, column=6, sticky="w", padx=(3, 12))
+        ttk.OptionMenu(controls, self.loop_crossfade_mode_var, self.loop_crossfade_mode_var.get(), "equal_power", "linear").grid(row=0, column=7, sticky="w")
+
+        buttons = ttk.Frame(outer)
+        buttons.pack(fill="x")
+        ttk.Button(buttons, text="Import WAV marker", command=self._import_marker).pack(side="left")
+        ttk.Button(buttons, text="Use visible middle 60%", command=self._use_middle).pack(side="left", padx=6)
+        ttk.Button(buttons, text="Clear per-WAV loop", command=self._clear_loop).pack(side="left", padx=6)
+        ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="right")
+        ttk.Button(buttons, text="Apply", command=self._apply).pack(side="right", padx=6)
+
+        for var in (self.loop_start_var, self.loop_end_var):
+            var.trace_add("write", lambda *_args: self._draw())
+        self._draw()
+        self.wait_window(self)
+
+    def _load_waveform(self, path: Path, buckets: int) -> tuple[int, int, list[float]]:
+        try:
+            import numpy as np
+            import soundfile as sf
+        except ImportError as exc:
+            raise RuntimeError("Loop editor needs soundfile and numpy installed. Run: python -m pip install -r requirements.txt") from exc
+        try:
+            audio, sample_rate = sf.read(path, always_2d=True, dtype="float32")
+        except Exception as exc:
+            raise RuntimeError(f"Could not read WAV for loop editing: {path}") from exc
+        if audio.size == 0:
+            raise RuntimeError(f"Cannot edit an empty WAV: {path}")
+        mono = np.max(np.abs(audio), axis=1)
+        frames = int(mono.shape[0])
+        bucket_size = max(1, math.ceil(frames / buckets))
+        padded = np.pad(mono, (0, bucket_size * buckets - frames), mode="constant")
+        peaks = padded.reshape(buckets, bucket_size).max(axis=1)
+        max_peak = float(peaks.max()) if peaks.size else 0.0
+        if max_peak > 0:
+            peaks = peaks / max_peak
+        return frames, int(sample_rate), [float(value) for value in peaks]
+
+    def _parse_frame(self, text: str | None, fallback: int) -> int:
+        try:
+            value = int(float((text or "").strip()))
+        except ValueError:
+            value = fallback
+        return max(0, min(self.frames - 1, value))
+
+    def _loop_points(self) -> tuple[int, int]:
+        start = self._parse_frame(self.loop_start_var.get(), 0)
+        end = self._parse_frame(self.loop_end_var.get(), self.frames - 1)
+        if end <= start:
+            end = min(self.frames - 1, start + 1)
+        return start, end
+
+    def _x_for_frame(self, frame: int) -> int:
+        if self.frames <= 1:
+            return 0
+        return int(round(frame / (self.frames - 1) * (self.canvas_width - 1)))
+
+    def _frame_for_x(self, x: int) -> int:
+        x = max(0, min(self.canvas_width - 1, x))
+        if self.frames <= 1:
+            return 0
+        return int(round(x / (self.canvas_width - 1) * (self.frames - 1)))
+
+    def _draw(self) -> None:
+        if not hasattr(self, "canvas"):
+            return
+        self.canvas.delete("all")
+        mid = self.canvas_height // 2
+        scale = (self.canvas_height // 2) - 14
+        for x, peak in enumerate(self.peaks):
+            y = int(peak * scale)
+            self.canvas.create_line(x, mid - y, x, mid + y, fill="#72b7ff")
+        start, end = self._loop_points()
+        start_x = self._x_for_frame(start)
+        end_x = self._x_for_frame(end)
+        if self.loop_enabled_var.get():
+            self.canvas.create_rectangle(start_x, 0, end_x, self.canvas_height, fill="#24402c", stipple="gray25", outline="")
+        self.canvas.create_line(start_x, 0, start_x, self.canvas_height, fill="#30d158", width=3, tags=("start",))
+        self.canvas.create_line(end_x, 0, end_x, self.canvas_height, fill="#ff453a", width=3, tags=("end",))
+        self.canvas.create_text(start_x + 4, 12, text=f"start {start}", anchor="w", fill="#30d158")
+        self.canvas.create_text(end_x - 4, self.canvas_height - 12, text=f"end {end}", anchor="e", fill="#ff453a")
+
+    def _start_drag(self, event) -> None:
+        start, end = self._loop_points()
+        start_x = self._x_for_frame(start)
+        end_x = self._x_for_frame(end)
+        self.dragging = "start" if abs(event.x - start_x) <= abs(event.x - end_x) else "end"
+        self._drag(event)
+
+    def _drag(self, event) -> None:
+        if self.dragging is None:
+            return
+        start, end = self._loop_points()
+        frame = self._frame_for_x(event.x)
+        if self.dragging == "start":
+            start = min(frame, end - 1)
+            self.loop_start_var.set(str(max(0, start)))
+        else:
+            end = max(frame, start + 1)
+            self.loop_end_var.set(str(min(self.frames - 1, end)))
+
+    def _end_drag(self, _event) -> None:
+        self.dragging = None
+
+    def _import_marker(self) -> None:
+        marker = read_wav_smpl_loop_points(self.sample.path)
+        if marker is None:
+            messagebox.showinfo("SampleSmith", "No embedded WAV smpl loop marker found in this WAV.")
+            return
+        start, end = marker
+        self.loop_enabled_var.set(True)
+        self.loop_start_var.set(str(start))
+        self.loop_end_var.set(str(end))
+        self._draw()
+
+    def _use_middle(self) -> None:
+        self.loop_enabled_var.set(True)
+        self.loop_start_var.set(str(max(0, int(self.frames * 0.2))))
+        self.loop_end_var.set(str(min(self.frames - 1, int(self.frames * 0.8))))
+        self._draw()
+
+    def _clear_loop(self) -> None:
+        self.loop_enabled_var.set(False)
+        self.loop_start_var.set("")
+        self.loop_end_var.set("")
+        self.loop_crossfade_var.set(0.0)
+        self.loop_crossfade_mode_var.set("equal_power")
+        self._draw()
+
+    def _apply(self) -> None:
+        if self.loop_enabled_var.get():
+            start, end = self._loop_points()
+            self.sample.loop_enabled = True
+            self.sample.loop_start = start
+            self.sample.loop_end = end
+            self.sample.loop_crossfade = max(0.0, min(60000.0, float(self.loop_crossfade_var.get())))
+            mode = self.loop_crossfade_mode_var.get()
+            self.sample.loop_crossfade_mode = mode if mode in {"linear", "equal_power"} else "equal_power"
+        else:
+            self.sample.loop_enabled = False
+            self.sample.loop_start = None
+            self.sample.loop_end = None
+            self.sample.loop_crossfade = None
+            self.sample.loop_crossfade_mode = None
+        self.on_apply(self.sample)
+        self.destroy()
 
 
 def main() -> None:
