@@ -71,7 +71,6 @@ class SampleSmithApp(tk.Tk):
         self.amp_sustain_var = tk.DoubleVar(value=1.0)
         self.amp_release_var = tk.DoubleVar(value=0.8)
         self.ds_knob_amp_env_var = tk.BooleanVar(value=True)
-        self.root_note_offset_var = tk.IntVar(value=-12)
         self.delay_enabled_var = tk.BooleanVar(value=False)
         self.delay_time_var = tk.DoubleVar(value=0.7)
         self.delay_stereo_offset_var = tk.DoubleVar(value=0.0)
@@ -274,8 +273,6 @@ class SampleSmithApp(tk.Tk):
         export = ttk.LabelFrame(basics_tab, text="Decent Sampler output")
         export.pack(fill="x")
         ttk.Checkbutton(export, text="Loop samples by default", variable=self.loop_enabled_var, command=self._on_output_parameter_changed).grid(row=0, column=0, sticky="w", padx=6, pady=6)
-        ttk.Label(export, text="Root offset").grid(row=0, column=1, sticky="w", padx=(18, 4), pady=6)
-        ttk.Spinbox(export, textvariable=self.root_note_offset_var, from_=-36, to=36, increment=12, width=6, command=self._on_output_parameter_changed).grid(row=0, column=2, sticky="w", pady=6)
 
         loop = ttk.LabelFrame(basics_tab, text="Fallback/default loop points")
         loop.pack(fill="x", pady=(10, 0))
@@ -442,7 +439,7 @@ class SampleSmithApp(tk.Tk):
         self.export_tree = ttk.Treeview(mapping, columns=("source", "keys", "root", "mode", "loop"), show="headings", height=10)
         self.export_tree.heading("source", text="Source WAV")
         self.export_tree.heading("keys", text="Plays on keys")
-        self.export_tree.heading("root", text="Exported root")
+        self.export_tree.heading("root", text="Root note")
         self.export_tree.heading("mode", text="Mode")
         self.export_tree.heading("loop", text="Loop")
         self.export_tree.column("source", width=250)
@@ -482,7 +479,6 @@ class SampleSmithApp(tk.Tk):
             self.amp_sustain_var,
             self.amp_release_var,
             self.ds_knob_amp_env_var,
-            self.root_note_offset_var,
             self.delay_enabled_var,
             self.delay_time_var,
             self.delay_stereo_offset_var,
@@ -692,7 +688,6 @@ class SampleSmithApp(tk.Tk):
             "amp_sustain": self.amp_sustain_var.get(),
             "amp_release": self.amp_release_var.get(),
             "ds_knob_amp_env": self.ds_knob_amp_env_var.get(),
-            "root_note_offset": self.root_note_offset_var.get(),
             "delay_enabled": self.delay_enabled_var.get(),
             "delay_time": self.delay_time_var.get(),
             "delay_stereo_offset": self.delay_stereo_offset_var.get(),
@@ -838,6 +833,7 @@ class SampleSmithApp(tk.Tk):
         if self.project_path is not None:
             roots.append(self.project_path.parent)
         seen_roots: set[Path] = set()
+        seen_wavs: set[Path] = set()
         known = {sample.path.resolve() for sample in self.samples if sample.path.exists()}
         strays: list[Path] = []
         for root in roots:
@@ -848,12 +844,11 @@ class SampleSmithApp(tk.Tk):
             if resolved_root in seen_roots:
                 continue
             seen_roots.add(resolved_root)
-            for wav in sorted(root.rglob("*.wav")):
-                if "generated" in wav.relative_to(root).parts:
-                    continue
+            for wav in sorted(root.glob("*.wav")):
                 resolved_wav = wav.resolve()
-                if resolved_wav in known or resolved_wav in {path.resolve() for path in strays}:
+                if resolved_wav in known or resolved_wav in seen_wavs:
                     continue
+                seen_wavs.add(resolved_wav)
                 strays.append(wav)
         return strays
 
@@ -949,7 +944,6 @@ class SampleSmithApp(tk.Tk):
         self.amp_sustain_var.set(float(data.get("amp_sustain", 1.0)))
         self.amp_release_var.set(float(data.get("amp_release", 0.8)))
         self.ds_knob_amp_env_var.set(bool(data.get("ds_knob_amp_env", True)))
-        self.root_note_offset_var.set(int(data.get("root_note_offset", -12)))
         self.delay_enabled_var.set(bool(data.get("delay_enabled", False)))
         self.delay_time_var.set(float(data.get("delay_time", 0.7)))
         self.delay_stereo_offset_var.set(float(data.get("delay_stereo_offset", 0.0)))
@@ -1454,7 +1448,7 @@ class SampleSmithApp(tk.Tk):
                 values=(
                     f"[GENERATED provisional] {sample.path.name}" if sample.generated or sample.provisional else sample.path.name,
                     mapping_text(sample.lo_note, sample.hi_note),
-                    exported_root_text(sample.root_note, self.root_note_offset_var.get()),
+                    exported_root_text(sample.root_note, 0),
                     "bridge" if sample.generated or sample.provisional else sample.mode,
                     self._sample_loop_text(sample),
                 ),
@@ -1530,7 +1524,6 @@ class SampleSmithApp(tk.Tk):
             amp_sustain=self.amp_sustain_var.get(),
             amp_release=self.amp_release_var.get(),
             ds_knob_amp_env=self.ds_knob_amp_env_var.get(),
-            root_note_offset=self.root_note_offset_var.get(),
             delay_enabled=self.delay_enabled_var.get(),
             delay_time=self.delay_time_var.get(),
             delay_stereo_offset=self.delay_stereo_offset_var.get(),

@@ -149,7 +149,6 @@ def build_pack(output_root: Path) -> None:
             name,
             output_root,
             [sample],
-            root_note_offset=0,
             **test.get("kwargs", {}),
         )
         rows.append((preset.name, str(test["effect"]), str(test["expected"])))

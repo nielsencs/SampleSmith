@@ -516,7 +516,10 @@ def generate_dspreset(
         sample_loop_enabled = loop_enabled if sample.loop_enabled is None else sample.loop_enabled
         attrs = {
             "path": sample.path.relative_to(output_dir).as_posix(),
-            "rootNote": str(clamp_midi_note(sample.root_note + root_note_offset)),
+            # Keep note names literal: a mapped C4 exports as C4. The
+            # root_note_offset argument is ignored for compatibility with older
+            # SampleSmith project/export callers that may still pass it.
+            "rootNote": str(clamp_midi_note(sample.root_note)),
             "loNote": str(sample.lo_note),
             "hiNote": str(sample.hi_note),
             "loVel": "1",

@@ -86,8 +86,10 @@ def mapping_text(lo_note: int, hi_note: int) -> str:
     return f"MIDI {lo_note}–{hi_note} ({midi_to_name(lo_note)} to {midi_to_name(hi_note)})"
 
 
-def exported_root_text(root_note: int, root_note_offset: int) -> str:
-    exported = clamp_midi_note(root_note + root_note_offset)
+def exported_root_text(root_note: int, root_note_offset: int = 0) -> str:
+    # root_note_offset is kept only for compatibility with older call sites.
+    # SampleSmith no longer shifts roots: C4 should export as C4.
+    exported = clamp_midi_note(root_note)
     return f"MIDI {exported} ({midi_to_name(exported)})"
 
 
