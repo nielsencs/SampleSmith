@@ -9,10 +9,14 @@ from pathlib import Path
 
 NOTE_NAMES_SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 NOTE_ALIASES = {"DB": "C#", "EB": "D#", "GB": "F#", "AB": "G#", "BB": "A#"}
-A4_MIDI = 69
+# Decent Sampler's screen keyboard labels C4 as key/note number 72. SampleSmith
+# follows that convention because its purpose is to build Decent Sampler patches.
+# Acoustic frequency conversion uses DS A4 = key 81 so DS C4 still sounds as
+# middle C (~261.63 Hz).
+A4_MIDI = 81
 A4_HZ = 440.0
 DEFAULT_SAMPLE_RATE = 44100
-DEFAULT_PAD_START_NOTE = 36  # C2
+DEFAULT_PAD_START_NOTE = 48  # DS C2
 
 
 def slugify(value: str) -> str:
@@ -30,7 +34,7 @@ def freq_to_midi(freq: float) -> int:
 
 
 def midi_to_name(midi_note: int) -> str:
-    return f"{NOTE_NAMES_SHARP[midi_note % 12]}{(midi_note // 12) - 1}"
+    return f"{NOTE_NAMES_SHARP[midi_note % 12]}{(midi_note // 12) - 2}"
 
 
 def name_to_midi(note_name: str) -> int:
@@ -42,7 +46,7 @@ def name_to_midi(note_name: str) -> int:
     note = NOTE_ALIASES.get(note, note)
     if note not in NOTE_NAMES_SHARP:
         raise ValueError(f"Invalid note name: {note_name!r}")
-    return (int(octave_text) + 1) * 12 + NOTE_NAMES_SHARP.index(note)
+    return (int(octave_text) + 2) * 12 + NOTE_NAMES_SHARP.index(note)
 
 
 def note_range(low: int, high: int, step: int) -> list[int]:
@@ -66,8 +70,8 @@ def build_key_ranges(notes: list[int]) -> list[tuple[int, int, int]]:
 def build_overlapping_key_ranges(notes: list[int]) -> list[tuple[int, int, int]]:
     """Map recorded sample roots with overlap between neighbouring home notes.
 
-    Example: roots C3/C4 become C3 -> MIDI 0-60 and C4 -> MIDI 48-127.
-    The 48-60 overlap is a layered blend zone for now; true key-based crossfades
+    Example: DS roots C3/C4 (60/72) become C3 -> keys 0-72 and C4 -> keys 60-127.
+    The 60-72 overlap is a layered blend zone for now; true key-based crossfades
     can be added later if/when we add Decent Sampler fade parameters.
     """
     sorted_notes = sorted(notes)
@@ -80,7 +84,7 @@ def build_overlapping_key_ranges(notes: list[int]) -> list[tuple[int, int, int]]
 
 
 def mapping_text(lo_note: int, hi_note: int) -> str:
-    return f"MIDI {lo_note}–{hi_note} ({midi_to_name(lo_note)} to {midi_to_name(hi_note)})"
+    return f"DS keys {lo_note}–{hi_note} ({midi_to_name(lo_note)} to {midi_to_name(hi_note)})"
 
 
 def decent_sampler_root_note(root_note: int) -> int:
@@ -89,10 +93,9 @@ def decent_sampler_root_note(root_note: int) -> int:
 
 def exported_root_text(root_note: int, root_note_offset: int = 0) -> str:
     # root_note_offset is kept only for compatibility with older call sites.
-    # Decent Sampler rootNote is a MIDI note number, so export the stored root
-    # literally and let octave-label differences be diagnosed separately.
+    # SampleSmith stores DS key numbers, so export roots literally.
     exported = decent_sampler_root_note(root_note)
-    return f"MIDI {exported} ({midi_to_name(exported)})"
+    return f"DS key {exported} ({midi_to_name(exported)})"
 
 
 @dataclass

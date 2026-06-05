@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Build a small Decent Sampler octave/MIDI diagnostic pack.
 
-This is for checking octave-label confusion. Decent Sampler's rootNote,
-loNote, and hiNote are MIDI note numbers. Decent Sampler standalone and MIDI
-controllers may label MIDI 60 differently. This pack lets a human hear which
-MIDI key plays an unshifted C4 tone in Decent Sampler standalone.
+This confirms Decent Sampler standalone's screen-key numbering. Decent
+Sampler uses key/root number 72 for its displayed C4 key. This pack uses a
+middle-C/C4 tone so the key-72 preset should play unshifted from DS C4.
 """
 
 from __future__ import annotations
@@ -63,19 +62,18 @@ def _write_readme(path: Path) -> None:
             [
                 "# SampleSmith octave/MIDI diagnostic pack",
                 "",
-                "This pack tests octave-label confusion between SampleSmith, Decent Sampler standalone, and your MIDI keyboard/controller.",
+                "This pack confirms Decent Sampler standalone's screen-key/root-note convention.",
                 "",
-                "The WAV is a generated C4 tone at about 261.63 Hz.",
-                "Decent Sampler `rootNote`, `loNote`, and `hiNote` are MIDI note numbers, not note-name strings.",
+                "The WAV is a generated middle-C/C4 tone at about 261.63 Hz.",
+                "Decent Sampler `rootNote`, `loNote`, and `hiNote` are key/root numbers. Its screen keyboard labels key 72 as C4.",
                 "",
-                "Open each preset in Decent Sampler and play the key your setup labels C4:",
+                "Open each preset in Decent Sampler standalone and click the on-screen C4 key:",
                 "",
-                "| Preset | rootNote | What it means if your C4 key sounds unshifted |",
+                "| Preset | rootNote | Expected result from DS C4 screen key |",
                 "| --- | ---: | --- |",
-                "| `Root_60_MIDI_C4.dspreset` | 60 | Your C4 key sends MIDI 60; SampleSmith should export literal roots. |",
-                "| `Root_72_MIDI_C5.dspreset` | 72 | Your C4 key sends MIDI 72; the problem is controller/octave labelling, not Decent Sampler parsing names. |",
+                "| `Root_60_DS_C3.dspreset` | 60 | Shifted, because DS C4 is not key 60. |",
+                "| `Root_72_DS_C4.dspreset` | 72 | Unshifted middle-C/C4 tone. |",
                 "",
-                "If both sound shifted, check which MIDI note Decent Sampler is receiving when you press the key labelled C4.",
                 "",
             ]
         ),
@@ -90,7 +88,7 @@ def build_pack(output_root: Path) -> None:
     sample_path = output_root / "Samples" / "generated_C4_261Hz.wav"
     _make_c4_sample(sample_path)
 
-    for name, root_note in [("Root_60_MIDI_C4", 60), ("Root_72_MIDI_C5", 72)]:
+    for name, root_note in [("Root_60_DS_C3", 60), ("Root_72_DS_C4", 72)]:
         sample = SampleInfo(path=sample_path, root_note=root_note, lo_note=0, hi_note=127, label=name)
         generate_dspreset(name, output_root, [sample])
 

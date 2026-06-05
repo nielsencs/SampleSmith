@@ -86,15 +86,15 @@ To audibly check Decent Sampler effect support on a local machine with audio, ge
 python tools/make_effects_test_pack.py
 ```
 
-This recreates `effects-test-pack/` with one shared `Samples/` folder, a dry control preset, one exaggerated `.dspreset` per supported effect/filter, and `LISTENING_CHECKLIST.md`. Open the checklist, then open each preset in Decent Sampler and play around C3/middle C. The generated pack is ignored by Git.
+This recreates `effects-test-pack/` with one shared `Samples/` folder, a dry control preset, one exaggerated `.dspreset` per supported effect/filter, and `LISTENING_CHECKLIST.md`. Open the checklist, then open each preset in Decent Sampler and play around the on-screen C4 key. The generated pack is ignored by Git.
 
-To diagnose octave-label / MIDI-number confusion between SampleSmith, Decent Sampler standalone, and a keyboard/controller, generate the octave diagnostic pack:
+To confirm Decent Sampler standalone's octave/key numbering, generate the octave diagnostic pack:
 
 ```bash
 python tools/make_octave_diagnostic_pack.py
 ```
 
-This recreates `octave-diagnostic-pack/` with one generated C4 tone sample plus two presets: one rooted at MIDI 60 and one rooted at MIDI 72. Open its README and test which one sounds unshifted on the key your setup labels C4. The generated pack is ignored by Git.
+This recreates `octave-diagnostic-pack/` with one generated middle-C/C4 tone sample plus two presets: one rooted at key 60 and one rooted at key 72. In Decent Sampler standalone, the C4 screen key should play the key-72 preset unshifted. The generated pack is ignored by Git.
 
 ## Pitched mapping behaviour
 
@@ -105,7 +105,7 @@ Default pitched behaviour is classic sampler spreading: SampleSmith generates a 
 - Neighbouring samples overlap between their home notes.
 - Use **Generate bridge WAVs** on the Pitched tab to explicitly write provisional blended WAV files under `Samples/generated/` for missing notes between recorded samples. SampleSmith does not generate them as a hidden export side effect. Existing generated bridge WAVs are included in the visible/exported mapping and deliberately marked `[GENERATED provisional]` so they are easy to replace later with proper recorded samples.
 
-For example, recorded C3/C4 maps C3 from MIDI `0–60` and C4 from MIDI `48–127`, giving an overlap/blend zone between them. This can make strange-but-useful transformed sounds, such as very low growls.
+For example, recorded C3/C4 maps C3 from DS keys `0–72` and C4 from DS keys `60–127`, giving an overlap/blend zone between them. This can make strange-but-useful transformed sounds, such as very low growls.
 
 Possible later range modes:
 
@@ -121,13 +121,13 @@ Current Decent Sampler output parameters:
 
 - **Loop samples** — writes `loopEnabled="true"` on generated sample entries. The visible controls are fallback/default loop settings for the whole project: manual `loopStart` / `loopEnd` sample positions plus `loopCrossfade` and `loopCrossfadeMode` (`equal_power` or `linear`). The Mapping tab also has **Edit selected WAV loop…**, which opens a per-WAV graphical loop editor with a full waveform display, zoomed signed-waveform panes where a click sets the loop start/end, draggable rough loop-start/end handles, numeric fields, crossfade settings, raw and crossfade loop audition/stop controls, and an individual **Import WAV marker** action. Per-sample loop fields (`loop_enabled`, `loop_start`, `loop_end`, `loop_crossfade`, `loop_crossfade_mode`) are saved in the project and take priority during export. If loop is enabled but no valid manual start/end is entered, SampleSmith leaves the explicit points out so Decent Sampler can still use embedded WAV loop markers when present. The Decent Sampler tab also has a first-pass “Use first WAV marker” helper for importing the first `smpl` loop marker it finds in the recorded WAVs.
 - **Amp ADSR envelope** — optional group-level amp envelope export using documented Decent Sampler attributes: `ampEnvEnabled`, `attack`, `decay`, `sustain`, and `release`. When enabled, SampleSmith can also write visible Decent Sampler knobs bound to the official-template-style instrument amp parameters `ENV_ATTACK`, `ENV_DECAY`, `ENV_SUSTAIN`, and `ENV_RELEASE`.
-- **Root notes are MIDI numbers** — Decent Sampler `rootNote`, `loNote`, and `hiNote` are MIDI note numbers. SampleSmith exports the stored MIDI root literally and keeps the old user-facing root-offset knob removed. Use `tools/make_octave_diagnostic_pack.py` if Decent Sampler standalone or a controller labels octaves differently.
+- **Decent Sampler note convention** — SampleSmith follows Decent Sampler's screen-key numbering because it exists to make `.dspreset` patches. In this convention C4 is key/root number 72, while the generated/reference tone for C4 is still actual middle C (~261.63 Hz). The old user-facing root-offset knob remains removed.
 - **Decent Sampler effects** — SampleSmith includes all effect types documented in the current Decent Sampler effects guide: filters (`lowpass`, `lowpass_1pl`, legacy `lowpass_4pl`, `bandpass`, `highpass`), `notch`, `peak`, `gain`, `reverb`, `delay`, `chorus`, `phaser`, `convolution`, `pitch_shift`, `wave_folder`, `wave_shaper`, `stereo_simulator`, and `bit_crusher`. Wave shaper now exposes its documented `highQuality` flag, stereo simulator exposes its documented algorithm/width/delay/modulation export settings, and bit crusher defaults to audible example-style settings (`bitDepth=8`, `sampleRateReduction=4`) rather than the documented clean no-op defaults.
 - **Visible DS controls** — when effects are enabled, SampleSmith also writes a simple Decent Sampler `<ui>` tab with visible knobs bound to the correct effect positions where the binding parameter is known. `K` checkboxes decide which main controls appear as DS knobs. If one knob is selected for an effect, it uses the effect title, e.g. Reverb or Delay; if two or more are selected, SampleSmith creates a boxed section with the effect title and parameter labels such as Amount, Room, Damp, Time, and Feedback. Knobs use visual defaults from Decent Sampler’s official boilerplate template, include Decent Sampler `defaultValue` settings, and each SampleSmith effect row has a small defaults button for restoring sensible documented/example defaults. The main Tone knob now uses the official boilerplate frequency translation table. Bit crusher has verified knobs for bit depth, sample-rate reduction, and mix; stereo simulator currently only exposes a DS knob for the documented/verified `FX_WIDTH` binding while exporting the other settings statically.
 - **Convolution reverb / IR** — adds a Decent Sampler `<effect type="convolution">` when you provide an IR file path and mix above zero. IR means impulse response; the file path must be valid from the `.dspreset`, e.g. `Samples/long hall.wav`. SampleSmith does not yet copy/manage IR files for you.
 - **Version caveat** — newer Decent Sampler effects require a recent Decent Sampler build (for example, `stereo_simulator` was introduced in DS 1.17.0). If an exported effect is ignored by Decent Sampler, first check the installed plug-in/app version.
 
-The **Effective exported sample mapping** table shows which WAV will play on which MIDI keys, including the Decent Sampler MIDI root note number used for each displayed SampleSmith note.
+The **Effective exported sample mapping** table shows which WAV will play on which Decent Sampler keys, including the key/root number used for each displayed SampleSmith note.
 
 ## Current limits / next improvements
 

@@ -26,7 +26,7 @@ from samplesmith_app.dspreset import generate_dspreset
 from samplesmith_app.models import SampleInfo
 
 SAMPLE_RATE = 44_100
-ROOT_NOTE = 60  # C3 in SampleSmith/Decent Sampler MIDI numbering.
+ROOT_NOTE = 72  # Decent Sampler C4 / middle C.
 
 
 def _write_pcm16_wav(path: Path, frames: list[float], sample_rate: int = SAMPLE_RATE) -> None:
@@ -88,18 +88,18 @@ def _make_ir_sample(path: Path) -> None:
 
 
 def _sample_for(output_dir: Path) -> SampleInfo:
-    sample_path = output_dir / "Samples" / "effects_test_C3.wav"
+    sample_path = output_dir / "Samples" / "effects_test_C4.wav"
     if not sample_path.exists():
         _make_source_sample(sample_path)
-    return SampleInfo(path=sample_path, root_note=ROOT_NOTE, lo_note=0, hi_note=127, label="C3")
+    return SampleInfo(path=sample_path, root_note=ROOT_NOTE, lo_note=0, hi_note=127, label="C4")
 
 
 def _write_notes(path: Path, rows: list[tuple[str, str, str]]) -> None:
     lines = [
         "# SampleSmith Decent Sampler effects listening test pack",
         "",
-        "Open each `.dspreset` in this folder in Decent Sampler and play around middle C / C3.",
-        "All presets share `Samples/effects_test_C3.wav`. The presets are deliberately exaggerated; the goal is not taste, but to hear whether Decent Sampler applies the exported effect at all.",
+        "Open each `.dspreset` in this folder in Decent Sampler and play around the on-screen C4 key.",
+        "All presets share `Samples/effects_test_C4.wav`. The presets are deliberately exaggerated; the goal is not taste, but to hear whether Decent Sampler applies the exported effect at all.",
         "",
         "If the dry control works but an effect preset sounds unchanged, note the Decent Sampler version and the preset name.",
         "",

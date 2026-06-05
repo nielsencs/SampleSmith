@@ -670,7 +670,8 @@ class SampleSmithApp(tk.Tk):
 
     def _project_data(self) -> dict[str, object]:
         return {
-            "version": 1,
+            "version": 2,
+            "note_convention": "decent_sampler_screen_keys",
             "name": self.name_var.get(),
             "output": self.output_var.get(),
             "sample_rate": self.sample_rate_var.get(),
@@ -875,7 +876,7 @@ class SampleSmithApp(tk.Tk):
                 continue
             note_text = simpledialog.askstring(
                 "SampleSmith",
-                "Enter its root note for pitched mapping (e.g. C3 or 60).\n"
+                "Enter its root note for pitched mapping (e.g. C4 or 72).\n"
                 "Leave blank to import as the next unpitched pad.",
                 initialvalue="",
             )
@@ -925,7 +926,39 @@ class SampleSmithApp(tk.Tk):
         if chosen:
             self._open_project(Path(chosen))
 
+    @staticmethod
+    def _migrate_old_note_to_ds_key(value: object, *, preserve_full_range_edge: bool = False) -> int:
+        note = int(value)
+        if preserve_full_range_edge and note in {0, 127}:
+            return note
+        return max(0, min(127, note + 12))
+
+    def _migrate_project_note_convention(self, data: dict[str, object]) -> dict[str, object]:
+        if data.get("note_convention") == "decent_sampler_screen_keys":
+            return data
+        migrated = dict(data)
+        migrated["version"] = 2
+        migrated["note_convention"] = "decent_sampler_screen_keys"
+        for key in ("low_note", "high_note", "next_pad_note"):
+            if migrated.get(key) is not None:
+                migrated[key] = self._migrate_old_note_to_ds_key(migrated[key])
+        migrated_samples = []
+        for item in migrated.get("samples", []):
+            sample = dict(item)
+            for key in ("root_note",):
+                if sample.get(key) is not None:
+                    sample[key] = self._migrate_old_note_to_ds_key(sample[key])
+            for key in ("lo_note", "hi_note"):
+                if sample.get(key) is not None:
+                    sample[key] = self._migrate_old_note_to_ds_key(sample[key], preserve_full_range_edge=True)
+            if sample.get("source_roots"):
+                sample["source_roots"] = [self._migrate_old_note_to_ds_key(note) for note in sample["source_roots"]]
+            migrated_samples.append(sample)
+        migrated["samples"] = migrated_samples
+        return migrated
+
     def _load_project_data(self, data: dict[str, object], project_path: Path | None) -> None:
+        data = self._migrate_project_note_convention(data)
         self.project_path = project_path
         self.name_var.set(str(data.get("name", "CarlSampler")))
         self.output_var.set(str(data.get("output", str(Path.cwd() / "captured-samplers"))))
