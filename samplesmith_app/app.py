@@ -232,6 +232,7 @@ class SampleSmithApp(tk.Tk):
         ttk.Button(buttons, text="Play selected reference", command=self._play_selected_reference).pack(side="left")
         ttk.Button(buttons, text="Record selected sample", command=self._record_selected_note).pack(side="left", padx=6)
         ttk.Button(buttons, text="Record all missing", command=self._record_all_missing).pack(side="left")
+        ttk.Button(buttons, text="Generate bridge WAVs", command=self._generate_bridge_wavs_now).pack(side="left", padx=6)
 
     def _build_pads_tab(self) -> None:
         controls = ttk.Frame(self.pads_tab)
@@ -274,10 +275,11 @@ class SampleSmithApp(tk.Tk):
         ttk.Spinbox(export, textvariable=self.root_note_offset_var, from_=-36, to=36, increment=12, width=6, command=self._on_output_parameter_changed).grid(row=0, column=2, sticky="w", pady=6)
         ttk.Checkbutton(
             export,
-            text="Generate provisional bridge WAVs for missing notes",
+            text="Generate provisional bridge WAVs for missing notes during export/update",
             variable=self.generate_bridge_samples_var,
             command=self._on_output_parameter_changed,
         ).grid(row=1, column=0, columnspan=3, sticky="w", padx=6, pady=(0, 6))
+        ttk.Button(export, text="Generate bridge WAVs now", command=self._generate_bridge_wavs_now).grid(row=1, column=3, sticky="w", padx=6, pady=(0, 6))
 
         loop = ttk.LabelFrame(basics_tab, text="Fallback/default loop points")
         loop.pack(fill="x", pady=(10, 0))
@@ -1191,6 +1193,32 @@ class SampleSmithApp(tk.Tk):
             self._log("No missing pitched samples")
             return
         self._record_note_sequence(notes)
+
+    def _generate_bridge_wavs_now(self) -> None:
+        recorded = sorted(self._recorded_pitched_samples(), key=lambda sample: sample.root_note)
+        if len(recorded) < 2:
+            messagebox.showwarning("SampleSmith", "Record or import at least two pitched samples first.")
+            return
+        bridge_paths = [
+            self._bridge_sample_path(note, low_sample.root_note, high_sample.root_note)
+            for low_sample, high_sample in zip(recorded, recorded[1:])
+            for note in range(low_sample.root_note + 1, high_sample.root_note)
+        ]
+        if not bridge_paths:
+            messagebox.showinfo("SampleSmith", "No missing notes between recorded pitched samples.")
+            return
+        self.generate_bridge_samples_var.set(True)
+        before = {path for path in bridge_paths if path.exists()}
+        preset = self._write_preset()
+        after = {path for path in bridge_paths if path.exists()}
+        created = len(after - before)
+        self._auto_save_project()
+        self._log(f"Generated/updated bridge WAVs for {len(after)} provisional note(s); {created} newly written. Updated {preset.name}")
+        messagebox.showinfo(
+            "SampleSmith",
+            f"Generated/updated bridge WAVs for {len(after)} provisional note(s).\n\n"
+            "They are shown as [GENERATED provisional] in the pitched list and saved under Samples/generated/.",
+        )
 
     def _record_note_sequence(self, notes: list[int]) -> None:
         if not notes:
