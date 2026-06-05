@@ -1356,11 +1356,14 @@ class SampleSmithApp(tk.Tk):
 
     def _refresh_pitched_mappings(self) -> None:
         exported = [sample for sample in self._spread_recorded_pitched_samples() if sample.mode == "pitched"]
-        generated_roots = {sample.root_note for sample in exported if sample.generated or sample.provisional}
+        exported_roots = {sample.root_note for sample in exported}
+        recorded_roots = {sample.root_note for sample in exported if not (sample.generated or sample.provisional)}
+        generated_roots = exported_roots - recorded_roots
         for item in list(self.note_tree.get_children()):
-            if "generated" in self.note_tree.item(item, "tags") and int(item) not in generated_roots:
+            note = int(item)
+            if "generated" in self.note_tree.item(item, "tags") and note not in generated_roots and note not in recorded_roots:
                 self.note_tree.delete(item)
-                self.note_rows.pop(int(item), None)
+                self.note_rows.pop(note, None)
 
         for sample in exported:
             iid = str(sample.root_note)
@@ -1369,9 +1372,9 @@ class SampleSmithApp(tk.Tk):
             values = (midi_to_name(sample.root_note), mapping_text(sample.lo_note, sample.hi_note), file_name)
             if iid in self.note_tree.get_children():
                 self.note_tree.item(iid, values=values, tags=("generated",) if is_generated else ())
-            elif is_generated:
-                self.note_rows[sample.root_note] = ""
-                self.note_tree.insert("", "end", iid=iid, values=values, tags=("generated",))
+            else:
+                self.note_rows[sample.root_note] = "" if is_generated else str(sample.path)
+                self.note_tree.insert("", "end", iid=iid, values=values, tags=("generated",) if is_generated else ())
 
     def _refresh_export_mapping(self) -> None:
         for item in self.export_tree.get_children():
