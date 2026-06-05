@@ -1632,8 +1632,10 @@ class LoopEditorDialog(tk.Toplevel):
         self.zoom_height = 120
         self.zoom_half_frames = 1200
         self.dragging: str | None = None
+        self.audition_stop_event: threading.Event | None = None
+        self.audition_thread: threading.Thread | None = None
         try:
-            self.frames, self.sample_rate, self.peaks, self.waveform = self._load_waveform(sample.path, self.canvas_width)
+            self.frames, self.sample_rate, self.peaks, self.waveform, self.audio = self._load_waveform(sample.path, self.canvas_width)
         except RuntimeError:
             self.destroy()
             raise
@@ -1645,6 +1647,7 @@ class LoopEditorDialog(tk.Toplevel):
         self.loop_end_var = tk.StringVar(value="" if sample.loop_end is None else str(sample.loop_end))
         self.loop_crossfade_var = tk.DoubleVar(value=0.0 if sample.loop_crossfade is None else sample.loop_crossfade)
         self.loop_crossfade_mode_var = tk.StringVar(value=sample.loop_crossfade_mode or "equal_power")
+        self.audition_status_var = tk.StringVar(value="Audition plays the raw end→start loop, without crossfade.")
 
         outer = ttk.Frame(self, padding=10)
         outer.pack(fill="both", expand=True)
@@ -1685,16 +1688,19 @@ class LoopEditorDialog(tk.Toplevel):
         buttons.pack(fill="x")
         ttk.Button(buttons, text="Import WAV marker", command=self._import_marker).pack(side="left")
         ttk.Button(buttons, text="Use visible middle 60%", command=self._use_middle).pack(side="left", padx=6)
+        ttk.Button(buttons, text="Audition loop", command=self._start_loop_audition).pack(side="left", padx=6)
+        ttk.Button(buttons, text="Stop", command=self._stop_loop_audition).pack(side="left")
         ttk.Button(buttons, text="Clear per-WAV loop", command=self._clear_loop).pack(side="left", padx=6)
         ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="right")
         ttk.Button(buttons, text="Apply", command=self._apply).pack(side="right", padx=6)
+        ttk.Label(outer, textvariable=self.audition_status_var, foreground="#555555").pack(anchor="w", pady=(6, 0))
 
         for var in (self.loop_start_var, self.loop_end_var):
             var.trace_add("write", lambda *_args: self._draw())
         self._draw()
         self.wait_window(self)
 
-    def _load_waveform(self, path: Path, buckets: int) -> tuple[int, int, list[float], list[float]]:
+    def _load_waveform(self, path: Path, buckets: int):
         try:
             import numpy as np
             import soundfile as sf
@@ -1718,7 +1724,7 @@ class LoopEditorDialog(tk.Toplevel):
         max_wave = float(np.max(np.abs(mono))) if mono.size else 0.0
         if max_wave > 0:
             mono = mono / max_wave
-        return frames, int(sample_rate), [float(value) for value in peaks], [float(value) for value in mono]
+        return frames, int(sample_rate), [float(value) for value in peaks], [float(value) for value in mono], audio
 
     def _parse_frame(self, text: str | None, fallback: int) -> int:
         try:
@@ -1853,12 +1859,81 @@ class LoopEditorDialog(tk.Toplevel):
         self._draw()
 
     def _clear_loop(self) -> None:
+        self._stop_loop_audition()
         self.loop_enabled_var.set(False)
         self.loop_start_var.set("")
         self.loop_end_var.set("")
         self.loop_crossfade_var.set(0.0)
         self.loop_crossfade_mode_var.set("equal_power")
         self._draw()
+
+    def _set_audition_status(self, text: str) -> None:
+        if self.winfo_exists():
+            self.audition_status_var.set(text)
+
+    def _start_loop_audition(self) -> None:
+        start, end = self._loop_points()
+        if end <= start + 8:
+            messagebox.showwarning("SampleSmith", "Choose a longer loop region before auditioning.")
+            return
+        self.loop_enabled_var.set(True)
+        self._stop_loop_audition(join=False)
+        stop_event = threading.Event()
+        self.audition_stop_event = stop_event
+        self.audition_thread = threading.Thread(
+            target=self._loop_audition_worker,
+            args=(start, end, stop_event),
+            daemon=True,
+        )
+        self.audition_thread.start()
+        self._set_audition_status(f"Auditioning raw loop {start}–{end}. Press Stop to end playback.")
+
+    def _stop_loop_audition(self, join: bool = True) -> None:
+        if self.audition_stop_event is not None:
+            self.audition_stop_event.set()
+        try:
+            import sounddevice as sd
+
+            sd.stop()
+        except Exception:
+            pass
+        if join and self.audition_thread is not None and self.audition_thread.is_alive():
+            self.audition_thread.join(timeout=0.3)
+        self.audition_thread = None
+        self.audition_stop_event = None
+        if hasattr(self, "audition_status_var"):
+            self._set_audition_status("Audition stopped. Audition plays the raw end→start loop, without crossfade.")
+
+    def _loop_audition_worker(self, start: int, end: int, stop_event: threading.Event) -> None:
+        try:
+            import sounddevice as sd
+        except ImportError:
+            self.after(0, self._set_audition_status, "Loop audition needs sounddevice. Run: python -m pip install -r requirements.txt")
+            return
+
+        try:
+            pre_roll = int(self.sample_rate * 0.35)
+            intro_start = max(0, start - pre_roll)
+            intro = self.audio[intro_start:end]
+            loop = self.audio[start:end]
+            channels = 1 if loop.ndim == 1 else loop.shape[1]
+            chunk_frames = max(1, int(self.sample_rate * 0.08))
+            with sd.OutputStream(samplerate=self.sample_rate, channels=channels, dtype="float32") as stream:
+                if intro.size:
+                    self._write_audio_chunks(stream, intro, chunk_frames, stop_event)
+                while not stop_event.is_set():
+                    self._write_audio_chunks(stream, loop, chunk_frames, stop_event)
+        except Exception as exc:
+            self.after(0, self._set_audition_status, f"Loop audition failed: {exc}")
+        finally:
+            if not stop_event.is_set():
+                self.after(0, self._set_audition_status, "Audition finished.")
+
+    def _write_audio_chunks(self, stream, audio, chunk_frames: int, stop_event: threading.Event) -> None:
+        position = 0
+        while position < audio.shape[0] and not stop_event.is_set():
+            stream.write(audio[position:position + chunk_frames])
+            position += chunk_frames
 
     def _has_typed_loop_points(self) -> bool:
         start_text = self.loop_start_var.get().strip()
@@ -1873,6 +1948,7 @@ class LoopEditorDialog(tk.Toplevel):
         return 0 <= start < end
 
     def _apply(self) -> None:
+        self._stop_loop_audition()
         if self.loop_enabled_var.get() or self._has_typed_loop_points():
             start, end = self._loop_points()
             self.sample.loop_enabled = True
@@ -1889,6 +1965,10 @@ class LoopEditorDialog(tk.Toplevel):
             self.sample.loop_crossfade_mode = None
         self.on_apply(self.sample)
         self.destroy()
+
+    def destroy(self) -> None:
+        self._stop_loop_audition()
+        super().destroy()
 
 
 def main() -> None:
