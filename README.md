@@ -85,7 +85,7 @@ Default pitched behaviour is classic sampler spreading: SampleSmith generates a 
 - One recorded pitched sample maps across the whole keyboard.
 - Multiple pitched samples map from the previous recorded root note to the next recorded root note.
 - Neighbouring samples overlap between their home notes.
-- If **Generate provisional bridge WAVs for missing notes** is enabled, SampleSmith writes simple pitch-shifted WAV files under `Samples/generated/` for missing notes between recorded samples. These are deliberately marked `[GENERATED provisional]` in the mapping table and as generated/provisional metadata/comments so they are easy to replace later with proper recorded samples.
+- Use **Generate bridge WAVs** on the Pitched tab to explicitly write provisional blended WAV files under `Samples/generated/` for missing notes between recorded samples. SampleSmith does not generate them as a hidden export side effect. Existing generated bridge WAVs are included in the visible/exported mapping and deliberately marked `[GENERATED provisional]` so they are easy to replace later with proper recorded samples.
 
 For example, recorded C3/C4 maps C3 from MIDI `0–60` and C4 from MIDI `48–127`, giving an overlap/blend zone between them. This can make strange-but-useful transformed sounds, such as very low growls.
 

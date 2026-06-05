@@ -69,7 +69,6 @@ class SampleSmithApp(tk.Tk):
         self.amp_release_var = tk.DoubleVar(value=0.8)
         self.ds_knob_amp_env_var = tk.BooleanVar(value=True)
         self.root_note_offset_var = tk.IntVar(value=-12)
-        self.generate_bridge_samples_var = tk.BooleanVar(value=False)
         self.delay_enabled_var = tk.BooleanVar(value=False)
         self.delay_time_var = tk.DoubleVar(value=0.7)
         self.delay_stereo_offset_var = tk.DoubleVar(value=0.0)
@@ -273,13 +272,6 @@ class SampleSmithApp(tk.Tk):
         ttk.Checkbutton(export, text="Loop samples by default", variable=self.loop_enabled_var, command=self._on_output_parameter_changed).grid(row=0, column=0, sticky="w", padx=6, pady=6)
         ttk.Label(export, text="Root offset").grid(row=0, column=1, sticky="w", padx=(18, 4), pady=6)
         ttk.Spinbox(export, textvariable=self.root_note_offset_var, from_=-36, to=36, increment=12, width=6, command=self._on_output_parameter_changed).grid(row=0, column=2, sticky="w", pady=6)
-        ttk.Checkbutton(
-            export,
-            text="Generate provisional bridge WAVs for missing notes during export/update",
-            variable=self.generate_bridge_samples_var,
-            command=self._on_output_parameter_changed,
-        ).grid(row=1, column=0, columnspan=3, sticky="w", padx=6, pady=(0, 6))
-        ttk.Button(export, text="Generate bridge WAVs now", command=self._generate_bridge_wavs_now).grid(row=1, column=3, sticky="w", padx=6, pady=(0, 6))
 
         loop = ttk.LabelFrame(basics_tab, text="Fallback/default loop points")
         loop.pack(fill="x", pady=(10, 0))
@@ -481,7 +473,6 @@ class SampleSmithApp(tk.Tk):
             self.amp_release_var,
             self.ds_knob_amp_env_var,
             self.root_note_offset_var,
-            self.generate_bridge_samples_var,
             self.delay_enabled_var,
             self.delay_time_var,
             self.delay_stereo_offset_var,
@@ -692,7 +683,6 @@ class SampleSmithApp(tk.Tk):
             "amp_release": self.amp_release_var.get(),
             "ds_knob_amp_env": self.ds_knob_amp_env_var.get(),
             "root_note_offset": self.root_note_offset_var.get(),
-            "generate_bridge_samples": self.generate_bridge_samples_var.get(),
             "delay_enabled": self.delay_enabled_var.get(),
             "delay_time": self.delay_time_var.get(),
             "delay_stereo_offset": self.delay_stereo_offset_var.get(),
@@ -930,7 +920,6 @@ class SampleSmithApp(tk.Tk):
         self.amp_release_var.set(float(data.get("amp_release", 0.8)))
         self.ds_knob_amp_env_var.set(bool(data.get("ds_knob_amp_env", True)))
         self.root_note_offset_var.set(int(data.get("root_note_offset", -12)))
-        self.generate_bridge_samples_var.set(bool(data.get("generate_bridge_samples", False)))
         self.delay_enabled_var.set(bool(data.get("delay_enabled", False)))
         self.delay_time_var.set(float(data.get("delay_time", 0.7)))
         self.delay_stereo_offset_var.set(float(data.get("delay_stereo_offset", 0.0)))
@@ -1207,8 +1196,8 @@ class SampleSmithApp(tk.Tk):
         if not bridge_paths:
             messagebox.showinfo("SampleSmith", "No missing notes between recorded pitched samples.")
             return
-        self.generate_bridge_samples_var.set(True)
         before = {path for path in bridge_paths if path.exists()}
+        self._generated_bridge_samples(render_missing=True)
         preset = self._write_preset()
         after = {path for path in bridge_paths if path.exists()}
         created = len(after - before)
@@ -1302,9 +1291,7 @@ class SampleSmithApp(tk.Tk):
     def _recorded_pitched_samples(self) -> list[SampleInfo]:
         return [sample for sample in self.samples if sample.mode == "pitched" and not sample.generated]
 
-    def _generated_bridge_samples(self) -> list[SampleInfo]:
-        if not self.generate_bridge_samples_var.get():
-            return []
+    def _generated_bridge_samples(self, render_missing: bool = False) -> list[SampleInfo]:
         recorded = sorted(self._recorded_pitched_samples(), key=lambda sample: sample.root_note)
         if len(recorded) < 2:
             return []
@@ -1313,31 +1300,34 @@ class SampleSmithApp(tk.Tk):
             if high_sample.root_note - low_sample.root_note <= 1:
                 continue
             for target_note in range(low_sample.root_note + 1, high_sample.root_note):
+                target_path = self._bridge_sample_path(target_note, low_sample.root_note, high_sample.root_note)
                 missing_sources = [source.path for source in (low_sample, high_sample) if not source.path.exists()]
-                if missing_sources:
+                if render_missing and missing_sources:
                     for path in missing_sources:
                         self._log(f"Cannot generate bridge {midi_to_name(target_note)}; source WAV is missing: {path}")
                     continue
-                target_path = self._bridge_sample_path(target_note, low_sample.root_note, high_sample.root_note)
-                source_mtime = max(low_sample.path.stat().st_mtime, high_sample.path.stat().st_mtime)
-                if not target_path.exists() or target_path.stat().st_mtime < source_mtime:
-                    try:
-                        render_bridge_wav(
-                            low_sample.path,
-                            high_sample.path,
-                            target_path,
-                            low_sample.root_note,
-                            target_note,
-                            high_sample.root_note,
+                if render_missing and not missing_sources:
+                    source_mtime = max(low_sample.path.stat().st_mtime, high_sample.path.stat().st_mtime)
+                    if not target_path.exists() or target_path.stat().st_mtime < source_mtime:
+                        try:
+                            render_bridge_wav(
+                                low_sample.path,
+                                high_sample.path,
+                                target_path,
+                                low_sample.root_note,
+                                target_note,
+                                high_sample.root_note,
+                            )
+                        except RuntimeError as exc:
+                            self._log(f"Cannot generate bridge {midi_to_name(target_note)}: {exc}")
+                            continue
+                        self._log(
+                            "Generated provisional bridge WAV: "
+                            f"{target_path.relative_to(self._instrument_dir())} from blended sources "
+                            f"{low_sample.path.name} + {high_sample.path.name}"
                         )
-                    except RuntimeError as exc:
-                        self._log(f"Cannot generate bridge {midi_to_name(target_note)}: {exc}")
-                        continue
-                    self._log(
-                        "Generated provisional bridge WAV: "
-                        f"{target_path.relative_to(self._instrument_dir())} from blended sources "
-                        f"{low_sample.path.name} + {high_sample.path.name}"
-                    )
+                if not target_path.exists():
+                    continue
                 generated.append(
                     SampleInfo(
                         path=target_path,
