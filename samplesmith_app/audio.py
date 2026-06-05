@@ -120,22 +120,20 @@ def write_silent_wav(path: Path, sample_rate: int = DEFAULT_SAMPLE_RATE) -> None
         handle.writeframes(b"\x00\x00" * int(sample_rate * 0.1))
 
 
-def render_pitch_shifted_wav(source_path: Path, target_path: Path, semitones: int) -> None:
-    """Write a simple provisional pitch-shifted WAV by resampling the source.
-
-    This deliberately favours a dependency-light bridge sample over studio quality:
-    the generated file is meant to make an instrument playable until the user records
-    a proper replacement for that note.
-    """
+def _load_audio_for_bridge(path: Path):
     try:
-        import numpy as np
         import soundfile as sf
     except ImportError as exc:
         raise RuntimeError("Bridge WAV generation needs soundfile and numpy installed.") from exc
 
-    audio, sample_rate = sf.read(source_path, always_2d=True, dtype="float32")
+    audio, sample_rate = sf.read(path, always_2d=True, dtype="float32")
     if audio.size == 0:
-        raise RuntimeError(f"Cannot generate bridge sample from empty WAV: {source_path}")
+        raise RuntimeError(f"Cannot generate bridge sample from empty WAV: {path}")
+    return audio, sample_rate
+
+
+def _pitch_shift_audio(audio, semitones: int):
+    import numpy as np
 
     factor = 2 ** (semitones / 12.0)
     source_positions = np.arange(audio.shape[0], dtype=np.float64) * factor
@@ -145,12 +143,81 @@ def render_pitch_shifted_wav(source_path: Path, target_path: Path, semitones: in
 
     source_index = np.arange(audio.shape[0], dtype=np.float64)
     shifted_channels = [np.interp(source_positions, source_index, audio[:, channel]) for channel in range(audio.shape[1])]
-    shifted = np.stack(shifted_channels, axis=1).astype("float32")
-    fade_len = min(int(sample_rate * 0.005), shifted.shape[0] // 4)
+    return np.stack(shifted_channels, axis=1).astype("float32")
+
+
+def _match_channels(audio, channels: int):
+    import numpy as np
+
+    if audio.shape[1] == channels:
+        return audio
+    if audio.shape[1] == 1:
+        return np.repeat(audio, channels, axis=1)
+    return audio[:, :channels]
+
+
+def _fade_edges(audio, sample_rate: int):
+    import numpy as np
+
+    fade_len = min(int(sample_rate * 0.005), audio.shape[0] // 4)
     if fade_len > 0:
         fade = np.linspace(0.0, 1.0, fade_len, dtype="float32")
-        shifted[:fade_len, :] *= fade[:, None]
-        shifted[-fade_len:, :] *= fade[::-1, None]
+        audio[:fade_len, :] *= fade[:, None]
+        audio[-fade_len:, :] *= fade[::-1, None]
+    return audio
+
+
+def render_bridge_wav(
+    low_source_path: Path,
+    high_source_path: Path,
+    target_path: Path,
+    low_root_note: int,
+    target_note: int,
+    high_root_note: int,
+) -> None:
+    """Write a provisional bridge WAV blended from the two neighbouring samples.
+
+    Both neighbours are pitch-shifted to the missing target note, then mixed by
+    distance: notes nearer the lower recording contain more of the lower source,
+    and notes nearer the higher recording contain more of the higher source.
+    These files are explicitly provisional replacements for real recordings.
+    """
+    try:
+        import numpy as np
+        import soundfile as sf
+    except ImportError as exc:
+        raise RuntimeError("Bridge WAV generation needs soundfile and numpy installed.") from exc
+
+    low_audio, low_rate = _load_audio_for_bridge(low_source_path)
+    high_audio, high_rate = _load_audio_for_bridge(high_source_path)
+    if low_rate != high_rate:
+        raise RuntimeError(
+            "Cannot blend bridge sample from WAVs with different sample rates: "
+            f"{low_source_path.name} is {low_rate} Hz, {high_source_path.name} is {high_rate} Hz."
+        )
+    if not (low_root_note < target_note < high_root_note):
+        raise RuntimeError("Bridge target note must sit between the two source root notes.")
+
+    low_shifted = _pitch_shift_audio(low_audio, target_note - low_root_note)
+    high_shifted = _pitch_shift_audio(high_audio, target_note - high_root_note)
+
+    channels = max(low_shifted.shape[1], high_shifted.shape[1])
+    low_shifted = _match_channels(low_shifted, channels)
+    high_shifted = _match_channels(high_shifted, channels)
+
+    length = max(low_shifted.shape[0], high_shifted.shape[0])
+    low_padded = np.zeros((length, channels), dtype="float32")
+    high_padded = np.zeros((length, channels), dtype="float32")
+    low_padded[: low_shifted.shape[0], :] = low_shifted
+    high_padded[: high_shifted.shape[0], :] = high_shifted
+
+    high_weight = (target_note - low_root_note) / (high_root_note - low_root_note)
+    low_weight = 1.0 - high_weight
+    blended = (low_padded * low_weight + high_padded * high_weight).astype("float32")
+    peak = float(np.max(np.abs(blended))) if blended.size else 0.0
+    if peak > 0.98:
+        blended *= 0.98 / peak
+    blended = _fade_edges(blended, low_rate)
 
     target_path.parent.mkdir(parents=True, exist_ok=True)
-    sf.write(target_path, shifted, sample_rate, subtype="PCM_24")
+    sf.write(target_path, blended, low_rate, subtype="PCM_24")

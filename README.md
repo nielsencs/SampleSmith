@@ -38,8 +38,10 @@ sudo apt install python3-tk
 On the machine doing the recording:
 
 ```bash
-python -m pip install sounddevice soundfile numpy
+python -m pip install -r requirements.txt
 ```
+
+That installs `sounddevice`, `soundfile`, and `numpy`. Bridge WAV generation needs `soundfile` and `numpy`.
 
 Optional, for better pitch detection:
 

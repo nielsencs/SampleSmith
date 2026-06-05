@@ -10,7 +10,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from .audio import AudioEngine, render_pitch_shifted_wav, write_silent_wav
+from .audio import AudioEngine, render_bridge_wav, write_silent_wav
 from .dspreset import generate_dspreset
 from .looping import read_wav_smpl_loop_points
 from .models import (
@@ -1284,22 +1284,30 @@ class SampleSmithApp(tk.Tk):
             if high_sample.root_note - low_sample.root_note <= 1:
                 continue
             for target_note in range(low_sample.root_note + 1, high_sample.root_note):
-                lower_distance = target_note - low_sample.root_note
-                upper_distance = high_sample.root_note - target_note
-                source = low_sample if lower_distance <= upper_distance else high_sample
-                if not source.path.exists():
-                    self._log(f"Cannot generate bridge {midi_to_name(target_note)}; source WAV is missing: {source.path}")
+                missing_sources = [source.path for source in (low_sample, high_sample) if not source.path.exists()]
+                if missing_sources:
+                    for path in missing_sources:
+                        self._log(f"Cannot generate bridge {midi_to_name(target_note)}; source WAV is missing: {path}")
                     continue
                 target_path = self._bridge_sample_path(target_note, low_sample.root_note, high_sample.root_note)
-                if not target_path.exists() or target_path.stat().st_mtime < source.path.stat().st_mtime:
+                source_mtime = max(low_sample.path.stat().st_mtime, high_sample.path.stat().st_mtime)
+                if not target_path.exists() or target_path.stat().st_mtime < source_mtime:
                     try:
-                        render_pitch_shifted_wav(source.path, target_path, target_note - source.root_note)
+                        render_bridge_wav(
+                            low_sample.path,
+                            high_sample.path,
+                            target_path,
+                            low_sample.root_note,
+                            target_note,
+                            high_sample.root_note,
+                        )
                     except RuntimeError as exc:
                         self._log(f"Cannot generate bridge {midi_to_name(target_note)}: {exc}")
                         continue
                     self._log(
                         "Generated provisional bridge WAV: "
-                        f"{target_path.relative_to(self._instrument_dir())} from {source.path.name}"
+                        f"{target_path.relative_to(self._instrument_dir())} from blended sources "
+                        f"{low_sample.path.name} + {high_sample.path.name}"
                     )
                 generated.append(
                     SampleInfo(
