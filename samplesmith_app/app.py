@@ -1674,7 +1674,7 @@ class LoopEditorDialog(tk.Toplevel):
         self.loop_end_var = tk.StringVar(value="" if sample.loop_end is None else str(sample.loop_end))
         self.loop_crossfade_var = tk.DoubleVar(value=0.0 if sample.loop_crossfade is None else sample.loop_crossfade)
         self.loop_crossfade_mode_var = tk.StringVar(value=sample.loop_crossfade_mode or "equal_power")
-        self.audition_status_var = tk.StringVar(value="Audition plays the raw end→start loop, without crossfade.")
+        self.audition_status_var = tk.StringVar(value="Audition raw exposes the end→start join; Audition xfade uses the current crossfade setting.")
 
         outer = ttk.Frame(self, padding=10)
         outer.pack(fill="both", expand=True)
@@ -1715,8 +1715,9 @@ class LoopEditorDialog(tk.Toplevel):
         buttons.pack(fill="x")
         ttk.Button(buttons, text="Import WAV marker", command=self._import_marker).pack(side="left")
         ttk.Button(buttons, text="Use visible middle 60%", command=self._use_middle).pack(side="left", padx=6)
-        ttk.Button(buttons, text="Audition loop", command=self._start_loop_audition).pack(side="left", padx=6)
-        ttk.Button(buttons, text="Stop", command=self._stop_loop_audition).pack(side="left")
+        ttk.Button(buttons, text="Audition raw", command=lambda: self._start_loop_audition("raw")).pack(side="left", padx=6)
+        ttk.Button(buttons, text="Audition xfade", command=lambda: self._start_loop_audition("xfade")).pack(side="left")
+        ttk.Button(buttons, text="Stop", command=self._stop_loop_audition).pack(side="left", padx=(6, 0))
         ttk.Button(buttons, text="Clear per-WAV loop", command=self._clear_loop).pack(side="left", padx=6)
         ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="right")
         ttk.Button(buttons, text="Apply", command=self._apply).pack(side="right", padx=6)
@@ -1898,22 +1899,34 @@ class LoopEditorDialog(tk.Toplevel):
         if self.winfo_exists():
             self.audition_status_var.set(text)
 
-    def _start_loop_audition(self) -> None:
+    def _start_loop_audition(self, mode: str = "raw") -> None:
         start, end = self._loop_points()
         if end <= start + 8:
             messagebox.showwarning("SampleSmith", "Choose a longer loop region before auditioning.")
             return
+        crossfade = 0
+        if mode == "xfade":
+            try:
+                crossfade = int(float(self.loop_crossfade_var.get()))
+            except (TypeError, ValueError, tk.TclError):
+                crossfade = 0
+            if crossfade <= 0:
+                messagebox.showwarning("SampleSmith", "Set a crossfade above 0 before auditioning with crossfade.")
+                return
         self.loop_enabled_var.set(True)
         self._stop_loop_audition(join=False)
         stop_event = threading.Event()
         self.audition_stop_event = stop_event
         self.audition_thread = threading.Thread(
             target=self._loop_audition_worker,
-            args=(start, end, stop_event),
+            args=(start, end, mode, crossfade, self.loop_crossfade_mode_var.get(), stop_event),
             daemon=True,
         )
         self.audition_thread.start()
-        self._set_audition_status(f"Auditioning raw loop {start}–{end}. Press Stop to end playback.")
+        if mode == "xfade":
+            self._set_audition_status(f"Auditioning crossfaded loop {start}–{end}, xfade {crossfade} ({self.loop_crossfade_mode_var.get()}). Press Stop to end playback.")
+        else:
+            self._set_audition_status(f"Auditioning raw loop {start}–{end}. Press Stop to end playback.")
 
     def _stop_loop_audition(self, join: bool = True) -> None:
         if self.audition_stop_event is not None:
@@ -1929,9 +1942,17 @@ class LoopEditorDialog(tk.Toplevel):
         self.audition_thread = None
         self.audition_stop_event = None
         if hasattr(self, "audition_status_var"):
-            self._set_audition_status("Audition stopped. Audition plays the raw end→start loop, without crossfade.")
+            self._set_audition_status("Audition stopped. Audition raw exposes the join; Audition xfade uses the current crossfade setting.")
 
-    def _loop_audition_worker(self, start: int, end: int, stop_event: threading.Event) -> None:
+    def _loop_audition_worker(
+        self,
+        start: int,
+        end: int,
+        mode: str,
+        crossfade: int,
+        crossfade_mode: str,
+        stop_event: threading.Event,
+    ) -> None:
         try:
             import sounddevice as sd
         except ImportError:
@@ -1941,15 +1962,19 @@ class LoopEditorDialog(tk.Toplevel):
         try:
             pre_roll = int(self.sample_rate * 0.35)
             intro_start = max(0, start - pre_roll)
-            intro = self.audio[intro_start:end]
-            loop = self.audio[start:end]
-            channels = 1 if loop.ndim == 1 else loop.shape[1]
             chunk_frames = max(1, int(self.sample_rate * 0.08))
+            if mode == "xfade":
+                cycle, effective_crossfade = self._crossfaded_loop_cycle(start, end, crossfade, crossfade_mode)
+                intro = self.audio[intro_start:max(start, end - effective_crossfade)]
+            else:
+                cycle = self.audio[start:end]
+                intro = self.audio[intro_start:end]
+            channels = 1 if cycle.ndim == 1 else cycle.shape[1]
             with sd.OutputStream(samplerate=self.sample_rate, channels=channels, dtype="float32") as stream:
                 if intro.size:
                     self._write_audio_chunks(stream, intro, chunk_frames, stop_event)
                 while not stop_event.is_set():
-                    self._write_audio_chunks(stream, loop, chunk_frames, stop_event)
+                    self._write_audio_chunks(stream, cycle, chunk_frames, stop_event)
         except Exception as exc:
             self.after(0, self._set_audition_status, f"Loop audition failed: {exc}")
         finally:
@@ -1961,6 +1986,34 @@ class LoopEditorDialog(tk.Toplevel):
         while position < audio.shape[0] and not stop_event.is_set():
             stream.write(audio[position:position + chunk_frames])
             position += chunk_frames
+
+    def _crossfaded_loop_cycle(self, start: int, end: int, crossfade: int, mode: str):
+        try:
+            import numpy as np
+        except ImportError as exc:
+            raise RuntimeError("Crossfade audition needs numpy. Run: python -m pip install -r requirements.txt") from exc
+
+        loop_len = end - start
+        effective = max(1, min(int(crossfade), loop_len // 2))
+        if effective < 1:
+            return self.audio[start:end], 0
+        tail = self.audio[end - effective:end]
+        head = self.audio[start:start + effective]
+        if mode == "linear":
+            fade_out = np.linspace(1.0, 0.0, effective, endpoint=False, dtype="float32")
+            fade_in = np.linspace(0.0, 1.0, effective, endpoint=False, dtype="float32")
+        else:
+            theta = np.linspace(0.0, np.pi / 2.0, effective, endpoint=False, dtype="float32")
+            fade_out = np.cos(theta).astype("float32")
+            fade_in = np.sin(theta).astype("float32")
+        if tail.ndim == 2:
+            fade_out = fade_out[:, None]
+            fade_in = fade_in[:, None]
+        transition = (tail * fade_out + head * fade_in).astype("float32")
+        body = self.audio[start + effective:end - effective]
+        if body.size:
+            return np.concatenate([transition, body], axis=0).astype("float32"), effective
+        return transition, effective
 
     def _has_typed_loop_points(self) -> bool:
         start_text = self.loop_start_var.get().strip()
