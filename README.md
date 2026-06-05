@@ -78,6 +78,16 @@ captured-samplers/<InstrumentName>/
 
 Open the `.dspreset` in Decent Sampler, including from Reaper.
 
+## Build a Decent Sampler effects test pack
+
+To audibly check Decent Sampler effect support on a local machine with audio, generate the listening pack:
+
+```bash
+python tools/make_effects_test_pack.py
+```
+
+This recreates `effects-test-pack/` with a dry control preset, one exaggerated `.dspreset` per supported effect/filter, generated WAV samples, and `LISTENING_CHECKLIST.md`. Open the checklist, then open each preset in Decent Sampler and play around C3/middle C. The generated pack is ignored by Git.
+
 ## Pitched mapping behaviour
 
 Default pitched behaviour is classic sampler spreading: SampleSmith generates a playable instrument from whatever samples have actually been recorded, even one sample.
