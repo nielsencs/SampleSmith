@@ -189,7 +189,8 @@ class SampleSmithApp(tk.Tk):
         self._bind_output_parameter_traces()
 
         bottom = ttk.Frame(outer)
-        bottom.pack(fill="both")
+        bottom.pack(fill="x")
+        ttk.Button(bottom, text="Generate / update .dspreset", command=self._generate_preset).pack(side="left", padx=(0, 6))
         ttk.Button(bottom, text="Open output folder", command=self._open_output_folder).pack(side="left", padx=6)
         self.status_var = tk.StringVar(value="Ready")
         ttk.Label(bottom, textvariable=self.status_var).pack(side="left", padx=12)
@@ -269,8 +270,6 @@ class SampleSmithApp(tk.Tk):
         ttk.Checkbutton(export, text="Loop samples by default", variable=self.loop_enabled_var, command=self._on_output_parameter_changed).grid(row=0, column=0, sticky="w", padx=6, pady=6)
         ttk.Label(export, text="Root offset").grid(row=0, column=1, sticky="w", padx=(18, 4), pady=6)
         ttk.Spinbox(export, textvariable=self.root_note_offset_var, from_=-36, to=36, increment=12, width=6, command=self._on_output_parameter_changed).grid(row=0, column=2, sticky="w", pady=6)
-        ttk.Button(export, text="Generate / update .dspreset", command=self._generate_preset).grid(row=0, column=3, sticky="w", padx=(18, 6), pady=6)
-        ttk.Button(export, text="Open output folder", command=self._open_output_folder).grid(row=0, column=4, sticky="w", padx=6, pady=6)
 
         loop = ttk.LabelFrame(basics_tab, text="Fallback/default loop points")
         loop.pack(fill="x", pady=(10, 0))
