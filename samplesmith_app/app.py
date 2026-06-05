@@ -191,7 +191,6 @@ class SampleSmithApp(tk.Tk):
         bottom = ttk.Frame(outer)
         bottom.pack(fill="x")
         ttk.Button(bottom, text="Generate / update .dspreset", command=self._generate_preset).pack(side="left", padx=(0, 6))
-        ttk.Button(bottom, text="Open output folder", command=self._open_output_folder).pack(side="left", padx=6)
         self.status_var = tk.StringVar(value="Ready")
         ttk.Label(bottom, textvariable=self.status_var).pack(side="left", padx=12)
         self.log = tk.Text(outer, height=9, wrap="word")
@@ -1351,11 +1350,6 @@ class SampleSmithApp(tk.Tk):
         preset = self._write_preset()
         self._log(f"Generated {preset}")
         messagebox.showinfo("SampleSmith", f"Generated:\n{preset}")
-
-    def _open_output_folder(self) -> None:
-        folder = self._instrument_dir()
-        folder.mkdir(parents=True, exist_ok=True)
-        self._log(f"Output folder: {folder}")
 
 
 def main() -> None:
