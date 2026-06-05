@@ -219,12 +219,13 @@ class SampleSmithApp(tk.Tk):
         ttk.Button(controls, text="Build note list", command=self._build_note_list).pack(side="left", padx=8)
 
         self.note_tree = ttk.Treeview(self.pitched_tab, columns=("note", "maps", "file"), show="headings", height=14)
-        self.note_tree.heading("note", text="Recorded note")
+        self.note_tree.heading("note", text="Target note")
         self.note_tree.heading("maps", text="Maps to keys")
         self.note_tree.heading("file", text="Sample file")
         self.note_tree.column("note", width=120, stretch=False)
         self.note_tree.column("maps", width=230, stretch=False)
         self.note_tree.column("file", width=420)
+        self.note_tree.tag_configure("generated", foreground="#666666")
         self.note_tree.pack(fill="both", expand=True, pady=8)
         buttons = ttk.Frame(self.pitched_tab)
         buttons.pack(fill="x")
@@ -1354,11 +1355,23 @@ class SampleSmithApp(tk.Tk):
         return sorted(spread + pads, key=lambda sample: (sample.mode, sample.root_note, sample.path.name))
 
     def _refresh_pitched_mappings(self) -> None:
-        for sample in self._spread_recorded_pitched_samples():
-            if sample.mode != "pitched" or str(sample.root_note) not in self.note_tree.get_children():
-                continue
-            file_name = sample.path.name if self.note_rows.get(sample.root_note) else ""
-            self.note_tree.item(str(sample.root_note), values=(midi_to_name(sample.root_note), mapping_text(sample.lo_note, sample.hi_note), file_name))
+        exported = [sample for sample in self._spread_recorded_pitched_samples() if sample.mode == "pitched"]
+        generated_roots = {sample.root_note for sample in exported if sample.generated or sample.provisional}
+        for item in list(self.note_tree.get_children()):
+            if "generated" in self.note_tree.item(item, "tags") and int(item) not in generated_roots:
+                self.note_tree.delete(item)
+                self.note_rows.pop(int(item), None)
+
+        for sample in exported:
+            iid = str(sample.root_note)
+            is_generated = sample.generated or sample.provisional
+            file_name = f"[GENERATED provisional] {sample.path.name}" if is_generated else sample.path.name
+            values = (midi_to_name(sample.root_note), mapping_text(sample.lo_note, sample.hi_note), file_name)
+            if iid in self.note_tree.get_children():
+                self.note_tree.item(iid, values=values, tags=("generated",) if is_generated else ())
+            elif is_generated:
+                self.note_rows[sample.root_note] = ""
+                self.note_tree.insert("", "end", iid=iid, values=values, tags=("generated",))
 
     def _refresh_export_mapping(self) -> None:
         for item in self.export_tree.get_children():
@@ -1502,6 +1515,7 @@ class SampleSmithApp(tk.Tk):
             ds_knob_bit_crusher_rate=self.ds_knob_bit_crusher_rate_var.get(),
             ds_knob_bit_crusher_mix=self.ds_knob_bit_crusher_mix_var.get(),
         )
+        self._refresh_pitched_mappings()
         self._refresh_export_mapping()
         return preset
 
