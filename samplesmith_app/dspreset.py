@@ -7,6 +7,35 @@ import xml.etree.ElementTree as ET
 
 from .models import SampleInfo, clamp_float, clamp_midi_note, slugify, valid_loop_points
 
+ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+OFFICIAL_BOILERPLATE_PATH = ASSETS_DIR / "official-boilerplate.dspreset"
+OFFICIAL_TONE_TRANSLATION_TABLE = "0,33;0.3,150;0.4,450;0.5,1100;0.7,4100;0.9,11000;1.0001,22000"
+OFFICIAL_KNOB_STYLE = {
+    "textColor": "AA000000",
+    "textSize": "16",
+    "trackForegroundColor": "CC000000",
+    "trackBackgroundColor": "66999999",
+}
+
+
+def tone_control_value_for_frequency(frequency: float) -> float:
+    """Approximate the official boilerplate Tone knob table input for a frequency."""
+    points = [
+        (0.0, 33.0),
+        (0.3, 150.0),
+        (0.4, 450.0),
+        (0.5, 1100.0),
+        (0.7, 4100.0),
+        (0.9, 11000.0),
+        (1.0, 22000.0),
+    ]
+    frequency = clamp_float(frequency, points[0][1], points[-1][1])
+    for (left_x, left_freq), (right_x, right_freq) in zip(points, points[1:]):
+        if frequency <= right_freq:
+            ratio = (frequency - left_freq) / (right_freq - left_freq)
+            return left_x + ratio * (right_x - left_x)
+    return 1.0
+
 def generate_dspreset(
     instrument_name: str,
     output_dir: Path,
@@ -205,10 +234,10 @@ def generate_dspreset(
     amp_sustain = clamp_float(amp_sustain, 0.0, 1.0)
     amp_release = clamp_float(amp_release, 0.0, 25.0)
 
-    root = ET.Element("DecentSampler", {"pluginVersion": "1"})
+    root = ET.Element("DecentSampler", {"minVersion": "1.0.0"})
     has_amp_env_knobs = amp_env_enabled and ds_knob_amp_env
     if effects_to_write or has_amp_env_knobs:
-        ui = ET.SubElement(root, "ui", {"width": "812", "height": "475"})
+        ui = ET.SubElement(root, "ui", {"width": "812", "height": "475", "layoutMode": "relative", "bgMode": "top_left"})
         tab = ET.SubElement(ui, "tab", {"name": "main"})
         ET.SubElement(
             tab,
@@ -231,7 +260,7 @@ def generate_dspreset(
             (
                 "Tone",
                 [
-                    (ds_knob_tone and filter_effect_type in effect_positions, filter_effect_type, "Frequency", "FX_FILTER_FREQUENCY", "60", "22000", f"{lowpass_frequency:.1f}", "22000.0"),
+                    (ds_knob_tone and filter_effect_type in effect_positions, filter_effect_type, "Tone", "FX_FILTER_FREQUENCY", "0", "1", f"{tone_control_value_for_frequency(lowpass_frequency):.3f}", "1.000"),
                     (ds_knob_filter_resonance and filter_effect_type in effect_positions and filter_effect_type != "lowpass_1pl", filter_effect_type, "Res", "FX_FILTER_RESONANCE", "0", "5", f"{filter_resonance:.3f}", "0.700"),
                 ],
             ),
@@ -350,23 +379,24 @@ def generate_dspreset(
                     "maxValue": max_value,
                     "value": value,
                     "defaultValue": default_value,
-                    "textColor": "DD330033",
-                    "textSize": "14",
+                    **OFFICIAL_KNOB_STYLE,
                     "style": "rotary",
-                    "trackForegroundColor": "EEFFFFFF",
-                    "trackBackgroundColor": "77330033",
                 },
             )
-            ET.SubElement(
-                knob,
-                "binding",
-                {
-                    "type": "effect",
-                    "level": "instrument",
-                    "position": str(position),
-                    "parameter": parameter,
-                },
-            )
+            binding_attrs = {
+                "type": "effect",
+                "level": "instrument",
+                "position": str(position),
+                "parameter": parameter,
+            }
+            if effect_type == filter_effect_type and parameter == "FX_FILTER_FREQUENCY":
+                binding_attrs.update(
+                    {
+                        "translation": "table",
+                        "translationTable": OFFICIAL_TONE_TRANSLATION_TABLE,
+                    }
+                )
+            ET.SubElement(knob, "binding", binding_attrs)
 
         def add_amp_knob(label: str, parameter: str, min_value: str, max_value: str, value: str, default_value: str) -> None:
             nonlocal visible_control_index
@@ -386,11 +416,8 @@ def generate_dspreset(
                     "maxValue": max_value,
                     "value": value,
                     "defaultValue": default_value,
-                    "textColor": "DD330033",
-                    "textSize": "14",
+                    **OFFICIAL_KNOB_STYLE,
                     "style": "rotary",
-                    "trackForegroundColor": "EEFFFFFF",
-                    "trackBackgroundColor": "77330033",
                 },
             )
             ET.SubElement(
@@ -398,7 +425,7 @@ def generate_dspreset(
                 "binding",
                 {
                     "type": "amp",
-                    "level": "group",
+                    "level": "instrument",
                     "position": "0",
                     "parameter": parameter,
                 },
