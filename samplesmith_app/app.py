@@ -8,9 +8,9 @@ import threading
 import time
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from .audio import AudioEngine, write_silent_wav
+from .audio import AudioEngine, render_pitch_shifted_wav, write_silent_wav
 from .dspreset import generate_dspreset
 from .looping import read_wav_smpl_loop_points
 from .models import (
@@ -69,6 +69,7 @@ class SampleSmithApp(tk.Tk):
         self.amp_release_var = tk.DoubleVar(value=0.8)
         self.ds_knob_amp_env_var = tk.BooleanVar(value=True)
         self.root_note_offset_var = tk.IntVar(value=-12)
+        self.generate_bridge_samples_var = tk.BooleanVar(value=False)
         self.delay_enabled_var = tk.BooleanVar(value=False)
         self.delay_time_var = tk.DoubleVar(value=0.7)
         self.delay_stereo_offset_var = tk.DoubleVar(value=0.0)
@@ -173,6 +174,7 @@ class SampleSmithApp(tk.Tk):
         ttk.Checkbutton(project, text="Normalise", variable=self.normalise_var).grid(row=1, column=4, sticky="w")
         ttk.Button(project, text="Open project", command=self._open_project_dialog).grid(row=2, column=0, sticky="w", pady=(6, 0))
         ttk.Button(project, text="Save project", command=self._save_project_dialog).grid(row=2, column=1, sticky="w", pady=(6, 0), padx=4)
+        ttk.Button(project, text="Review stray WAVs", command=self._review_stray_wavs).grid(row=2, column=2, sticky="w", pady=(6, 0), padx=4)
         project.columnconfigure(3, weight=1)
 
         tabs = ttk.Notebook(outer)
@@ -269,6 +271,12 @@ class SampleSmithApp(tk.Tk):
         ttk.Checkbutton(export, text="Loop samples by default", variable=self.loop_enabled_var, command=self._on_output_parameter_changed).grid(row=0, column=0, sticky="w", padx=6, pady=6)
         ttk.Label(export, text="Root offset").grid(row=0, column=1, sticky="w", padx=(18, 4), pady=6)
         ttk.Spinbox(export, textvariable=self.root_note_offset_var, from_=-36, to=36, increment=12, width=6, command=self._on_output_parameter_changed).grid(row=0, column=2, sticky="w", pady=6)
+        ttk.Checkbutton(
+            export,
+            text="Generate provisional bridge WAVs for missing notes",
+            variable=self.generate_bridge_samples_var,
+            command=self._on_output_parameter_changed,
+        ).grid(row=1, column=0, columnspan=3, sticky="w", padx=6, pady=(0, 6))
 
         loop = ttk.LabelFrame(basics_tab, text="Fallback/default loop points")
         loop.pack(fill="x", pady=(10, 0))
@@ -449,7 +457,8 @@ class SampleSmithApp(tk.Tk):
             notes,
             text=(
                 "Decent Sampler settings are split into sub-tabs. Loop controls here are fallback/default values; "
-                "project files can now carry per-WAV loop fields ready for a later graphical editor."
+                "project files can now carry per-WAV loop fields ready for a later graphical editor. "
+                "Generated bridge WAVs are marked provisional/derived in the mapping table and saved under Samples/generated."
             ),
             wraplength=820,
             justify="left",
@@ -469,6 +478,7 @@ class SampleSmithApp(tk.Tk):
             self.amp_release_var,
             self.ds_knob_amp_env_var,
             self.root_note_offset_var,
+            self.generate_bridge_samples_var,
             self.delay_enabled_var,
             self.delay_time_var,
             self.delay_stereo_offset_var,
@@ -644,6 +654,12 @@ class SampleSmithApp(tk.Tk):
     def _sample_path(self, label: str) -> Path:
         return self._instrument_dir() / "Samples" / f"{slugify(self.name_var.get())}_{label}.wav"
 
+    def _bridge_sample_path(self, target_note: int, low_root: int, high_root: int) -> Path:
+        target = midi_to_name(target_note).replace("#", "sharp")
+        low = midi_to_name(low_root).replace("#", "sharp")
+        high = midi_to_name(high_root).replace("#", "sharp")
+        return self._instrument_dir() / "Samples" / "generated" / f"bridge_note_{target_note:03d}_{target}_from_{low}_{high}.wav"
+
     def _browse_output(self) -> None:
         chosen = filedialog.askdirectory(initialdir=self.output_var.get() or str(Path.cwd()))
         if chosen:
@@ -673,6 +689,7 @@ class SampleSmithApp(tk.Tk):
             "amp_release": self.amp_release_var.get(),
             "ds_knob_amp_env": self.ds_knob_amp_env_var.get(),
             "root_note_offset": self.root_note_offset_var.get(),
+            "generate_bridge_samples": self.generate_bridge_samples_var.get(),
             "delay_enabled": self.delay_enabled_var.get(),
             "delay_time": self.delay_time_var.get(),
             "delay_stereo_offset": self.delay_stereo_offset_var.get(),
@@ -792,6 +809,88 @@ class SampleSmithApp(tk.Tk):
         saved = self._save_project(Path(chosen))
         self._log(f"Saved project: {saved}")
 
+    def _stray_wav_candidates(self) -> list[Path]:
+        roots = [self._instrument_dir(), self._instrument_dir() / "Samples"]
+        if self.project_path is not None:
+            roots.append(self.project_path.parent)
+        seen_roots: set[Path] = set()
+        known = {sample.path.resolve() for sample in self.samples if sample.path.exists()}
+        strays: list[Path] = []
+        for root in roots:
+            root = root.expanduser()
+            if not root.exists() or not root.is_dir():
+                continue
+            resolved_root = root.resolve()
+            if resolved_root in seen_roots:
+                continue
+            seen_roots.add(resolved_root)
+            for wav in sorted(root.rglob("*.wav")):
+                if "generated" in wav.relative_to(root).parts:
+                    continue
+                resolved_wav = wav.resolve()
+                if resolved_wav in known or resolved_wav in {path.resolve() for path in strays}:
+                    continue
+                strays.append(wav)
+        return strays
+
+    def _review_stray_wavs(self) -> None:
+        strays = self._stray_wav_candidates()
+        if not strays:
+            self._log("No stray WAV files found in this instrument/project folder.")
+            messagebox.showinfo("SampleSmith", "No stray WAV files found in this instrument/project folder.")
+            return
+        preview = "\n".join(str(path.relative_to(self._instrument_dir())) if path.is_relative_to(self._instrument_dir()) else str(path) for path in strays[:12])
+        if len(strays) > 12:
+            preview += f"\n… and {len(strays) - 12} more"
+        if not messagebox.askyesno(
+            "SampleSmith",
+            "Found WAV files in the project/instrument folders that are not in the current mapping.\n\n"
+            f"{preview}\n\nReview and import any of these now?",
+        ):
+            self._log(f"Stray WAV review skipped ({len(strays)} found).")
+            return
+        imported = 0
+        for wav in strays:
+            rel = str(wav.relative_to(self._instrument_dir())) if wav.is_relative_to(self._instrument_dir()) else str(wav)
+            if not messagebox.askyesno("SampleSmith", f"Include this WAV in the project?\n\n{rel}"):
+                continue
+            note_text = simpledialog.askstring(
+                "SampleSmith",
+                "Enter its root note for pitched mapping (e.g. C3 or 60).\n"
+                "Leave blank to import as the next unpitched pad.",
+                initialvalue="",
+            )
+            if note_text is None:
+                continue
+            note_text = note_text.strip()
+            if note_text:
+                try:
+                    try:
+                        root_note = int(note_text)
+                    except ValueError:
+                        root_note = name_to_midi(note_text)
+                except ValueError as exc:
+                    messagebox.showwarning("SampleSmith", f"Skipping {wav.name}: {exc}")
+                    continue
+                info = SampleInfo(path=wav, root_note=root_note, lo_note=root_note, hi_note=root_note, label=wav.stem, mode="pitched")
+                self._upsert_sample(info)
+                imported += 1
+                self._log(f"Imported stray pitched WAV: {wav.name} as {midi_to_name(root_note)}")
+            else:
+                midi_note = self.pad_note
+                self.pad_note += 1
+                info = SampleInfo(path=wav, root_note=midi_note, lo_note=midi_note, hi_note=midi_note, label=wav.stem, mode="pad")
+                self._upsert_sample(info)
+                imported += 1
+                self._log(f"Imported stray pad WAV: {wav.name} as {midi_to_name(midi_note)}")
+        if imported:
+            self._rebuild_trees_from_project()
+            preset = self._write_preset()
+            self._auto_save_project()
+            self._log(f"Imported {imported} stray WAV(s) and updated {preset.name}")
+        else:
+            self._log("No stray WAVs imported.")
+
     def _auto_save_project(self) -> None:
         try:
             saved = self._save_project()
@@ -828,6 +927,7 @@ class SampleSmithApp(tk.Tk):
         self.amp_release_var.set(float(data.get("amp_release", 0.8)))
         self.ds_knob_amp_env_var.set(bool(data.get("ds_knob_amp_env", True)))
         self.root_note_offset_var.set(int(data.get("root_note_offset", -12)))
+        self.generate_bridge_samples_var.set(bool(data.get("generate_bridge_samples", False)))
         self.delay_enabled_var.set(bool(data.get("delay_enabled", False)))
         self.delay_time_var.set(float(data.get("delay_time", 0.7)))
         self.delay_stereo_offset_var.set(float(data.get("delay_stereo_offset", 0.0)))
@@ -931,6 +1031,16 @@ class SampleSmithApp(tk.Tk):
         self.samples = [SampleInfo.from_dict(item) for item in data.get("samples", [])]
         self._rebuild_trees_from_project()
         self._log(f"Opened project: {path}")
+        self.after_idle(self._prompt_for_stray_wavs_if_any)
+
+    def _prompt_for_stray_wavs_if_any(self) -> None:
+        strays = self._stray_wav_candidates()
+        if not strays:
+            return
+        if messagebox.askyesno("SampleSmith", f"Found {len(strays)} stray WAV file(s) in this project/instrument folder. Review them now?"):
+            self._review_stray_wavs()
+        else:
+            self._log(f"Stray WAVs found but not imported: {len(strays)}")
 
     def _rebuild_trees_from_project(self) -> None:
         for item in self.note_tree.get_children():
@@ -1160,9 +1270,58 @@ class SampleSmithApp(tk.Tk):
         self.samples.append(info)
         self.samples.sort(key=lambda sample: (sample.mode, sample.root_note, sample.path.name))
 
+    def _recorded_pitched_samples(self) -> list[SampleInfo]:
+        return [sample for sample in self.samples if sample.mode == "pitched" and not sample.generated]
+
+    def _generated_bridge_samples(self) -> list[SampleInfo]:
+        if not self.generate_bridge_samples_var.get():
+            return []
+        recorded = sorted(self._recorded_pitched_samples(), key=lambda sample: sample.root_note)
+        if len(recorded) < 2:
+            return []
+        generated: list[SampleInfo] = []
+        for low_sample, high_sample in zip(recorded, recorded[1:]):
+            if high_sample.root_note - low_sample.root_note <= 1:
+                continue
+            for target_note in range(low_sample.root_note + 1, high_sample.root_note):
+                lower_distance = target_note - low_sample.root_note
+                upper_distance = high_sample.root_note - target_note
+                source = low_sample if lower_distance <= upper_distance else high_sample
+                if not source.path.exists():
+                    self._log(f"Cannot generate bridge {midi_to_name(target_note)}; source WAV is missing: {source.path}")
+                    continue
+                target_path = self._bridge_sample_path(target_note, low_sample.root_note, high_sample.root_note)
+                if not target_path.exists() or target_path.stat().st_mtime < source.path.stat().st_mtime:
+                    try:
+                        render_pitch_shifted_wav(source.path, target_path, target_note - source.root_note)
+                    except RuntimeError as exc:
+                        self._log(f"Cannot generate bridge {midi_to_name(target_note)}: {exc}")
+                        continue
+                    self._log(
+                        "Generated provisional bridge WAV: "
+                        f"{target_path.relative_to(self._instrument_dir())} from {source.path.name}"
+                    )
+                generated.append(
+                    SampleInfo(
+                        path=target_path,
+                        root_note=target_note,
+                        lo_note=target_note,
+                        hi_note=target_note,
+                        label=f"BRIDGE {midi_to_name(target_note)} (derived/provisional)",
+                        mode="pitched",
+                        generated=True,
+                        provisional=True,
+                        source_roots=[low_sample.root_note, high_sample.root_note],
+                        source_paths=[low_sample.path, high_sample.path],
+                    )
+                )
+        return generated
+
     def _spread_recorded_pitched_samples(self) -> list[SampleInfo]:
-        pitched = [sample for sample in self.samples if sample.mode == "pitched"]
+        pitched = self._recorded_pitched_samples() + self._generated_bridge_samples()
         pads = [sample for sample in self.samples if sample.mode == "pad"]
+        if not pitched:
+            return sorted(pads, key=lambda sample: (sample.mode, sample.root_note, sample.path.name))
         ranges = dict((root, (lo, hi)) for root, lo, hi in build_overlapping_key_ranges([sample.root_note for sample in pitched]))
         spread = [
             SampleInfo(
@@ -1177,6 +1336,10 @@ class SampleSmithApp(tk.Tk):
                 loop_end=sample.loop_end,
                 loop_crossfade=sample.loop_crossfade,
                 loop_crossfade_mode=sample.loop_crossfade_mode,
+                generated=sample.generated,
+                provisional=sample.provisional,
+                source_roots=sample.source_roots,
+                source_paths=sample.source_paths,
             )
             for sample in pitched
         ]
@@ -1197,10 +1360,10 @@ class SampleSmithApp(tk.Tk):
                 "",
                 "end",
                 values=(
-                    sample.path.name,
+                    f"[GENERATED provisional] {sample.path.name}" if sample.generated or sample.provisional else sample.path.name,
                     mapping_text(sample.lo_note, sample.hi_note),
                     exported_root_text(sample.root_note, self.root_note_offset_var.get()),
-                    sample.mode,
+                    "bridge" if sample.generated or sample.provisional else sample.mode,
                 ),
             )
 

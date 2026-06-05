@@ -404,32 +404,16 @@ def generate_dspreset(
                 },
             )
 
-        def add_amp_env_knobs() -> None:
-            if not has_amp_env_knobs:
-                return
-            for label, parameter, min_value, max_value, value, default_value in [
-                ("Attack", "ENV_ATTACK", "0", "10", f"{amp_attack:.3f}", "0.010"),
-                ("Decay", "ENV_DECAY", "0", "25", f"{amp_decay:.3f}", "0.000"),
-                ("Sustain", "ENV_SUSTAIN", "0", "1", f"{amp_sustain:.3f}", "1.000"),
-                ("Release", "ENV_RELEASE", "0", "25", f"{amp_release:.3f}", "0.800"),
-            ]:
-                add_amp_knob(label, parameter, min_value, max_value, value, default_value)
-
-        def add_knob_group(title: str, specs: list[tuple[bool, str, str, str, str, str, str, str]]) -> None:
+        def add_control_panel(title: str, control_count: int) -> None:
             nonlocal visible_control_index
-            included_specs = [spec for spec in specs if spec[0]]
-            if not included_specs:
+            if control_count <= 0:
                 return
-            if len(included_specs) == 1:
-                _include, effect_type, _label, parameter, min_value, max_value, value, default_value = included_specs[0]
-                add_effect_knob(effect_type, title, parameter, min_value, max_value, value, default_value)
-                return
-            if (visible_control_index % knob_columns) + len(included_specs) > knob_columns:
+            if (visible_control_index % knob_columns) + control_count > knob_columns:
                 visible_control_index += knob_columns - (visible_control_index % knob_columns)
             first_x, first_y = knob_position(visible_control_index)
             group_x = first_x - 10
             group_y = first_y - group_title_height - 8
-            group_width = knob_step_x * len(included_specs) - 8
+            group_width = knob_step_x * control_count - 8
             ET.SubElement(
                 tab,
                 "rectangle",
@@ -449,7 +433,7 @@ def generate_dspreset(
                 {
                     "x": str(group_x + 10),
                     "y": str(group_y + 4),
-                    "width": str(group_width - 20),
+                    "width": str(max(40, group_width - 20)),
                     "height": "18",
                     "text": title,
                     "textColor": "DD330033",
@@ -457,6 +441,25 @@ def generate_dspreset(
                     "hAlign": "center",
                 },
             )
+
+        def add_amp_env_knobs() -> None:
+            if not has_amp_env_knobs:
+                return
+            specs = [
+                ("Attack", "ENV_ATTACK", "0", "10", f"{amp_attack:.3f}", "0.010"),
+                ("Decay", "ENV_DECAY", "0", "25", f"{amp_decay:.3f}", "0.000"),
+                ("Sustain", "ENV_SUSTAIN", "0", "1", f"{amp_sustain:.3f}", "1.000"),
+                ("Release", "ENV_RELEASE", "0", "25", f"{amp_release:.3f}", "0.800"),
+            ]
+            add_control_panel("Envelope", len(specs))
+            for label, parameter, min_value, max_value, value, default_value in specs:
+                add_amp_knob(label, parameter, min_value, max_value, value, default_value)
+
+        def add_knob_group(title: str, specs: list[tuple[bool, str, str, str, str, str, str, str]]) -> None:
+            included_specs = [spec for spec in specs if spec[0]]
+            if not included_specs:
+                return
+            add_control_panel(title, len(included_specs))
             for _include, effect_type, label, parameter, min_value, max_value, value, default_value in included_specs:
                 add_effect_knob(effect_type, label, parameter, min_value, max_value, value, default_value)
 
@@ -500,6 +503,11 @@ def generate_dspreset(
                 if sample_loop_crossfade > 0:
                     attrs["loopCrossfade"] = f"{sample_loop_crossfade:.1f}"
                     attrs["loopCrossfadeMode"] = sample_loop_crossfade_mode
+        if sample.generated or sample.provisional:
+            source_bits = ""
+            if sample.source_roots:
+                source_bits = " from roots " + ", ".join(str(root) for root in sample.source_roots)
+            group.append(ET.Comment(f" GENERATED/PROVISIONAL bridge sample{source_bits}; replace with a recorded WAV when ready. "))
         ET.SubElement(group, "sample", attrs)
     if effects_to_write:
         effects = ET.SubElement(root, "effects")

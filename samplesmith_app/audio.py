@@ -118,3 +118,39 @@ def write_silent_wav(path: Path, sample_rate: int = DEFAULT_SAMPLE_RATE) -> None
         handle.setsampwidth(2)
         handle.setframerate(sample_rate)
         handle.writeframes(b"\x00\x00" * int(sample_rate * 0.1))
+
+
+def render_pitch_shifted_wav(source_path: Path, target_path: Path, semitones: int) -> None:
+    """Write a simple provisional pitch-shifted WAV by resampling the source.
+
+    This deliberately favours a dependency-light bridge sample over studio quality:
+    the generated file is meant to make an instrument playable until the user records
+    a proper replacement for that note.
+    """
+    try:
+        import numpy as np
+        import soundfile as sf
+    except ImportError as exc:
+        raise RuntimeError("Bridge WAV generation needs soundfile and numpy installed.") from exc
+
+    audio, sample_rate = sf.read(source_path, always_2d=True, dtype="float32")
+    if audio.size == 0:
+        raise RuntimeError(f"Cannot generate bridge sample from empty WAV: {source_path}")
+
+    factor = 2 ** (semitones / 12.0)
+    source_positions = np.arange(audio.shape[0], dtype=np.float64) * factor
+    source_positions = source_positions[source_positions < audio.shape[0] - 1]
+    if source_positions.size < 2:
+        source_positions = np.array([0.0, max(0.0, float(audio.shape[0] - 1))])
+
+    source_index = np.arange(audio.shape[0], dtype=np.float64)
+    shifted_channels = [np.interp(source_positions, source_index, audio[:, channel]) for channel in range(audio.shape[1])]
+    shifted = np.stack(shifted_channels, axis=1).astype("float32")
+    fade_len = min(int(sample_rate * 0.005), shifted.shape[0] // 4)
+    if fade_len > 0:
+        fade = np.linspace(0.0, 1.0, fade_len, dtype="float32")
+        shifted[:fade_len, :] *= fade[:, None]
+        shifted[-fade_len:, :] *= fade[::-1, None]
+
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    sf.write(target_path, shifted, sample_rate, subtype="PCM_24")

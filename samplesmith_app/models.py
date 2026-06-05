@@ -104,6 +104,10 @@ class SampleInfo:
     loop_end: int | None = None
     loop_crossfade: float | None = None
     loop_crossfade_mode: str | None = None
+    generated: bool = False
+    provisional: bool = False
+    source_roots: list[int] | None = None
+    source_paths: list[Path] | None = None
 
     def to_dict(self) -> dict[str, object]:
         data: dict[str, object] = {
@@ -124,6 +128,14 @@ class SampleInfo:
             data["loop_crossfade"] = self.loop_crossfade
         if self.loop_crossfade_mode is not None:
             data["loop_crossfade_mode"] = self.loop_crossfade_mode
+        if self.generated:
+            data["generated"] = True
+        if self.provisional:
+            data["provisional"] = True
+        if self.source_roots:
+            data["source_roots"] = self.source_roots
+        if self.source_paths:
+            data["source_paths"] = [str(path) for path in self.source_paths]
         return data
 
     @classmethod
@@ -146,6 +158,10 @@ class SampleInfo:
             loop_end=optional_non_negative_int(data.get("loop_end")),
             loop_crossfade=loop_crossfade,
             loop_crossfade_mode=None if data.get("loop_crossfade_mode") is None else str(data.get("loop_crossfade_mode")),
+            generated=bool(data.get("generated", False)),
+            provisional=bool(data.get("provisional", False)),
+            source_roots=[int(root) for root in data.get("source_roots", [])] if data.get("source_roots") else None,
+            source_paths=[Path(str(path)) for path in data.get("source_paths", [])] if data.get("source_paths") else None,
         )
 
 def clamp_midi_note(midi_note: int) -> int:

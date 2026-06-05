@@ -17,6 +17,7 @@ SampleSmith currently supports two main workflows:
    - record matching samples
    - trim and normalise the WAVs
    - map the recorded samples across the keyboard
+   - optionally generate clearly marked provisional bridge WAVs for missing notes between recorded notes
    - generate a Decent Sampler `.dspreset`
 
 2. **Unpitched / pad instruments** — for hits, breaths, mouth noises, objects, scrapes, claps, one-shots, etc.
@@ -60,6 +61,8 @@ Set the instrument name and output folder, choose **Pitched** or **Unpitched / P
 
 Use **Open project** to return to an existing SampleSmith project.
 
+Use **Review stray WAVs** if you have copied or recorded WAV files into the instrument/project folders outside SampleSmith. SampleSmith only checks the current project/instrument/sample folders, never the whole filesystem, and it asks before importing anything into the mapping.
+
 Output defaults to:
 
 ```text
@@ -80,6 +83,7 @@ Default pitched behaviour is classic sampler spreading: SampleSmith generates a 
 - One recorded pitched sample maps across the whole keyboard.
 - Multiple pitched samples map from the previous recorded root note to the next recorded root note.
 - Neighbouring samples overlap between their home notes.
+- If **Generate provisional bridge WAVs for missing notes** is enabled, SampleSmith writes simple pitch-shifted WAV files under `Samples/generated/` for missing notes between recorded samples. These are deliberately marked `[GENERATED provisional]` in the mapping table and as generated/provisional metadata/comments so they are easy to replace later with proper recorded samples.
 
 For example, recorded C3/C4 maps C3 from MIDI `0–60` and C4 from MIDI `48–127`, giving an overlap/blend zone between them. This can make strange-but-useful transformed sounds, such as very low growls.
 
