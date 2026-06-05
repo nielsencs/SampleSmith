@@ -249,15 +249,28 @@ class SampleSmithApp(tk.Tk):
         self.pad_tree.pack(fill="both", expand=True, pady=8)
 
     def _build_decent_sampler_tab(self) -> None:
-        export = ttk.LabelFrame(self.decent_sampler_tab, text="Decent Sampler output")
+        ds_tabs = ttk.Notebook(self.decent_sampler_tab)
+        ds_tabs.pack(fill="both", expand=True)
+        basics_tab = ttk.Frame(ds_tabs, padding=8)
+        tone_tab = ttk.Frame(ds_tabs, padding=8)
+        space_tab = ttk.Frame(ds_tabs, padding=8)
+        shape_tab = ttk.Frame(ds_tabs, padding=8)
+        mapping_tab = ttk.Frame(ds_tabs, padding=8)
+        ds_tabs.add(basics_tab, text="Basics / Export")
+        ds_tabs.add(tone_tab, text="Tone")
+        ds_tabs.add(space_tab, text="Space")
+        ds_tabs.add(shape_tab, text="Shape")
+        ds_tabs.add(mapping_tab, text="Mapping")
+
+        export = ttk.LabelFrame(basics_tab, text="Decent Sampler output")
         export.pack(fill="x")
-        ttk.Checkbutton(export, text="Loop samples", variable=self.loop_enabled_var, command=self._on_output_parameter_changed).grid(row=0, column=0, sticky="w", padx=6, pady=6)
+        ttk.Checkbutton(export, text="Loop samples by default", variable=self.loop_enabled_var, command=self._on_output_parameter_changed).grid(row=0, column=0, sticky="w", padx=6, pady=6)
         ttk.Label(export, text="Root offset").grid(row=0, column=1, sticky="w", padx=(18, 4), pady=6)
         ttk.Spinbox(export, textvariable=self.root_note_offset_var, from_=-36, to=36, increment=12, width=6, command=self._on_output_parameter_changed).grid(row=0, column=2, sticky="w", pady=6)
         ttk.Button(export, text="Generate / update .dspreset", command=self._generate_preset).grid(row=0, column=3, sticky="w", padx=(18, 6), pady=6)
         ttk.Button(export, text="Open output folder", command=self._open_output_folder).grid(row=0, column=4, sticky="w", padx=6, pady=6)
 
-        loop = ttk.LabelFrame(self.decent_sampler_tab, text="Loop points")
+        loop = ttk.LabelFrame(basics_tab, text="Fallback/default loop points")
         loop.pack(fill="x", pady=(10, 0))
         ttk.Label(loop, text="start sample").pack(side="left", padx=(6, 2), pady=6)
         ttk.Entry(loop, textvariable=self.loop_start_var, width=10).pack(side="left", padx=(0, 10), pady=6)
@@ -268,7 +281,7 @@ class SampleSmithApp(tk.Tk):
         ttk.OptionMenu(loop, self.loop_crossfade_mode_var, self.loop_crossfade_mode_var.get(), "equal_power", "linear").pack(side="left", padx=(0, 10), pady=6)
         ttk.Button(loop, text="Use first WAV marker", command=self._import_first_wav_loop_marker).pack(side="left", padx=(0, 6), pady=6)
 
-        envelope = ttk.LabelFrame(self.decent_sampler_tab, text="Amp envelope")
+        envelope = ttk.LabelFrame(basics_tab, text="Amp envelope")
         envelope.pack(fill="x", pady=(10, 0))
         ttk.Checkbutton(envelope, text="Enable ADSR", variable=self.amp_env_enabled_var, command=self._on_output_parameter_changed).pack(side="left", padx=6, pady=6)
         ttk.Label(envelope, text="attack").pack(side="left", padx=(6, 2), pady=6)
@@ -282,25 +295,25 @@ class SampleSmithApp(tk.Tk):
         ttk.Checkbutton(envelope, text="K", variable=self.ds_knob_amp_env_var, command=self._on_output_parameter_changed).pack(side="left", padx=(4, 6), pady=6)
         ttk.Button(envelope, text="defaults", command=lambda: self._set_effect_defaults("amp_env")).pack(side="left", padx=(0, 6), pady=6)
 
-        effects = ttk.LabelFrame(self.decent_sampler_tab, text="Decent Sampler effects")
-        effects.pack(fill="x", pady=(10, 0))
-        ttk.Label(effects, text="Effect").grid(row=0, column=0, sticky="w", padx=6, pady=(3, 2))
-        ttk.Label(effects, text="Parameters  (K = knob included in DS display)").grid(row=0, column=1, sticky="w", padx=6, pady=(3, 2))
-        ttk.Label(effects, text="Defaults").grid(row=0, column=2, sticky="w", padx=6, pady=(3, 2))
+        def make_effects(parent: ttk.Frame, title: str) -> ttk.LabelFrame:
+            effects = ttk.LabelFrame(parent, text=title)
+            effects.pack(fill="x")
+            ttk.Label(effects, text="Effect").grid(row=0, column=0, sticky="w", padx=6, pady=(3, 2))
+            ttk.Label(effects, text="Parameters  (K = knob included in DS display)").grid(row=0, column=1, sticky="w", padx=6, pady=(3, 2))
+            ttk.Label(effects, text="Defaults").grid(row=0, column=2, sticky="w", padx=6, pady=(3, 2))
+            effects.columnconfigure(1, weight=1)
+            return effects
 
-        def params_frame(row: int) -> ttk.Frame:
-            frame = ttk.Frame(effects)
+        def params_frame(parent: ttk.LabelFrame, row: int) -> ttk.Frame:
+            frame = ttk.Frame(parent)
             frame.grid(row=row, column=1, sticky="ew", padx=6, pady=2)
             return frame
 
-        def title_check(row: int, text: str, variable: tk.BooleanVar) -> None:
-            ttk.Checkbutton(effects, text=text, variable=variable, command=self._on_output_parameter_changed).grid(row=row, column=0, sticky="w", padx=6, pady=2)
+        def title_check(parent: ttk.LabelFrame, row: int, text: str, variable: tk.BooleanVar) -> None:
+            ttk.Checkbutton(parent, text=text, variable=variable, command=self._on_output_parameter_changed).grid(row=row, column=0, sticky="w", padx=6, pady=2)
 
-        def title_label(row: int, text: str) -> None:
-            ttk.Label(effects, text=text).grid(row=row, column=0, sticky="w", padx=6, pady=2)
-
-        def defaults_button(row: int, group: str) -> None:
-            ttk.Button(effects, text="defaults", command=lambda: self._set_effect_defaults(group)).grid(row=row, column=2, sticky="w", padx=6, pady=2)
+        def defaults_button(parent: ttk.LabelFrame, row: int, group: str) -> None:
+            ttk.Button(parent, text="defaults", command=lambda: self._set_effect_defaults(group)).grid(row=row, column=2, sticky="w", padx=6, pady=2)
 
         def param_label(parent: ttk.Frame, text: str) -> None:
             ttk.Label(parent, text=text).pack(side="left", padx=(0, 2))
@@ -313,118 +326,108 @@ class SampleSmithApp(tk.Tk):
             else:
                 ttk.Label(parent, text="").pack(side="left", padx=(0, 10))
 
+        tone = make_effects(tone_tab, "Tone effects")
         row = 1
-        title_check(row, "Filter", self.lowpass_enabled_var)
-        frame = params_frame(row)
+        title_check(tone, row, "Filter", self.lowpass_enabled_var)
+        frame = params_frame(tone, row)
         ttk.OptionMenu(frame, self.filter_type_var, self.filter_type_var.get(), "lowpass", "lowpass_1pl", "lowpass_4pl", "bandpass", "highpass").pack(side="left", padx=(0, 10))
         spin_param(frame, "freq", self.lowpass_frequency_var, 60, 22000, 100, width=8, k_var=self.ds_knob_tone_var)
         spin_param(frame, "res", self.filter_resonance_var, 0.001, 5.0, 0.1, k_var=self.ds_knob_filter_resonance_var)
-        defaults_button(row, "filter")
-
+        defaults_button(tone, row, "filter")
         row += 1
-        title_check(row, "Notch", self.notch_enabled_var)
-        frame = params_frame(row)
+        title_check(tone, row, "Notch", self.notch_enabled_var)
+        frame = params_frame(tone, row)
         spin_param(frame, "freq", self.notch_frequency_var, 60, 22000, 100, width=8, k_var=self.ds_knob_notch_frequency_var)
         spin_param(frame, "Q", self.notch_q_var, 0.01, 18.0, 0.1, k_var=self.ds_knob_notch_q_var)
-        defaults_button(row, "eq")
-
+        defaults_button(tone, row, "eq")
         row += 1
-        title_check(row, "Peak", self.peak_enabled_var)
-        frame = params_frame(row)
+        title_check(tone, row, "Peak", self.peak_enabled_var)
+        frame = params_frame(tone, row)
         spin_param(frame, "freq", self.peak_frequency_var, 60, 22000, 100, width=8, k_var=self.ds_knob_peak_frequency_var)
         spin_param(frame, "Q", self.peak_q_var, 0.01, 18.0, 0.1, k_var=self.ds_knob_peak_q_var)
         spin_param(frame, "gain", self.peak_gain_var, 0.0, 2.0, 0.1, k_var=self.ds_knob_peak_gain_var)
-        defaults_button(row, "eq")
-
+        defaults_button(tone, row, "eq")
         row += 1
-        title_check(row, "Gain", self.gain_enabled_var)
-        frame = params_frame(row)
+        title_check(tone, row, "Gain", self.gain_enabled_var)
+        frame = params_frame(tone, row)
         spin_param(frame, "dB", self.gain_level_var, -99, 24, 1, k_var=self.ds_knob_gain_level_var)
-        defaults_button(row, "gain")
+        defaults_button(tone, row, "gain")
 
-        row += 1
-        title_check(row, "Reverb", self.reverb_enabled_var)
-        frame = params_frame(row)
+        space = make_effects(space_tab, "Space effects")
+        row = 1
+        title_check(space, row, "Reverb", self.reverb_enabled_var)
+        frame = params_frame(space, row)
         spin_param(frame, "wet", self.reverb_wet_level_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_reverb_wet_var)
         spin_param(frame, "room", self.reverb_room_size_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_reverb_room_var)
         spin_param(frame, "damping", self.reverb_damping_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_reverb_damping_var)
-        defaults_button(row, "reverb")
-
+        defaults_button(space, row, "reverb")
         row += 1
-        title_check(row, "Delay", self.delay_enabled_var)
-        frame = params_frame(row)
+        title_check(space, row, "Delay", self.delay_enabled_var)
+        frame = params_frame(space, row)
         spin_param(frame, "time", self.delay_time_var, 0.0, 20.0, 0.05, k_var=self.ds_knob_delay_time_var)
         spin_param(frame, "offset", self.delay_stereo_offset_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_delay_stereo_offset_var)
         spin_param(frame, "feedback", self.delay_feedback_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_delay_feedback_var)
         spin_param(frame, "wet", self.delay_wet_level_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_delay_wet_var)
-        defaults_button(row, "delay")
-
+        defaults_button(space, row, "delay")
         row += 1
-        title_check(row, "Chorus", self.chorus_enabled_var)
-        frame = params_frame(row)
+        title_check(space, row, "Chorus", self.chorus_enabled_var)
+        frame = params_frame(space, row)
         spin_param(frame, "mix", self.chorus_mix_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_chorus_mix_var)
         spin_param(frame, "depth", self.chorus_mod_depth_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_chorus_depth_var)
         spin_param(frame, "rate", self.chorus_mod_rate_var, 0.0, 10.0, 0.05, k_var=self.ds_knob_chorus_rate_var)
-        defaults_button(row, "chorus")
-
+        defaults_button(space, row, "chorus")
         row += 1
-        title_check(row, "Phaser", self.phaser_enabled_var)
-        frame = params_frame(row)
+        title_check(space, row, "Phaser", self.phaser_enabled_var)
+        frame = params_frame(space, row)
         spin_param(frame, "mix", self.phaser_mix_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_phaser_mix_var)
         spin_param(frame, "depth", self.phaser_mod_depth_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_phaser_depth_var)
         spin_param(frame, "rate", self.phaser_mod_rate_var, 0.0, 10.0, 0.05, k_var=self.ds_knob_phaser_rate_var)
         spin_param(frame, "freq", self.phaser_center_frequency_var, 0.0, 22000, 50, width=8, k_var=self.ds_knob_phaser_frequency_var)
         spin_param(frame, "feedback", self.phaser_feedback_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_phaser_feedback_var)
-        defaults_button(row, "modulation")
-
+        defaults_button(space, row, "modulation")
         row += 1
-        title_check(row, "Pitch shift", self.pitch_shift_enabled_var)
-        frame = params_frame(row)
-        spin_param(frame, "semitones", self.pitch_shift_var, -24, 24, 1, k_var=self.ds_knob_pitch_shift_var)
-        spin_param(frame, "mix", self.pitch_shift_mix_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_pitch_shift_mix_var)
-        defaults_button(row, "modulation")
-
-        row += 1
-        title_check(row, "Convolution / IR", self.convolution_enabled_var)
-        frame = params_frame(row)
+        title_check(space, row, "Convolution / IR", self.convolution_enabled_var)
+        frame = params_frame(space, row)
         ttk.Entry(frame, textvariable=self.reverb_ir_var, width=30).pack(side="left", padx=(0, 10))
         spin_param(frame, "mix", self.reverb_mix_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_convolution_mix_var)
-        defaults_button(row, "convolution")
+        defaults_button(space, row, "convolution")
 
+        shape = make_effects(shape_tab, "Shape effects")
+        row = 1
+        title_check(shape, row, "Pitch shift", self.pitch_shift_enabled_var)
+        frame = params_frame(shape, row)
+        spin_param(frame, "semitones", self.pitch_shift_var, -24, 24, 1, k_var=self.ds_knob_pitch_shift_var)
+        spin_param(frame, "mix", self.pitch_shift_mix_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_pitch_shift_mix_var)
+        defaults_button(shape, row, "modulation")
         row += 1
-        title_check(row, "Wave folder", self.wave_folder_enabled_var)
-        frame = params_frame(row)
+        title_check(shape, row, "Wave folder", self.wave_folder_enabled_var)
+        frame = params_frame(shape, row)
         spin_param(frame, "drive", self.wave_folder_drive_var, 1, 100, 1, k_var=self.ds_knob_wave_folder_drive_var)
         spin_param(frame, "threshold", self.wave_folder_threshold_var, 0, 10, 0.1, k_var=self.ds_knob_wave_folder_threshold_var)
-        defaults_button(row, "wave_folder")
-
+        defaults_button(shape, row, "wave_folder")
         row += 1
-        title_check(row, "Wave shaper", self.wave_shaper_enabled_var)
-        frame = params_frame(row)
+        title_check(shape, row, "Wave shaper", self.wave_shaper_enabled_var)
+        frame = params_frame(shape, row)
         spin_param(frame, "drive", self.wave_shaper_drive_var, 1, 1000, 1, k_var=self.ds_knob_wave_shaper_drive_var)
         spin_param(frame, "boost", self.wave_shaper_drive_boost_var, 0, 1, 0.05, k_var=self.ds_knob_wave_shaper_boost_var)
         spin_param(frame, "out", self.wave_shaper_output_level_var, 0, 1, 0.05, k_var=self.ds_knob_wave_shaper_output_var)
-        defaults_button(row, "wave_shaper")
-
+        defaults_button(shape, row, "wave_shaper")
         row += 1
-        title_check(row, "Stereo simulator", self.stereo_simulator_enabled_var)
-        frame = params_frame(row)
+        title_check(shape, row, "Stereo simulator", self.stereo_simulator_enabled_var)
+        frame = params_frame(shape, row)
         ttk.OptionMenu(frame, self.stereo_simulator_algorithm_var, self.stereo_simulator_algorithm_var.get(), "adt", "lauridsen", "schroeder").pack(side="left", padx=(0, 10))
         spin_param(frame, "width", self.stereo_simulator_width_var, 0, 1, 0.05, k_var=self.ds_knob_stereo_width_var)
-        defaults_button(row, "stereo_simulator")
-
+        defaults_button(shape, row, "stereo_simulator")
         row += 1
-        title_check(row, "Bit crusher", self.bit_crusher_enabled_var)
-        frame = params_frame(row)
+        title_check(shape, row, "Bit crusher", self.bit_crusher_enabled_var)
+        frame = params_frame(shape, row)
         spin_param(frame, "bits", self.bit_crusher_bit_depth_var, 1, 24, 1, k_var=self.ds_knob_bit_depth_var)
         spin_param(frame, "rate div", self.bit_crusher_sample_rate_reduction_var, 1, 32, 1)
         spin_param(frame, "mix", self.bit_crusher_mix_var, 0, 1, 0.05, k_var=self.ds_knob_bit_crusher_mix_var)
-        defaults_button(row, "bit_crusher")
+        defaults_button(shape, row, "bit_crusher")
 
-        effects.columnconfigure(1, weight=1)
-
-        mapping = ttk.LabelFrame(self.decent_sampler_tab, text="Effective exported sample mapping")
-        mapping.pack(fill="both", expand=True, pady=(10, 0))
+        mapping = ttk.LabelFrame(mapping_tab, text="Effective exported sample mapping")
+        mapping.pack(fill="both", expand=True)
         self.export_tree = ttk.Treeview(mapping, columns=("source", "keys", "root", "mode"), show="headings", height=10)
         self.export_tree.heading("source", text="Source WAV")
         self.export_tree.heading("keys", text="Plays on keys")
@@ -436,13 +439,13 @@ class SampleSmithApp(tk.Tk):
         self.export_tree.column("mode", width=80, stretch=False)
         self.export_tree.pack(fill="both", expand=True, padx=6, pady=6)
 
-        notes = ttk.LabelFrame(self.decent_sampler_tab, text="Notes")
+        notes = ttk.LabelFrame(mapping_tab, text="Notes")
         notes.pack(fill="x", pady=(10, 0))
         ttk.Label(
             notes,
             text=(
-                "This tab is for Decent Sampler generation settings. "
-                "Manual loop start/end, loop crossfade, ADSR envelope, effects, and visible DS knobs live here."
+                "Decent Sampler settings are split into sub-tabs. Loop controls here are fallback/default values; "
+                "project files can now carry per-WAV loop fields ready for a later graphical editor."
             ),
             wraplength=820,
             justify="left",
@@ -1151,7 +1154,19 @@ class SampleSmithApp(tk.Tk):
         pads = [sample for sample in self.samples if sample.mode == "pad"]
         ranges = dict((root, (lo, hi)) for root, lo, hi in build_overlapping_key_ranges([sample.root_note for sample in pitched]))
         spread = [
-            SampleInfo(path=sample.path, root_note=sample.root_note, lo_note=ranges[sample.root_note][0], hi_note=ranges[sample.root_note][1], label=sample.label, mode=sample.mode)
+            SampleInfo(
+                path=sample.path,
+                root_note=sample.root_note,
+                lo_note=ranges[sample.root_note][0],
+                hi_note=ranges[sample.root_note][1],
+                label=sample.label,
+                mode=sample.mode,
+                loop_enabled=sample.loop_enabled,
+                loop_start=sample.loop_start,
+                loop_end=sample.loop_end,
+                loop_crossfade=sample.loop_crossfade,
+                loop_crossfade_mode=sample.loop_crossfade_mode,
+            )
             for sample in pitched
         ]
         return sorted(spread + pads, key=lambda sample: (sample.mode, sample.root_note, sample.path.name))

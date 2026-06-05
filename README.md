@@ -91,11 +91,11 @@ Possible later range modes:
 
 ## Decent Sampler settings
 
-Decent Sampler export settings live on their own **Decent Sampler** tab so loop, tone, reverb, and playback controls can keep growing without cluttering the recording workflow.
+Decent Sampler export settings live on their own **Decent Sampler** tab so loop, tone, reverb, and playback controls can keep growing without cluttering the recording workflow. That tab now has nested sub-tabs for **Basics / Export**, **Tone**, **Space**, **Shape**, and **Mapping** rather than one long wall of controls.
 
 Current Decent Sampler output parameters:
 
-- **Loop samples** — writes `loopEnabled="true"` on generated sample entries. You can now enter manual `loopStart` / `loopEnd` sample positions plus `loopCrossfade` and `loopCrossfadeMode` (`equal_power` or `linear`). If loop is enabled but no valid manual start/end is entered, SampleSmith leaves the explicit points out so Decent Sampler can still use embedded WAV loop markers when present. The Decent Sampler tab also has a first-pass “Use first WAV marker” helper for importing the first `smpl` loop marker it finds in the recorded WAVs.
+- **Loop samples** — writes `loopEnabled="true"` on generated sample entries. The visible controls are fallback/default loop settings for the whole project: manual `loopStart` / `loopEnd` sample positions plus `loopCrossfade` and `loopCrossfadeMode` (`equal_power` or `linear`). Project files can also carry optional per-sample loop fields (`loop_enabled`, `loop_start`, `loop_end`, `loop_crossfade`, `loop_crossfade_mode`) as groundwork for a later graphical per-WAV editor; when present, those per-sample values take priority during export. If loop is enabled but no valid manual start/end is entered, SampleSmith leaves the explicit points out so Decent Sampler can still use embedded WAV loop markers when present. The Decent Sampler tab also has a first-pass “Use first WAV marker” helper for importing the first `smpl` loop marker it finds in the recorded WAVs.
 - **Amp ADSR envelope** — optional group-level amp envelope export using documented Decent Sampler attributes: `ampEnvEnabled`, `attack`, `decay`, `sustain`, and `release`. When enabled, SampleSmith can also write visible Decent Sampler knobs bound to the documented group amp parameters `ENV_ATTACK`, `ENV_DECAY`, `ENV_SUSTAIN`, and `ENV_RELEASE`.
 - **Root offset** — shifts exported `rootNote` values without moving the playable key ranges. Default is `-12` because early tests came out sounding an octave low; set it back to `0` if your setup does not need that correction.
 - **Decent Sampler effects** — SampleSmith includes the documented DS effect types: filters (`lowpass`, `lowpass_1pl`, legacy `lowpass_4pl`, `bandpass`, `highpass`), `notch`, `peak`, `gain`, `reverb`, `delay`, `chorus`, `phaser`, `convolution`, `pitch_shift`, `wave_folder`, `wave_shaper`, `stereo_simulator`, and `bit_crusher`.
@@ -114,8 +114,8 @@ Likely next steps:
 - add velocity layers
 - add round-robin takes
 - improve loop-point detection/preview for sustained notes
-- add per-sample loop overrides instead of only project-wide loop settings
-- improve Decent Sampler UI controls
+- add the graphical per-WAV loop editor for the new per-sample loop fields
+- refine Decent Sampler UI controls
 - add Reaper-specific helper/export workflow
 - support manual note correction more elegantly
 - add a review pass for clipped/quiet/too-short samples

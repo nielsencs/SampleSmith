@@ -99,9 +99,14 @@ class SampleInfo:
     hi_note: int
     label: str
     mode: str = "pitched"
+    loop_enabled: bool | None = None
+    loop_start: int | None = None
+    loop_end: int | None = None
+    loop_crossfade: float | None = None
+    loop_crossfade_mode: str | None = None
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        data: dict[str, object] = {
             "path": str(self.path),
             "root_note": self.root_note,
             "lo_note": self.lo_note,
@@ -109,9 +114,26 @@ class SampleInfo:
             "label": self.label,
             "mode": self.mode,
         }
+        if self.loop_enabled is not None:
+            data["loop_enabled"] = self.loop_enabled
+        if self.loop_start is not None:
+            data["loop_start"] = self.loop_start
+        if self.loop_end is not None:
+            data["loop_end"] = self.loop_end
+        if self.loop_crossfade is not None:
+            data["loop_crossfade"] = self.loop_crossfade
+        if self.loop_crossfade_mode is not None:
+            data["loop_crossfade_mode"] = self.loop_crossfade_mode
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> "SampleInfo":
+        loop_crossfade = None
+        if data.get("loop_crossfade") is not None:
+            try:
+                loop_crossfade = clamp_float(float(data.get("loop_crossfade", 0.0)), 0.0, 60000.0)
+            except (TypeError, ValueError):
+                loop_crossfade = None
         return cls(
             path=Path(str(data["path"])),
             root_note=int(data["root_note"]),
@@ -119,6 +141,11 @@ class SampleInfo:
             hi_note=int(data["hi_note"]),
             label=str(data.get("label", "")),
             mode=str(data.get("mode", "pitched")),
+            loop_enabled=None if data.get("loop_enabled") is None else bool(data.get("loop_enabled")),
+            loop_start=optional_non_negative_int(data.get("loop_start")),
+            loop_end=optional_non_negative_int(data.get("loop_end")),
+            loop_crossfade=loop_crossfade,
+            loop_crossfade_mode=None if data.get("loop_crossfade_mode") is None else str(data.get("loop_crossfade_mode")),
         )
 
 def clamp_midi_note(midi_note: int) -> int:

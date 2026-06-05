@@ -445,6 +445,14 @@ def generate_dspreset(
         )
     group = ET.SubElement(groups, "group", group_attrs)
     for sample in samples:
+        sample_loop_start = sample.loop_start if sample.loop_start is not None else loop_start
+        sample_loop_end = sample.loop_end if sample.loop_end is not None else loop_end
+        sample_loop_start, sample_loop_end = valid_loop_points(sample_loop_start, sample_loop_end)
+        sample_loop_crossfade = loop_crossfade if sample.loop_crossfade is None else clamp_float(sample.loop_crossfade, 0.0, 60000.0)
+        sample_loop_crossfade_mode = sample.loop_crossfade_mode or loop_crossfade_mode
+        if sample_loop_crossfade_mode not in {"linear", "equal_power"}:
+            sample_loop_crossfade_mode = "equal_power"
+        sample_loop_enabled = loop_enabled if sample.loop_enabled is None else sample.loop_enabled
         attrs = {
             "path": sample.path.relative_to(output_dir).as_posix(),
             "rootNote": str(clamp_midi_note(sample.root_note + root_note_offset)),
@@ -453,14 +461,14 @@ def generate_dspreset(
             "loVel": "1",
             "hiVel": "127",
         }
-        if loop_enabled:
+        if sample_loop_enabled:
             attrs["loopEnabled"] = "true"
-            if loop_start is not None and loop_end is not None:
-                attrs["loopStart"] = str(loop_start)
-                attrs["loopEnd"] = str(loop_end)
-                if loop_crossfade > 0:
-                    attrs["loopCrossfade"] = f"{loop_crossfade:.1f}"
-                    attrs["loopCrossfadeMode"] = loop_crossfade_mode
+            if sample_loop_start is not None and sample_loop_end is not None:
+                attrs["loopStart"] = str(sample_loop_start)
+                attrs["loopEnd"] = str(sample_loop_end)
+                if sample_loop_crossfade > 0:
+                    attrs["loopCrossfade"] = f"{sample_loop_crossfade:.1f}"
+                    attrs["loopCrossfadeMode"] = sample_loop_crossfade_mode
         ET.SubElement(group, "sample", attrs)
     if effects_to_write:
         effects = ET.SubElement(root, "effects")
