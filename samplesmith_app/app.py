@@ -114,6 +114,7 @@ class SampleSmithApp(tk.Tk):
         self.wave_shaper_drive_var = tk.DoubleVar(value=1.0)
         self.wave_shaper_drive_boost_var = tk.DoubleVar(value=1.0)
         self.wave_shaper_output_level_var = tk.DoubleVar(value=0.1)
+        self.wave_shaper_high_quality_var = tk.BooleanVar(value=True)
         self.stereo_simulator_enabled_var = tk.BooleanVar(value=False)
         self.stereo_simulator_algorithm_var = tk.StringVar(value="adt")
         self.stereo_simulator_width_var = tk.DoubleVar(value=0.5)
@@ -121,8 +122,8 @@ class SampleSmithApp(tk.Tk):
         self.stereo_simulator_mod_rate_var = tk.DoubleVar(value=0.5)
         self.stereo_simulator_mod_depth_var = tk.DoubleVar(value=0.3)
         self.bit_crusher_enabled_var = tk.BooleanVar(value=False)
-        self.bit_crusher_bit_depth_var = tk.IntVar(value=24)
-        self.bit_crusher_sample_rate_reduction_var = tk.IntVar(value=1)
+        self.bit_crusher_bit_depth_var = tk.IntVar(value=8)
+        self.bit_crusher_sample_rate_reduction_var = tk.IntVar(value=4)
         self.bit_crusher_mix_var = tk.DoubleVar(value=1.0)
         self.ds_knob_tone_var = tk.BooleanVar(value=True)
         self.ds_knob_filter_resonance_var = tk.BooleanVar(value=False)
@@ -157,6 +158,7 @@ class SampleSmithApp(tk.Tk):
         self.ds_knob_wave_shaper_output_var = tk.BooleanVar(value=False)
         self.ds_knob_stereo_width_var = tk.BooleanVar(value=False)
         self.ds_knob_bit_depth_var = tk.BooleanVar(value=False)
+        self.ds_knob_bit_crusher_rate_var = tk.BooleanVar(value=False)
         self.ds_knob_bit_crusher_mix_var = tk.BooleanVar(value=False)
 
         ttk.Label(project, text="Name").grid(row=0, column=0, sticky="w")
@@ -365,7 +367,7 @@ class SampleSmithApp(tk.Tk):
         title_check(space, row, "Delay", self.delay_enabled_var)
         frame = params_frame(space, row)
         spin_param(frame, "time", self.delay_time_var, 0.0, 20.0, 0.05, k_var=self.ds_knob_delay_time_var)
-        spin_param(frame, "offset", self.delay_stereo_offset_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_delay_stereo_offset_var)
+        spin_param(frame, "offset", self.delay_stereo_offset_var, -10.0, 10.0, 0.05, k_var=self.ds_knob_delay_stereo_offset_var)
         spin_param(frame, "feedback", self.delay_feedback_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_delay_feedback_var)
         spin_param(frame, "wet", self.delay_wet_level_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_delay_wet_var)
         defaults_button(space, row, "delay")
@@ -411,18 +413,22 @@ class SampleSmithApp(tk.Tk):
         spin_param(frame, "drive", self.wave_shaper_drive_var, 1, 1000, 1, k_var=self.ds_knob_wave_shaper_drive_var)
         spin_param(frame, "boost", self.wave_shaper_drive_boost_var, 0, 1, 0.05, k_var=self.ds_knob_wave_shaper_boost_var)
         spin_param(frame, "out", self.wave_shaper_output_level_var, 0, 1, 0.05, k_var=self.ds_knob_wave_shaper_output_var)
+        ttk.Checkbutton(frame, text="high quality", variable=self.wave_shaper_high_quality_var, command=self._on_output_parameter_changed).pack(side="left", padx=(0, 10))
         defaults_button(shape, row, "wave_shaper")
         row += 1
         title_check(shape, row, "Stereo simulator", self.stereo_simulator_enabled_var)
         frame = params_frame(shape, row)
         ttk.OptionMenu(frame, self.stereo_simulator_algorithm_var, self.stereo_simulator_algorithm_var.get(), "adt", "lauridsen", "schroeder").pack(side="left", padx=(0, 10))
         spin_param(frame, "width", self.stereo_simulator_width_var, 0, 1, 0.05, k_var=self.ds_knob_stereo_width_var)
+        spin_param(frame, "delay", self.stereo_simulator_delay_time_var, 0.001, 0.030, 0.001, width=7)
+        spin_param(frame, "rate", self.stereo_simulator_mod_rate_var, 0.1, 10.0, 0.1)
+        spin_param(frame, "depth", self.stereo_simulator_mod_depth_var, 0.0, 1.0, 0.05)
         defaults_button(shape, row, "stereo_simulator")
         row += 1
         title_check(shape, row, "Bit crusher", self.bit_crusher_enabled_var)
         frame = params_frame(shape, row)
         spin_param(frame, "bits", self.bit_crusher_bit_depth_var, 1, 24, 1, k_var=self.ds_knob_bit_depth_var)
-        spin_param(frame, "rate div", self.bit_crusher_sample_rate_reduction_var, 1, 32, 1)
+        spin_param(frame, "rate div", self.bit_crusher_sample_rate_reduction_var, 1, 32, 1, k_var=self.ds_knob_bit_crusher_rate_var)
         spin_param(frame, "mix", self.bit_crusher_mix_var, 0, 1, 0.05, k_var=self.ds_knob_bit_crusher_mix_var)
         defaults_button(shape, row, "bit_crusher")
 
@@ -510,6 +516,7 @@ class SampleSmithApp(tk.Tk):
             self.wave_shaper_drive_var,
             self.wave_shaper_drive_boost_var,
             self.wave_shaper_output_level_var,
+            self.wave_shaper_high_quality_var,
             self.stereo_simulator_enabled_var,
             self.stereo_simulator_algorithm_var,
             self.stereo_simulator_width_var,
@@ -553,6 +560,7 @@ class SampleSmithApp(tk.Tk):
             self.ds_knob_wave_shaper_output_var,
             self.ds_knob_stereo_width_var,
             self.ds_knob_bit_depth_var,
+            self.ds_knob_bit_crusher_rate_var,
             self.ds_knob_bit_crusher_mix_var,
         ]
         for var in output_vars:
@@ -606,6 +614,7 @@ class SampleSmithApp(tk.Tk):
             self.wave_shaper_drive_var.set(1.0)
             self.wave_shaper_drive_boost_var.set(1.0)
             self.wave_shaper_output_level_var.set(0.1)
+            self.wave_shaper_high_quality_var.set(True)
         elif effect_group == "stereo_simulator":
             self.stereo_simulator_algorithm_var.set("adt")
             self.stereo_simulator_width_var.set(0.5)
@@ -613,8 +622,8 @@ class SampleSmithApp(tk.Tk):
             self.stereo_simulator_mod_rate_var.set(0.5)
             self.stereo_simulator_mod_depth_var.set(0.3)
         elif effect_group == "bit_crusher":
-            self.bit_crusher_bit_depth_var.set(24)
-            self.bit_crusher_sample_rate_reduction_var.set(1)
+            self.bit_crusher_bit_depth_var.set(8)
+            self.bit_crusher_sample_rate_reduction_var.set(4)
             self.bit_crusher_mix_var.set(1.0)
         elif effect_group == "amp_env":
             self.amp_attack_var.set(0.01)
@@ -711,6 +720,7 @@ class SampleSmithApp(tk.Tk):
             "wave_shaper_drive": self.wave_shaper_drive_var.get(),
             "wave_shaper_drive_boost": self.wave_shaper_drive_boost_var.get(),
             "wave_shaper_output_level": self.wave_shaper_output_level_var.get(),
+            "wave_shaper_high_quality": self.wave_shaper_high_quality_var.get(),
             "stereo_simulator_enabled": self.stereo_simulator_enabled_var.get(),
             "stereo_simulator_algorithm": self.stereo_simulator_algorithm_var.get(),
             "stereo_simulator_width": self.stereo_simulator_width_var.get(),
@@ -754,6 +764,7 @@ class SampleSmithApp(tk.Tk):
             "ds_knob_wave_shaper_output": self.ds_knob_wave_shaper_output_var.get(),
             "ds_knob_stereo_width": self.ds_knob_stereo_width_var.get(),
             "ds_knob_bit_depth": self.ds_knob_bit_depth_var.get(),
+            "ds_knob_bit_crusher_rate": self.ds_knob_bit_crusher_rate_var.get(),
             "ds_knob_bit_crusher_mix": self.ds_knob_bit_crusher_mix_var.get(),
             "low_note": self.low_note,
             "high_note": self.high_note,
@@ -864,6 +875,7 @@ class SampleSmithApp(tk.Tk):
         self.wave_shaper_drive_var.set(float(data.get("wave_shaper_drive", 1.0)))
         self.wave_shaper_drive_boost_var.set(float(data.get("wave_shaper_drive_boost", 1.0)))
         self.wave_shaper_output_level_var.set(float(data.get("wave_shaper_output_level", 0.1)))
+        self.wave_shaper_high_quality_var.set(bool(data.get("wave_shaper_high_quality", True)))
         self.stereo_simulator_enabled_var.set(bool(data.get("stereo_simulator_enabled", False)))
         self.stereo_simulator_algorithm_var.set(str(data.get("stereo_simulator_algorithm", "adt")))
         self.stereo_simulator_width_var.set(float(data.get("stereo_simulator_width", 0.5)))
@@ -871,8 +883,8 @@ class SampleSmithApp(tk.Tk):
         self.stereo_simulator_mod_rate_var.set(float(data.get("stereo_simulator_mod_rate", 0.5)))
         self.stereo_simulator_mod_depth_var.set(float(data.get("stereo_simulator_mod_depth", 0.3)))
         self.bit_crusher_enabled_var.set(bool(data.get("bit_crusher_enabled", False)))
-        self.bit_crusher_bit_depth_var.set(int(data.get("bit_crusher_bit_depth", 24)))
-        self.bit_crusher_sample_rate_reduction_var.set(int(data.get("bit_crusher_sample_rate_reduction", 1)))
+        self.bit_crusher_bit_depth_var.set(int(data.get("bit_crusher_bit_depth", 8)))
+        self.bit_crusher_sample_rate_reduction_var.set(int(data.get("bit_crusher_sample_rate_reduction", 4)))
         self.bit_crusher_mix_var.set(float(data.get("bit_crusher_mix", 1.0)))
         self.ds_knob_tone_var.set(bool(data.get("ds_knob_tone", True)))
         self.ds_knob_filter_resonance_var.set(bool(data.get("ds_knob_filter_resonance", False)))
@@ -907,6 +919,7 @@ class SampleSmithApp(tk.Tk):
         self.ds_knob_wave_shaper_output_var.set(bool(data.get("ds_knob_wave_shaper_output", False)))
         self.ds_knob_stereo_width_var.set(bool(data.get("ds_knob_stereo_width", False)))
         self.ds_knob_bit_depth_var.set(bool(data.get("ds_knob_bit_depth", False)))
+        self.ds_knob_bit_crusher_rate_var.set(bool(data.get("ds_knob_bit_crusher_rate", False)))
         self.ds_knob_bit_crusher_mix_var.set(bool(data.get("ds_knob_bit_crusher_mix", False)))
         self.low_note = int(data["low_note"]) if data.get("low_note") is not None else None
         self.high_note = int(data["high_note"]) if data.get("high_note") is not None else None
@@ -1273,6 +1286,7 @@ class SampleSmithApp(tk.Tk):
             wave_shaper_drive=self.wave_shaper_drive_var.get(),
             wave_shaper_drive_boost=self.wave_shaper_drive_boost_var.get(),
             wave_shaper_output_level=self.wave_shaper_output_level_var.get(),
+            wave_shaper_high_quality=self.wave_shaper_high_quality_var.get(),
             stereo_simulator_enabled=self.stereo_simulator_enabled_var.get(),
             stereo_simulator_algorithm=self.stereo_simulator_algorithm_var.get(),
             stereo_simulator_width=self.stereo_simulator_width_var.get(),
@@ -1316,6 +1330,7 @@ class SampleSmithApp(tk.Tk):
             ds_knob_wave_shaper_output=self.ds_knob_wave_shaper_output_var.get(),
             ds_knob_stereo_width=self.ds_knob_stereo_width_var.get(),
             ds_knob_bit_depth=self.ds_knob_bit_depth_var.get(),
+            ds_knob_bit_crusher_rate=self.ds_knob_bit_crusher_rate_var.get(),
             ds_knob_bit_crusher_mix=self.ds_knob_bit_crusher_mix_var.get(),
         )
         self._refresh_export_mapping()

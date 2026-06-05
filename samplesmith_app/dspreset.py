@@ -68,6 +68,7 @@ def generate_dspreset(
     wave_shaper_drive: float = 1.0,
     wave_shaper_drive_boost: float = 1.0,
     wave_shaper_output_level: float = 0.1,
+    wave_shaper_high_quality: bool = True,
     stereo_simulator_enabled: bool = False,
     stereo_simulator_algorithm: str = "adt",
     stereo_simulator_width: float = 0.5,
@@ -75,8 +76,8 @@ def generate_dspreset(
     stereo_simulator_mod_rate: float = 0.5,
     stereo_simulator_mod_depth: float = 0.3,
     bit_crusher_enabled: bool = False,
-    bit_crusher_bit_depth: int = 24,
-    bit_crusher_sample_rate_reduction: int = 1,
+    bit_crusher_bit_depth: int = 8,
+    bit_crusher_sample_rate_reduction: int = 4,
     bit_crusher_mix: float = 1.0,
     ds_knob_tone: bool = True,
     ds_knob_filter_resonance: bool = False,
@@ -111,6 +112,7 @@ def generate_dspreset(
     ds_knob_wave_shaper_output: bool = False,
     ds_knob_stereo_width: bool = False,
     ds_knob_bit_depth: bool = False,
+    ds_knob_bit_crusher_rate: bool = False,
     ds_knob_bit_crusher_mix: bool = False,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -160,11 +162,39 @@ def generate_dspreset(
     if wave_folder_enabled:
         effects_to_write.append(("wave_folder", {"drive": f"{wave_folder_drive:.3f}", "threshold": f"{wave_folder_threshold:.3f}"}))
     if wave_shaper_enabled:
-        effects_to_write.append(("wave_shaper", {"drive": f"{wave_shaper_drive:.3f}", "driveBoost": f"{wave_shaper_drive_boost:.3f}", "outputLevel": f"{wave_shaper_output_level:.3f}"}))
+        effects_to_write.append((
+            "wave_shaper",
+            {
+                "drive": f"{clamp_float(wave_shaper_drive, 1.0, 1000.0):.3f}",
+                "driveBoost": f"{clamp_float(wave_shaper_drive_boost, 0.0, 1.0):.3f}",
+                "outputLevel": f"{clamp_float(wave_shaper_output_level, 0.0, 1.0):.3f}",
+                "highQuality": "true" if wave_shaper_high_quality else "false",
+            },
+        ))
     if stereo_simulator_enabled:
-        effects_to_write.append(("stereo_simulator", {"algorithm": stereo_simulator_algorithm, "width": f"{stereo_simulator_width:.3f}", "delayTime": f"{stereo_simulator_delay_time:.3f}", "modRate": f"{stereo_simulator_mod_rate:.3f}", "modDepth": f"{stereo_simulator_mod_depth:.3f}"}))
+        if stereo_simulator_algorithm not in {"adt", "lauridsen", "schroeder"}:
+            stereo_simulator_algorithm = "adt"
+        effects_to_write.append((
+            "stereo_simulator",
+            {
+                "algorithm": stereo_simulator_algorithm,
+                "width": f"{clamp_float(stereo_simulator_width, 0.0, 1.0):.3f}",
+                "delayTime": f"{clamp_float(stereo_simulator_delay_time, 0.001, 0.030):.3f}",
+                "modRate": f"{clamp_float(stereo_simulator_mod_rate, 0.1, 10.0):.3f}",
+                "modDepth": f"{clamp_float(stereo_simulator_mod_depth, 0.0, 1.0):.3f}",
+            },
+        ))
     if bit_crusher_enabled:
-        effects_to_write.append(("bit_crusher", {"bitDepth": str(bit_crusher_bit_depth), "sampleRateReduction": str(bit_crusher_sample_rate_reduction), "mix": f"{bit_crusher_mix:.3f}"}))
+        bit_depth = int(clamp_float(float(bit_crusher_bit_depth), 1.0, 24.0))
+        sample_rate_reduction = int(clamp_float(float(bit_crusher_sample_rate_reduction), 1.0, 32.0))
+        effects_to_write.append((
+            "bit_crusher",
+            {
+                "bitDepth": str(bit_depth),
+                "sampleRateReduction": str(sample_rate_reduction),
+                "mix": f"{clamp_float(bit_crusher_mix, 0.0, 1.0):.3f}",
+            },
+        ))
 
     loop_start, loop_end = valid_loop_points(loop_start, loop_end)
     loop_crossfade = clamp_float(loop_crossfade, 0.0, 60000.0)
@@ -283,7 +313,8 @@ def generate_dspreset(
             (
                 "Bits",
                 [
-                    (ds_knob_bit_depth and "bit_crusher" in effect_positions, "bit_crusher", "Depth", "FX_BIT_DEPTH", "1", "24", str(bit_crusher_bit_depth), "24"),
+                    (ds_knob_bit_depth and "bit_crusher" in effect_positions, "bit_crusher", "Depth", "FX_BIT_DEPTH", "1", "24", str(bit_crusher_bit_depth), "8"),
+                    (ds_knob_bit_crusher_rate and "bit_crusher" in effect_positions, "bit_crusher", "Rate", "FX_SAMPLE_RATE_REDUCTION", "1", "32", str(bit_crusher_sample_rate_reduction), "4"),
                     (ds_knob_bit_crusher_mix and "bit_crusher" in effect_positions, "bit_crusher", "Mix", "FX_MIX", "0", "1", f"{bit_crusher_mix:.3f}", "1.000"),
                 ],
             ),
