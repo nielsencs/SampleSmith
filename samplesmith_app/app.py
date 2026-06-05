@@ -1,0 +1,1334 @@
+"""Tkinter GUI application for SampleSmith."""
+
+from __future__ import annotations
+
+import json
+import queue
+import threading
+import time
+import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
+
+from .audio import AudioEngine, write_silent_wav
+from .dspreset import generate_dspreset
+from .looping import read_wav_smpl_loop_points
+from .models import (
+    DEFAULT_PAD_START_NOTE,
+    DEFAULT_SAMPLE_RATE,
+    SampleInfo,
+    build_key_ranges,
+    build_overlapping_key_ranges,
+    exported_root_text,
+    freq_to_midi,
+    mapping_text,
+    midi_to_name,
+    name_to_midi,
+    note_range,
+    optional_non_negative_int,
+    slugify,
+)
+
+class SampleSmithApp(tk.Tk):
+    def __init__(self) -> None:
+        super().__init__()
+        self.title("SampleSmith")
+        self.geometry("920x680")
+        self.queue: queue.Queue[tuple[str, object]] = queue.Queue()
+        self.samples: list[SampleInfo] = []
+        self.project_path: Path | None = None
+        self.low_note: int | None = None
+        self.high_note: int | None = None
+        self.note_rows: dict[int, str] = {}
+        self.pad_note = DEFAULT_PAD_START_NOTE
+        self._output_update_after_id: str | None = None
+        self._build_ui()
+        self.after(100, self._drain_queue)
+
+    def _build_ui(self) -> None:
+        outer = ttk.Frame(self, padding=10)
+        outer.pack(fill="both", expand=True)
+
+        project = ttk.LabelFrame(outer, text="Project")
+        project.pack(fill="x")
+        self.name_var = tk.StringVar(value="CarlSampler")
+        self.output_var = tk.StringVar(value=str(Path.cwd() / "captured-samplers"))
+        self.sample_rate_var = tk.IntVar(value=DEFAULT_SAMPLE_RATE)
+        self.record_seconds_var = tk.DoubleVar(value=4.0)
+        self.threshold_var = tk.DoubleVar(value=-45.0)
+        self.normalise_var = tk.BooleanVar(value=True)
+        self.loop_enabled_var = tk.BooleanVar(value=False)
+        self.loop_start_var = tk.StringVar(value="")
+        self.loop_end_var = tk.StringVar(value="")
+        self.loop_crossfade_var = tk.DoubleVar(value=0.0)
+        self.loop_crossfade_mode_var = tk.StringVar(value="equal_power")
+        self.amp_env_enabled_var = tk.BooleanVar(value=False)
+        self.amp_attack_var = tk.DoubleVar(value=0.01)
+        self.amp_decay_var = tk.DoubleVar(value=0.0)
+        self.amp_sustain_var = tk.DoubleVar(value=1.0)
+        self.amp_release_var = tk.DoubleVar(value=0.8)
+        self.ds_knob_amp_env_var = tk.BooleanVar(value=True)
+        self.root_note_offset_var = tk.IntVar(value=-12)
+        self.delay_enabled_var = tk.BooleanVar(value=False)
+        self.delay_time_var = tk.DoubleVar(value=0.7)
+        self.delay_stereo_offset_var = tk.DoubleVar(value=0.0)
+        self.delay_feedback_var = tk.DoubleVar(value=0.2)
+        self.delay_wet_level_var = tk.DoubleVar(value=0.5)
+        self.lowpass_enabled_var = tk.BooleanVar(value=False)
+        self.filter_type_var = tk.StringVar(value="lowpass_4pl")
+        self.lowpass_frequency_var = tk.DoubleVar(value=22000.0)
+        self.filter_resonance_var = tk.DoubleVar(value=0.7)
+        self.notch_enabled_var = tk.BooleanVar(value=False)
+        self.notch_frequency_var = tk.DoubleVar(value=10000.0)
+        self.notch_q_var = tk.DoubleVar(value=0.7)
+        self.peak_enabled_var = tk.BooleanVar(value=False)
+        self.peak_frequency_var = tk.DoubleVar(value=10000.0)
+        self.peak_q_var = tk.DoubleVar(value=0.7)
+        self.peak_gain_var = tk.DoubleVar(value=1.0)
+        self.gain_enabled_var = tk.BooleanVar(value=False)
+        self.gain_level_var = tk.DoubleVar(value=0.0)
+        self.reverb_enabled_var = tk.BooleanVar(value=False)
+        self.reverb_room_size_var = tk.DoubleVar(value=0.7)
+        self.reverb_damping_var = tk.DoubleVar(value=0.3)
+        self.reverb_wet_level_var = tk.DoubleVar(value=0.5)
+        self.chorus_enabled_var = tk.BooleanVar(value=False)
+        self.chorus_mix_var = tk.DoubleVar(value=0.5)
+        self.chorus_mod_depth_var = tk.DoubleVar(value=0.2)
+        self.chorus_mod_rate_var = tk.DoubleVar(value=0.2)
+        self.phaser_enabled_var = tk.BooleanVar(value=False)
+        self.phaser_mix_var = tk.DoubleVar(value=0.5)
+        self.phaser_mod_depth_var = tk.DoubleVar(value=0.2)
+        self.phaser_mod_rate_var = tk.DoubleVar(value=0.2)
+        self.phaser_center_frequency_var = tk.DoubleVar(value=400.0)
+        self.phaser_feedback_var = tk.DoubleVar(value=0.7)
+        self.convolution_enabled_var = tk.BooleanVar(value=False)
+        self.reverb_ir_var = tk.StringVar(value="")
+        self.reverb_mix_var = tk.DoubleVar(value=0.0)
+        self.pitch_shift_enabled_var = tk.BooleanVar(value=False)
+        self.pitch_shift_var = tk.DoubleVar(value=0.0)
+        self.pitch_shift_mix_var = tk.DoubleVar(value=0.5)
+        self.wave_folder_enabled_var = tk.BooleanVar(value=False)
+        self.wave_folder_drive_var = tk.DoubleVar(value=1.0)
+        self.wave_folder_threshold_var = tk.DoubleVar(value=0.25)
+        self.wave_shaper_enabled_var = tk.BooleanVar(value=False)
+        self.wave_shaper_drive_var = tk.DoubleVar(value=1.0)
+        self.wave_shaper_drive_boost_var = tk.DoubleVar(value=1.0)
+        self.wave_shaper_output_level_var = tk.DoubleVar(value=0.1)
+        self.stereo_simulator_enabled_var = tk.BooleanVar(value=False)
+        self.stereo_simulator_algorithm_var = tk.StringVar(value="adt")
+        self.stereo_simulator_width_var = tk.DoubleVar(value=0.5)
+        self.stereo_simulator_delay_time_var = tk.DoubleVar(value=0.005)
+        self.stereo_simulator_mod_rate_var = tk.DoubleVar(value=0.5)
+        self.stereo_simulator_mod_depth_var = tk.DoubleVar(value=0.3)
+        self.bit_crusher_enabled_var = tk.BooleanVar(value=False)
+        self.bit_crusher_bit_depth_var = tk.IntVar(value=24)
+        self.bit_crusher_sample_rate_reduction_var = tk.IntVar(value=1)
+        self.bit_crusher_mix_var = tk.DoubleVar(value=1.0)
+        self.ds_knob_tone_var = tk.BooleanVar(value=True)
+        self.ds_knob_filter_resonance_var = tk.BooleanVar(value=False)
+        self.ds_knob_notch_frequency_var = tk.BooleanVar(value=False)
+        self.ds_knob_notch_q_var = tk.BooleanVar(value=False)
+        self.ds_knob_peak_frequency_var = tk.BooleanVar(value=False)
+        self.ds_knob_peak_q_var = tk.BooleanVar(value=False)
+        self.ds_knob_peak_gain_var = tk.BooleanVar(value=False)
+        self.ds_knob_gain_level_var = tk.BooleanVar(value=False)
+        self.ds_knob_reverb_wet_var = tk.BooleanVar(value=True)
+        self.ds_knob_reverb_room_var = tk.BooleanVar(value=False)
+        self.ds_knob_reverb_damping_var = tk.BooleanVar(value=False)
+        self.ds_knob_delay_wet_var = tk.BooleanVar(value=True)
+        self.ds_knob_delay_time_var = tk.BooleanVar(value=False)
+        self.ds_knob_delay_stereo_offset_var = tk.BooleanVar(value=False)
+        self.ds_knob_delay_feedback_var = tk.BooleanVar(value=False)
+        self.ds_knob_chorus_mix_var = tk.BooleanVar(value=True)
+        self.ds_knob_chorus_depth_var = tk.BooleanVar(value=False)
+        self.ds_knob_chorus_rate_var = tk.BooleanVar(value=False)
+        self.ds_knob_phaser_mix_var = tk.BooleanVar(value=False)
+        self.ds_knob_phaser_depth_var = tk.BooleanVar(value=False)
+        self.ds_knob_phaser_rate_var = tk.BooleanVar(value=False)
+        self.ds_knob_phaser_frequency_var = tk.BooleanVar(value=False)
+        self.ds_knob_phaser_feedback_var = tk.BooleanVar(value=False)
+        self.ds_knob_convolution_mix_var = tk.BooleanVar(value=False)
+        self.ds_knob_pitch_shift_var = tk.BooleanVar(value=False)
+        self.ds_knob_pitch_shift_mix_var = tk.BooleanVar(value=False)
+        self.ds_knob_wave_folder_drive_var = tk.BooleanVar(value=False)
+        self.ds_knob_wave_folder_threshold_var = tk.BooleanVar(value=False)
+        self.ds_knob_wave_shaper_drive_var = tk.BooleanVar(value=False)
+        self.ds_knob_wave_shaper_boost_var = tk.BooleanVar(value=False)
+        self.ds_knob_wave_shaper_output_var = tk.BooleanVar(value=False)
+        self.ds_knob_stereo_width_var = tk.BooleanVar(value=False)
+        self.ds_knob_bit_depth_var = tk.BooleanVar(value=False)
+        self.ds_knob_bit_crusher_mix_var = tk.BooleanVar(value=False)
+
+        ttk.Label(project, text="Name").grid(row=0, column=0, sticky="w")
+        ttk.Entry(project, textvariable=self.name_var, width=28).grid(row=0, column=1, sticky="ew", padx=4)
+        ttk.Label(project, text="Output").grid(row=0, column=2, sticky="w")
+        ttk.Entry(project, textvariable=self.output_var, width=46).grid(row=0, column=3, sticky="ew", padx=4)
+        ttk.Button(project, text="Browse", command=self._browse_output).grid(row=0, column=4)
+        ttk.Label(project, text="Record seconds").grid(row=1, column=0, sticky="w")
+        ttk.Spinbox(project, textvariable=self.record_seconds_var, from_=0.5, to=30, increment=0.5, width=8).grid(row=1, column=1, sticky="w", padx=4)
+        ttk.Label(project, text="Trim dB").grid(row=1, column=2, sticky="w")
+        ttk.Spinbox(project, textvariable=self.threshold_var, from_=-80, to=-10, increment=1, width=8).grid(row=1, column=3, sticky="w", padx=4)
+        ttk.Checkbutton(project, text="Normalise", variable=self.normalise_var).grid(row=1, column=4, sticky="w")
+        ttk.Button(project, text="Open project", command=self._open_project_dialog).grid(row=2, column=0, sticky="w", pady=(6, 0))
+        ttk.Button(project, text="Save project", command=self._save_project_dialog).grid(row=2, column=1, sticky="w", pady=(6, 0), padx=4)
+        project.columnconfigure(3, weight=1)
+
+        tabs = ttk.Notebook(outer)
+        tabs.pack(fill="both", expand=True, pady=8)
+        self.pitched_tab = ttk.Frame(tabs, padding=8)
+        self.pads_tab = ttk.Frame(tabs, padding=8)
+        self.decent_sampler_tab = ttk.Frame(tabs, padding=8)
+        tabs.add(self.pitched_tab, text="Pitched")
+        tabs.add(self.pads_tab, text="Unpitched / Pads")
+        tabs.add(self.decent_sampler_tab, text="Decent Sampler")
+        self._build_pitched_tab()
+        self._build_pads_tab()
+        self._build_decent_sampler_tab()
+        self._bind_output_parameter_traces()
+
+        bottom = ttk.Frame(outer)
+        bottom.pack(fill="both")
+        ttk.Button(bottom, text="Open output folder", command=self._open_output_folder).pack(side="left", padx=6)
+        self.status_var = tk.StringVar(value="Ready")
+        ttk.Label(bottom, textvariable=self.status_var).pack(side="left", padx=12)
+        self.log = tk.Text(outer, height=9, wrap="word")
+        self.log.pack(fill="both", expand=False, pady=(8, 0))
+
+    def _build_pitched_tab(self) -> None:
+        controls = ttk.Frame(self.pitched_tab)
+        controls.pack(fill="x")
+        ttk.Button(controls, text="Record lowest note", command=lambda: self._detect_note("low")).pack(side="left")
+        self.low_var = tk.StringVar(value="not set")
+        ttk.Label(controls, textvariable=self.low_var, width=10).pack(side="left", padx=3)
+        self.low_entry_var = tk.StringVar()
+        ttk.Entry(controls, textvariable=self.low_entry_var, width=7).pack(side="left")
+        ttk.Button(controls, text="Set", command=lambda: self._set_note_from_entry("low")).pack(side="left", padx=(2, 8))
+        ttk.Button(controls, text="Record highest note", command=lambda: self._detect_note("high")).pack(side="left")
+        self.high_var = tk.StringVar(value="not set")
+        ttk.Label(controls, textvariable=self.high_var, width=10).pack(side="left", padx=3)
+        self.high_entry_var = tk.StringVar()
+        ttk.Entry(controls, textvariable=self.high_entry_var, width=7).pack(side="left")
+        ttk.Button(controls, text="Set", command=lambda: self._set_note_from_entry("high")).pack(side="left", padx=(2, 8))
+        ttk.Label(controls, text="Step").pack(side="left", padx=(4, 2))
+        self.step_var = tk.IntVar(value=1)
+        ttk.Spinbox(controls, textvariable=self.step_var, from_=1, to=12, width=4).pack(side="left")
+        ttk.Button(controls, text="Build note list", command=self._build_note_list).pack(side="left", padx=8)
+
+        self.note_tree = ttk.Treeview(self.pitched_tab, columns=("note", "maps", "file"), show="headings", height=14)
+        self.note_tree.heading("note", text="Recorded note")
+        self.note_tree.heading("maps", text="Maps to keys")
+        self.note_tree.heading("file", text="Sample file")
+        self.note_tree.column("note", width=120, stretch=False)
+        self.note_tree.column("maps", width=230, stretch=False)
+        self.note_tree.column("file", width=420)
+        self.note_tree.pack(fill="both", expand=True, pady=8)
+        buttons = ttk.Frame(self.pitched_tab)
+        buttons.pack(fill="x")
+        ttk.Button(buttons, text="Play selected reference", command=self._play_selected_reference).pack(side="left")
+        ttk.Button(buttons, text="Record selected sample", command=self._record_selected_note).pack(side="left", padx=6)
+        ttk.Button(buttons, text="Record all missing", command=self._record_all_missing).pack(side="left")
+
+    def _build_pads_tab(self) -> None:
+        controls = ttk.Frame(self.pads_tab)
+        controls.pack(fill="x")
+        ttk.Label(controls, text="Pad label").pack(side="left")
+        self.pad_label_var = tk.StringVar()
+        ttk.Entry(controls, textvariable=self.pad_label_var, width=28).pack(side="left", padx=4)
+        ttk.Label(controls, text="Start note").pack(side="left", padx=(12, 2))
+        self.pad_start_var = tk.StringVar(value=midi_to_name(DEFAULT_PAD_START_NOTE))
+        ttk.Entry(controls, textvariable=self.pad_start_var, width=8).pack(side="left")
+        ttk.Button(controls, text="Record pad", command=self._record_pad).pack(side="left", padx=8)
+
+        self.pad_tree = ttk.Treeview(self.pads_tab, columns=("note", "label", "file"), show="headings", height=14)
+        self.pad_tree.heading("note", text="Maps to pad")
+        self.pad_tree.heading("label", text="Label")
+        self.pad_tree.heading("file", text="Sample file")
+        self.pad_tree.column("note", width=90, stretch=False)
+        self.pad_tree.column("label", width=160, stretch=False)
+        self.pad_tree.column("file", width=520)
+        self.pad_tree.pack(fill="both", expand=True, pady=8)
+
+    def _build_decent_sampler_tab(self) -> None:
+        export = ttk.LabelFrame(self.decent_sampler_tab, text="Decent Sampler output")
+        export.pack(fill="x")
+        ttk.Checkbutton(export, text="Loop samples", variable=self.loop_enabled_var, command=self._on_output_parameter_changed).grid(row=0, column=0, sticky="w", padx=6, pady=6)
+        ttk.Label(export, text="Root offset").grid(row=0, column=1, sticky="w", padx=(18, 4), pady=6)
+        ttk.Spinbox(export, textvariable=self.root_note_offset_var, from_=-36, to=36, increment=12, width=6, command=self._on_output_parameter_changed).grid(row=0, column=2, sticky="w", pady=6)
+        ttk.Button(export, text="Generate / update .dspreset", command=self._generate_preset).grid(row=0, column=3, sticky="w", padx=(18, 6), pady=6)
+        ttk.Button(export, text="Open output folder", command=self._open_output_folder).grid(row=0, column=4, sticky="w", padx=6, pady=6)
+
+        loop = ttk.LabelFrame(self.decent_sampler_tab, text="Loop points")
+        loop.pack(fill="x", pady=(10, 0))
+        ttk.Label(loop, text="start sample").pack(side="left", padx=(6, 2), pady=6)
+        ttk.Entry(loop, textvariable=self.loop_start_var, width=10).pack(side="left", padx=(0, 10), pady=6)
+        ttk.Label(loop, text="end sample").pack(side="left", padx=(0, 2), pady=6)
+        ttk.Entry(loop, textvariable=self.loop_end_var, width=10).pack(side="left", padx=(0, 10), pady=6)
+        ttk.Label(loop, text="crossfade").pack(side="left", padx=(0, 2), pady=6)
+        ttk.Spinbox(loop, textvariable=self.loop_crossfade_var, from_=0, to=60000, increment=10, width=8).pack(side="left", padx=(0, 10), pady=6)
+        ttk.OptionMenu(loop, self.loop_crossfade_mode_var, self.loop_crossfade_mode_var.get(), "equal_power", "linear").pack(side="left", padx=(0, 10), pady=6)
+        ttk.Button(loop, text="Use first WAV marker", command=self._import_first_wav_loop_marker).pack(side="left", padx=(0, 6), pady=6)
+
+        envelope = ttk.LabelFrame(self.decent_sampler_tab, text="Amp envelope")
+        envelope.pack(fill="x", pady=(10, 0))
+        ttk.Checkbutton(envelope, text="Enable ADSR", variable=self.amp_env_enabled_var, command=self._on_output_parameter_changed).pack(side="left", padx=6, pady=6)
+        ttk.Label(envelope, text="attack").pack(side="left", padx=(6, 2), pady=6)
+        ttk.Spinbox(envelope, textvariable=self.amp_attack_var, from_=0, to=10, increment=0.01, width=7).pack(side="left", padx=(0, 6), pady=6)
+        ttk.Label(envelope, text="decay").pack(side="left", padx=(0, 2), pady=6)
+        ttk.Spinbox(envelope, textvariable=self.amp_decay_var, from_=0, to=25, increment=0.01, width=7).pack(side="left", padx=(0, 6), pady=6)
+        ttk.Label(envelope, text="sustain").pack(side="left", padx=(0, 2), pady=6)
+        ttk.Spinbox(envelope, textvariable=self.amp_sustain_var, from_=0, to=1, increment=0.05, width=6).pack(side="left", padx=(0, 6), pady=6)
+        ttk.Label(envelope, text="release").pack(side="left", padx=(0, 2), pady=6)
+        ttk.Spinbox(envelope, textvariable=self.amp_release_var, from_=0, to=25, increment=0.05, width=7).pack(side="left", padx=(0, 6), pady=6)
+        ttk.Checkbutton(envelope, text="K", variable=self.ds_knob_amp_env_var, command=self._on_output_parameter_changed).pack(side="left", padx=(4, 6), pady=6)
+        ttk.Button(envelope, text="defaults", command=lambda: self._set_effect_defaults("amp_env")).pack(side="left", padx=(0, 6), pady=6)
+
+        effects = ttk.LabelFrame(self.decent_sampler_tab, text="Decent Sampler effects")
+        effects.pack(fill="x", pady=(10, 0))
+        ttk.Label(effects, text="Effect").grid(row=0, column=0, sticky="w", padx=6, pady=(3, 2))
+        ttk.Label(effects, text="Parameters  (K = knob included in DS display)").grid(row=0, column=1, sticky="w", padx=6, pady=(3, 2))
+        ttk.Label(effects, text="Defaults").grid(row=0, column=2, sticky="w", padx=6, pady=(3, 2))
+
+        def params_frame(row: int) -> ttk.Frame:
+            frame = ttk.Frame(effects)
+            frame.grid(row=row, column=1, sticky="ew", padx=6, pady=2)
+            return frame
+
+        def title_check(row: int, text: str, variable: tk.BooleanVar) -> None:
+            ttk.Checkbutton(effects, text=text, variable=variable, command=self._on_output_parameter_changed).grid(row=row, column=0, sticky="w", padx=6, pady=2)
+
+        def title_label(row: int, text: str) -> None:
+            ttk.Label(effects, text=text).grid(row=row, column=0, sticky="w", padx=6, pady=2)
+
+        def defaults_button(row: int, group: str) -> None:
+            ttk.Button(effects, text="defaults", command=lambda: self._set_effect_defaults(group)).grid(row=row, column=2, sticky="w", padx=6, pady=2)
+
+        def param_label(parent: ttk.Frame, text: str) -> None:
+            ttk.Label(parent, text=text).pack(side="left", padx=(0, 2))
+
+        def spin_param(parent: ttk.Frame, text: str, variable, from_: float, to: float, increment: float, width: int = 6, k_var: tk.BooleanVar | None = None) -> None:
+            param_label(parent, text)
+            ttk.Spinbox(parent, textvariable=variable, from_=from_, to=to, increment=increment, width=width).pack(side="left", padx=(0, 3))
+            if k_var is not None:
+                ttk.Checkbutton(parent, text="K", variable=k_var, command=self._on_output_parameter_changed).pack(side="left", padx=(0, 10))
+            else:
+                ttk.Label(parent, text="").pack(side="left", padx=(0, 10))
+
+        row = 1
+        title_check(row, "Filter", self.lowpass_enabled_var)
+        frame = params_frame(row)
+        ttk.OptionMenu(frame, self.filter_type_var, self.filter_type_var.get(), "lowpass", "lowpass_1pl", "lowpass_4pl", "bandpass", "highpass").pack(side="left", padx=(0, 10))
+        spin_param(frame, "freq", self.lowpass_frequency_var, 60, 22000, 100, width=8, k_var=self.ds_knob_tone_var)
+        spin_param(frame, "res", self.filter_resonance_var, 0.001, 5.0, 0.1, k_var=self.ds_knob_filter_resonance_var)
+        defaults_button(row, "filter")
+
+        row += 1
+        title_check(row, "Notch", self.notch_enabled_var)
+        frame = params_frame(row)
+        spin_param(frame, "freq", self.notch_frequency_var, 60, 22000, 100, width=8, k_var=self.ds_knob_notch_frequency_var)
+        spin_param(frame, "Q", self.notch_q_var, 0.01, 18.0, 0.1, k_var=self.ds_knob_notch_q_var)
+        defaults_button(row, "eq")
+
+        row += 1
+        title_check(row, "Peak", self.peak_enabled_var)
+        frame = params_frame(row)
+        spin_param(frame, "freq", self.peak_frequency_var, 60, 22000, 100, width=8, k_var=self.ds_knob_peak_frequency_var)
+        spin_param(frame, "Q", self.peak_q_var, 0.01, 18.0, 0.1, k_var=self.ds_knob_peak_q_var)
+        spin_param(frame, "gain", self.peak_gain_var, 0.0, 2.0, 0.1, k_var=self.ds_knob_peak_gain_var)
+        defaults_button(row, "eq")
+
+        row += 1
+        title_check(row, "Gain", self.gain_enabled_var)
+        frame = params_frame(row)
+        spin_param(frame, "dB", self.gain_level_var, -99, 24, 1, k_var=self.ds_knob_gain_level_var)
+        defaults_button(row, "gain")
+
+        row += 1
+        title_check(row, "Reverb", self.reverb_enabled_var)
+        frame = params_frame(row)
+        spin_param(frame, "wet", self.reverb_wet_level_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_reverb_wet_var)
+        spin_param(frame, "room", self.reverb_room_size_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_reverb_room_var)
+        spin_param(frame, "damping", self.reverb_damping_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_reverb_damping_var)
+        defaults_button(row, "reverb")
+
+        row += 1
+        title_check(row, "Delay", self.delay_enabled_var)
+        frame = params_frame(row)
+        spin_param(frame, "time", self.delay_time_var, 0.0, 20.0, 0.05, k_var=self.ds_knob_delay_time_var)
+        spin_param(frame, "offset", self.delay_stereo_offset_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_delay_stereo_offset_var)
+        spin_param(frame, "feedback", self.delay_feedback_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_delay_feedback_var)
+        spin_param(frame, "wet", self.delay_wet_level_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_delay_wet_var)
+        defaults_button(row, "delay")
+
+        row += 1
+        title_check(row, "Chorus", self.chorus_enabled_var)
+        frame = params_frame(row)
+        spin_param(frame, "mix", self.chorus_mix_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_chorus_mix_var)
+        spin_param(frame, "depth", self.chorus_mod_depth_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_chorus_depth_var)
+        spin_param(frame, "rate", self.chorus_mod_rate_var, 0.0, 10.0, 0.05, k_var=self.ds_knob_chorus_rate_var)
+        defaults_button(row, "chorus")
+
+        row += 1
+        title_check(row, "Phaser", self.phaser_enabled_var)
+        frame = params_frame(row)
+        spin_param(frame, "mix", self.phaser_mix_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_phaser_mix_var)
+        spin_param(frame, "depth", self.phaser_mod_depth_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_phaser_depth_var)
+        spin_param(frame, "rate", self.phaser_mod_rate_var, 0.0, 10.0, 0.05, k_var=self.ds_knob_phaser_rate_var)
+        spin_param(frame, "freq", self.phaser_center_frequency_var, 0.0, 22000, 50, width=8, k_var=self.ds_knob_phaser_frequency_var)
+        spin_param(frame, "feedback", self.phaser_feedback_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_phaser_feedback_var)
+        defaults_button(row, "modulation")
+
+        row += 1
+        title_check(row, "Pitch shift", self.pitch_shift_enabled_var)
+        frame = params_frame(row)
+        spin_param(frame, "semitones", self.pitch_shift_var, -24, 24, 1, k_var=self.ds_knob_pitch_shift_var)
+        spin_param(frame, "mix", self.pitch_shift_mix_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_pitch_shift_mix_var)
+        defaults_button(row, "modulation")
+
+        row += 1
+        title_check(row, "Convolution / IR", self.convolution_enabled_var)
+        frame = params_frame(row)
+        ttk.Entry(frame, textvariable=self.reverb_ir_var, width=30).pack(side="left", padx=(0, 10))
+        spin_param(frame, "mix", self.reverb_mix_var, 0.0, 1.0, 0.05, k_var=self.ds_knob_convolution_mix_var)
+        defaults_button(row, "convolution")
+
+        row += 1
+        title_check(row, "Wave folder", self.wave_folder_enabled_var)
+        frame = params_frame(row)
+        spin_param(frame, "drive", self.wave_folder_drive_var, 1, 100, 1, k_var=self.ds_knob_wave_folder_drive_var)
+        spin_param(frame, "threshold", self.wave_folder_threshold_var, 0, 10, 0.1, k_var=self.ds_knob_wave_folder_threshold_var)
+        defaults_button(row, "wave_folder")
+
+        row += 1
+        title_check(row, "Wave shaper", self.wave_shaper_enabled_var)
+        frame = params_frame(row)
+        spin_param(frame, "drive", self.wave_shaper_drive_var, 1, 1000, 1, k_var=self.ds_knob_wave_shaper_drive_var)
+        spin_param(frame, "boost", self.wave_shaper_drive_boost_var, 0, 1, 0.05, k_var=self.ds_knob_wave_shaper_boost_var)
+        spin_param(frame, "out", self.wave_shaper_output_level_var, 0, 1, 0.05, k_var=self.ds_knob_wave_shaper_output_var)
+        defaults_button(row, "wave_shaper")
+
+        row += 1
+        title_check(row, "Stereo simulator", self.stereo_simulator_enabled_var)
+        frame = params_frame(row)
+        ttk.OptionMenu(frame, self.stereo_simulator_algorithm_var, self.stereo_simulator_algorithm_var.get(), "adt", "lauridsen", "schroeder").pack(side="left", padx=(0, 10))
+        spin_param(frame, "width", self.stereo_simulator_width_var, 0, 1, 0.05, k_var=self.ds_knob_stereo_width_var)
+        defaults_button(row, "stereo_simulator")
+
+        row += 1
+        title_check(row, "Bit crusher", self.bit_crusher_enabled_var)
+        frame = params_frame(row)
+        spin_param(frame, "bits", self.bit_crusher_bit_depth_var, 1, 24, 1, k_var=self.ds_knob_bit_depth_var)
+        spin_param(frame, "rate div", self.bit_crusher_sample_rate_reduction_var, 1, 32, 1)
+        spin_param(frame, "mix", self.bit_crusher_mix_var, 0, 1, 0.05, k_var=self.ds_knob_bit_crusher_mix_var)
+        defaults_button(row, "bit_crusher")
+
+        effects.columnconfigure(1, weight=1)
+
+        mapping = ttk.LabelFrame(self.decent_sampler_tab, text="Effective exported sample mapping")
+        mapping.pack(fill="both", expand=True, pady=(10, 0))
+        self.export_tree = ttk.Treeview(mapping, columns=("source", "keys", "root", "mode"), show="headings", height=10)
+        self.export_tree.heading("source", text="Source WAV")
+        self.export_tree.heading("keys", text="Plays on keys")
+        self.export_tree.heading("root", text="Exported root")
+        self.export_tree.heading("mode", text="Mode")
+        self.export_tree.column("source", width=280)
+        self.export_tree.column("keys", width=230)
+        self.export_tree.column("root", width=160)
+        self.export_tree.column("mode", width=80, stretch=False)
+        self.export_tree.pack(fill="both", expand=True, padx=6, pady=6)
+
+        notes = ttk.LabelFrame(self.decent_sampler_tab, text="Notes")
+        notes.pack(fill="x", pady=(10, 0))
+        ttk.Label(
+            notes,
+            text=(
+                "This tab is for Decent Sampler generation settings. "
+                "Manual loop start/end, loop crossfade, ADSR envelope, effects, and visible DS knobs live here."
+            ),
+            wraplength=820,
+            justify="left",
+        ).pack(anchor="w", padx=6, pady=6)
+
+    def _bind_output_parameter_traces(self) -> None:
+        output_vars = [
+            self.loop_enabled_var,
+            self.loop_start_var,
+            self.loop_end_var,
+            self.loop_crossfade_var,
+            self.loop_crossfade_mode_var,
+            self.amp_env_enabled_var,
+            self.amp_attack_var,
+            self.amp_decay_var,
+            self.amp_sustain_var,
+            self.amp_release_var,
+            self.ds_knob_amp_env_var,
+            self.root_note_offset_var,
+            self.delay_enabled_var,
+            self.delay_time_var,
+            self.delay_stereo_offset_var,
+            self.delay_feedback_var,
+            self.delay_wet_level_var,
+            self.lowpass_enabled_var,
+            self.filter_type_var,
+            self.lowpass_frequency_var,
+            self.filter_resonance_var,
+            self.notch_enabled_var,
+            self.notch_frequency_var,
+            self.notch_q_var,
+            self.peak_enabled_var,
+            self.peak_frequency_var,
+            self.peak_q_var,
+            self.peak_gain_var,
+            self.gain_enabled_var,
+            self.gain_level_var,
+            self.reverb_enabled_var,
+            self.reverb_room_size_var,
+            self.reverb_damping_var,
+            self.reverb_wet_level_var,
+            self.chorus_enabled_var,
+            self.chorus_mix_var,
+            self.chorus_mod_depth_var,
+            self.chorus_mod_rate_var,
+            self.phaser_enabled_var,
+            self.phaser_mix_var,
+            self.phaser_mod_depth_var,
+            self.phaser_mod_rate_var,
+            self.phaser_center_frequency_var,
+            self.phaser_feedback_var,
+            self.convolution_enabled_var,
+            self.reverb_ir_var,
+            self.reverb_mix_var,
+            self.pitch_shift_enabled_var,
+            self.pitch_shift_var,
+            self.pitch_shift_mix_var,
+            self.wave_folder_enabled_var,
+            self.wave_folder_drive_var,
+            self.wave_folder_threshold_var,
+            self.wave_shaper_enabled_var,
+            self.wave_shaper_drive_var,
+            self.wave_shaper_drive_boost_var,
+            self.wave_shaper_output_level_var,
+            self.stereo_simulator_enabled_var,
+            self.stereo_simulator_algorithm_var,
+            self.stereo_simulator_width_var,
+            self.stereo_simulator_delay_time_var,
+            self.stereo_simulator_mod_rate_var,
+            self.stereo_simulator_mod_depth_var,
+            self.bit_crusher_enabled_var,
+            self.bit_crusher_bit_depth_var,
+            self.bit_crusher_sample_rate_reduction_var,
+            self.bit_crusher_mix_var,
+            self.ds_knob_tone_var,
+            self.ds_knob_filter_resonance_var,
+            self.ds_knob_notch_frequency_var,
+            self.ds_knob_notch_q_var,
+            self.ds_knob_peak_frequency_var,
+            self.ds_knob_peak_q_var,
+            self.ds_knob_peak_gain_var,
+            self.ds_knob_gain_level_var,
+            self.ds_knob_reverb_wet_var,
+            self.ds_knob_reverb_room_var,
+            self.ds_knob_reverb_damping_var,
+            self.ds_knob_delay_wet_var,
+            self.ds_knob_delay_time_var,
+            self.ds_knob_delay_stereo_offset_var,
+            self.ds_knob_delay_feedback_var,
+            self.ds_knob_chorus_mix_var,
+            self.ds_knob_chorus_depth_var,
+            self.ds_knob_chorus_rate_var,
+            self.ds_knob_phaser_mix_var,
+            self.ds_knob_phaser_depth_var,
+            self.ds_knob_phaser_rate_var,
+            self.ds_knob_phaser_frequency_var,
+            self.ds_knob_phaser_feedback_var,
+            self.ds_knob_convolution_mix_var,
+            self.ds_knob_pitch_shift_var,
+            self.ds_knob_pitch_shift_mix_var,
+            self.ds_knob_wave_folder_drive_var,
+            self.ds_knob_wave_folder_threshold_var,
+            self.ds_knob_wave_shaper_drive_var,
+            self.ds_knob_wave_shaper_boost_var,
+            self.ds_knob_wave_shaper_output_var,
+            self.ds_knob_stereo_width_var,
+            self.ds_knob_bit_depth_var,
+            self.ds_knob_bit_crusher_mix_var,
+        ]
+        for var in output_vars:
+            var.trace_add("write", lambda *_args: self._schedule_output_parameter_changed())
+
+    def _schedule_output_parameter_changed(self) -> None:
+        if self._output_update_after_id is not None:
+            self.after_cancel(self._output_update_after_id)
+        self._output_update_after_id = self.after(600, self._on_output_parameter_changed)
+
+    def _set_effect_defaults(self, effect_group: str) -> None:
+        if effect_group == "filter":
+            self.filter_type_var.set("lowpass_4pl")
+            self.lowpass_frequency_var.set(22000.0)
+            self.filter_resonance_var.set(0.7)
+        elif effect_group == "eq":
+            self.notch_frequency_var.set(10000.0)
+            self.notch_q_var.set(0.7)
+            self.peak_frequency_var.set(10000.0)
+            self.peak_q_var.set(0.7)
+            self.peak_gain_var.set(1.0)
+        elif effect_group == "gain":
+            self.gain_level_var.set(0.0)
+        elif effect_group == "reverb":
+            self.reverb_room_size_var.set(0.7)
+            self.reverb_damping_var.set(0.3)
+            self.reverb_wet_level_var.set(0.5)
+        elif effect_group == "delay":
+            self.delay_time_var.set(0.7)
+            self.delay_stereo_offset_var.set(0.0)
+            self.delay_feedback_var.set(0.2)
+            self.delay_wet_level_var.set(0.5)
+        elif effect_group == "chorus":
+            self.chorus_mix_var.set(0.5)
+            self.chorus_mod_depth_var.set(0.2)
+            self.chorus_mod_rate_var.set(0.2)
+        elif effect_group == "modulation":
+            self.phaser_mix_var.set(0.5)
+            self.phaser_mod_depth_var.set(0.2)
+            self.phaser_mod_rate_var.set(0.2)
+            self.phaser_center_frequency_var.set(400.0)
+            self.phaser_feedback_var.set(0.7)
+            self.pitch_shift_var.set(0.0)
+            self.pitch_shift_mix_var.set(0.5)
+        elif effect_group == "convolution":
+            self.reverb_mix_var.set(0.5)
+        elif effect_group == "wave_folder":
+            self.wave_folder_drive_var.set(1.0)
+            self.wave_folder_threshold_var.set(0.25)
+        elif effect_group == "wave_shaper":
+            self.wave_shaper_drive_var.set(1.0)
+            self.wave_shaper_drive_boost_var.set(1.0)
+            self.wave_shaper_output_level_var.set(0.1)
+        elif effect_group == "stereo_simulator":
+            self.stereo_simulator_algorithm_var.set("adt")
+            self.stereo_simulator_width_var.set(0.5)
+            self.stereo_simulator_delay_time_var.set(0.005)
+            self.stereo_simulator_mod_rate_var.set(0.5)
+            self.stereo_simulator_mod_depth_var.set(0.3)
+        elif effect_group == "bit_crusher":
+            self.bit_crusher_bit_depth_var.set(24)
+            self.bit_crusher_sample_rate_reduction_var.set(1)
+            self.bit_crusher_mix_var.set(1.0)
+        elif effect_group == "amp_env":
+            self.amp_attack_var.set(0.01)
+            self.amp_decay_var.set(0.0)
+            self.amp_sustain_var.set(1.0)
+            self.amp_release_var.set(0.8)
+
+    def _audio(self) -> AudioEngine:
+        return AudioEngine(
+            sample_rate=self.sample_rate_var.get(),
+            trim_threshold_db=self.threshold_var.get(),
+            pre_roll_ms=40.0,
+            post_roll_ms=180.0,
+            normalise=self.normalise_var.get(),
+        )
+
+    def _instrument_dir(self) -> Path:
+        return Path(self.output_var.get()).expanduser() / slugify(self.name_var.get())
+
+    def _sample_path(self, label: str) -> Path:
+        return self._instrument_dir() / "Samples" / f"{slugify(self.name_var.get())}_{label}.wav"
+
+    def _browse_output(self) -> None:
+        chosen = filedialog.askdirectory(initialdir=self.output_var.get() or str(Path.cwd()))
+        if chosen:
+            self.output_var.set(chosen)
+
+    def _default_project_path(self) -> Path:
+        return self._instrument_dir() / f"{slugify(self.name_var.get())}.samplesmith.json"
+
+    def _project_data(self) -> dict[str, object]:
+        return {
+            "version": 1,
+            "name": self.name_var.get(),
+            "output": self.output_var.get(),
+            "sample_rate": self.sample_rate_var.get(),
+            "record_seconds": self.record_seconds_var.get(),
+            "trim_threshold_db": self.threshold_var.get(),
+            "normalise": self.normalise_var.get(),
+            "loop_enabled": self.loop_enabled_var.get(),
+            "loop_start": self.loop_start_var.get(),
+            "loop_end": self.loop_end_var.get(),
+            "loop_crossfade": self.loop_crossfade_var.get(),
+            "loop_crossfade_mode": self.loop_crossfade_mode_var.get(),
+            "amp_env_enabled": self.amp_env_enabled_var.get(),
+            "amp_attack": self.amp_attack_var.get(),
+            "amp_decay": self.amp_decay_var.get(),
+            "amp_sustain": self.amp_sustain_var.get(),
+            "amp_release": self.amp_release_var.get(),
+            "ds_knob_amp_env": self.ds_knob_amp_env_var.get(),
+            "root_note_offset": self.root_note_offset_var.get(),
+            "delay_enabled": self.delay_enabled_var.get(),
+            "delay_time": self.delay_time_var.get(),
+            "delay_stereo_offset": self.delay_stereo_offset_var.get(),
+            "delay_feedback": self.delay_feedback_var.get(),
+            "delay_wet_level": self.delay_wet_level_var.get(),
+            "lowpass_enabled": self.lowpass_enabled_var.get(),
+            "filter_type": self.filter_type_var.get(),
+            "lowpass_frequency": self.lowpass_frequency_var.get(),
+            "filter_resonance": self.filter_resonance_var.get(),
+            "notch_enabled": self.notch_enabled_var.get(),
+            "notch_frequency": self.notch_frequency_var.get(),
+            "notch_q": self.notch_q_var.get(),
+            "peak_enabled": self.peak_enabled_var.get(),
+            "peak_frequency": self.peak_frequency_var.get(),
+            "peak_q": self.peak_q_var.get(),
+            "peak_gain": self.peak_gain_var.get(),
+            "gain_enabled": self.gain_enabled_var.get(),
+            "gain_level": self.gain_level_var.get(),
+            "reverb_enabled": self.reverb_enabled_var.get(),
+            "reverb_room_size": self.reverb_room_size_var.get(),
+            "reverb_damping": self.reverb_damping_var.get(),
+            "reverb_wet_level": self.reverb_wet_level_var.get(),
+            "chorus_enabled": self.chorus_enabled_var.get(),
+            "chorus_mix": self.chorus_mix_var.get(),
+            "chorus_mod_depth": self.chorus_mod_depth_var.get(),
+            "chorus_mod_rate": self.chorus_mod_rate_var.get(),
+            "phaser_enabled": self.phaser_enabled_var.get(),
+            "phaser_mix": self.phaser_mix_var.get(),
+            "phaser_mod_depth": self.phaser_mod_depth_var.get(),
+            "phaser_mod_rate": self.phaser_mod_rate_var.get(),
+            "phaser_center_frequency": self.phaser_center_frequency_var.get(),
+            "phaser_feedback": self.phaser_feedback_var.get(),
+            "convolution_enabled": self.convolution_enabled_var.get(),
+            "reverb_ir_file": self.reverb_ir_var.get(),
+            "reverb_mix": self.reverb_mix_var.get(),
+            "pitch_shift_enabled": self.pitch_shift_enabled_var.get(),
+            "pitch_shift": self.pitch_shift_var.get(),
+            "pitch_shift_mix": self.pitch_shift_mix_var.get(),
+            "wave_folder_enabled": self.wave_folder_enabled_var.get(),
+            "wave_folder_drive": self.wave_folder_drive_var.get(),
+            "wave_folder_threshold": self.wave_folder_threshold_var.get(),
+            "wave_shaper_enabled": self.wave_shaper_enabled_var.get(),
+            "wave_shaper_drive": self.wave_shaper_drive_var.get(),
+            "wave_shaper_drive_boost": self.wave_shaper_drive_boost_var.get(),
+            "wave_shaper_output_level": self.wave_shaper_output_level_var.get(),
+            "stereo_simulator_enabled": self.stereo_simulator_enabled_var.get(),
+            "stereo_simulator_algorithm": self.stereo_simulator_algorithm_var.get(),
+            "stereo_simulator_width": self.stereo_simulator_width_var.get(),
+            "stereo_simulator_delay_time": self.stereo_simulator_delay_time_var.get(),
+            "stereo_simulator_mod_rate": self.stereo_simulator_mod_rate_var.get(),
+            "stereo_simulator_mod_depth": self.stereo_simulator_mod_depth_var.get(),
+            "bit_crusher_enabled": self.bit_crusher_enabled_var.get(),
+            "bit_crusher_bit_depth": self.bit_crusher_bit_depth_var.get(),
+            "bit_crusher_sample_rate_reduction": self.bit_crusher_sample_rate_reduction_var.get(),
+            "bit_crusher_mix": self.bit_crusher_mix_var.get(),
+            "ds_knob_tone": self.ds_knob_tone_var.get(),
+            "ds_knob_filter_resonance": self.ds_knob_filter_resonance_var.get(),
+            "ds_knob_notch_frequency": self.ds_knob_notch_frequency_var.get(),
+            "ds_knob_notch_q": self.ds_knob_notch_q_var.get(),
+            "ds_knob_peak_frequency": self.ds_knob_peak_frequency_var.get(),
+            "ds_knob_peak_q": self.ds_knob_peak_q_var.get(),
+            "ds_knob_peak_gain": self.ds_knob_peak_gain_var.get(),
+            "ds_knob_gain_level": self.ds_knob_gain_level_var.get(),
+            "ds_knob_reverb_wet": self.ds_knob_reverb_wet_var.get(),
+            "ds_knob_reverb_room": self.ds_knob_reverb_room_var.get(),
+            "ds_knob_reverb_damping": self.ds_knob_reverb_damping_var.get(),
+            "ds_knob_delay_wet": self.ds_knob_delay_wet_var.get(),
+            "ds_knob_delay_time": self.ds_knob_delay_time_var.get(),
+            "ds_knob_delay_stereo_offset": self.ds_knob_delay_stereo_offset_var.get(),
+            "ds_knob_delay_feedback": self.ds_knob_delay_feedback_var.get(),
+            "ds_knob_chorus_mix": self.ds_knob_chorus_mix_var.get(),
+            "ds_knob_chorus_depth": self.ds_knob_chorus_depth_var.get(),
+            "ds_knob_chorus_rate": self.ds_knob_chorus_rate_var.get(),
+            "ds_knob_phaser_mix": self.ds_knob_phaser_mix_var.get(),
+            "ds_knob_phaser_depth": self.ds_knob_phaser_depth_var.get(),
+            "ds_knob_phaser_rate": self.ds_knob_phaser_rate_var.get(),
+            "ds_knob_phaser_frequency": self.ds_knob_phaser_frequency_var.get(),
+            "ds_knob_phaser_feedback": self.ds_knob_phaser_feedback_var.get(),
+            "ds_knob_convolution_mix": self.ds_knob_convolution_mix_var.get(),
+            "ds_knob_pitch_shift": self.ds_knob_pitch_shift_var.get(),
+            "ds_knob_pitch_shift_mix": self.ds_knob_pitch_shift_mix_var.get(),
+            "ds_knob_wave_folder_drive": self.ds_knob_wave_folder_drive_var.get(),
+            "ds_knob_wave_folder_threshold": self.ds_knob_wave_folder_threshold_var.get(),
+            "ds_knob_wave_shaper_drive": self.ds_knob_wave_shaper_drive_var.get(),
+            "ds_knob_wave_shaper_boost": self.ds_knob_wave_shaper_boost_var.get(),
+            "ds_knob_wave_shaper_output": self.ds_knob_wave_shaper_output_var.get(),
+            "ds_knob_stereo_width": self.ds_knob_stereo_width_var.get(),
+            "ds_knob_bit_depth": self.ds_knob_bit_depth_var.get(),
+            "ds_knob_bit_crusher_mix": self.ds_knob_bit_crusher_mix_var.get(),
+            "low_note": self.low_note,
+            "high_note": self.high_note,
+            "step": self.step_var.get(),
+            "pad_start": self.pad_start_var.get(),
+            "next_pad_note": self.pad_note,
+            "samples": [sample.to_dict() for sample in self.samples],
+        }
+
+    def _save_project(self, path: Path | None = None) -> Path:
+        target = path or self.project_path or self._default_project_path()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(self._project_data(), indent=2), encoding="utf-8")
+        self.project_path = target
+        return target
+
+    def _save_project_dialog(self) -> None:
+        initial = self.project_path or self._default_project_path()
+        chosen = filedialog.asksaveasfilename(
+            initialdir=str(initial.parent),
+            initialfile=initial.name,
+            defaultextension=".samplesmith.json",
+            filetypes=[("SampleSmith project", "*.samplesmith.json"), ("JSON", "*.json"), ("All files", "*.*")],
+        )
+        if not chosen:
+            return
+        saved = self._save_project(Path(chosen))
+        self._log(f"Saved project: {saved}")
+
+    def _auto_save_project(self) -> None:
+        try:
+            saved = self._save_project()
+            self._log(f"Saved project: {saved.name}")
+        except Exception as exc:
+            self._log(f"Could not save project: {exc}")
+
+    def _open_project_dialog(self) -> None:
+        chosen = filedialog.askopenfilename(
+            initialdir=str(self._instrument_dir()),
+            filetypes=[("SampleSmith project", "*.samplesmith.json"), ("JSON", "*.json"), ("All files", "*.*")],
+        )
+        if chosen:
+            self._open_project(Path(chosen))
+
+    def _open_project(self, path: Path) -> None:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        self.project_path = path
+        self.name_var.set(str(data.get("name", "CarlSampler")))
+        self.output_var.set(str(data.get("output", str(Path.cwd() / "captured-samplers"))))
+        self.sample_rate_var.set(int(data.get("sample_rate", DEFAULT_SAMPLE_RATE)))
+        self.record_seconds_var.set(float(data.get("record_seconds", 4.0)))
+        self.threshold_var.set(float(data.get("trim_threshold_db", -45.0)))
+        self.normalise_var.set(bool(data.get("normalise", True)))
+        self.loop_enabled_var.set(bool(data.get("loop_enabled", False)))
+        self.loop_start_var.set(str(data.get("loop_start", "") or ""))
+        self.loop_end_var.set(str(data.get("loop_end", "") or ""))
+        self.loop_crossfade_var.set(float(data.get("loop_crossfade", 0.0)))
+        self.loop_crossfade_mode_var.set(str(data.get("loop_crossfade_mode", "equal_power")))
+        self.amp_env_enabled_var.set(bool(data.get("amp_env_enabled", False)))
+        self.amp_attack_var.set(float(data.get("amp_attack", 0.01)))
+        self.amp_decay_var.set(float(data.get("amp_decay", 0.0)))
+        self.amp_sustain_var.set(float(data.get("amp_sustain", 1.0)))
+        self.amp_release_var.set(float(data.get("amp_release", 0.8)))
+        self.ds_knob_amp_env_var.set(bool(data.get("ds_knob_amp_env", True)))
+        self.root_note_offset_var.set(int(data.get("root_note_offset", -12)))
+        self.delay_enabled_var.set(bool(data.get("delay_enabled", False)))
+        self.delay_time_var.set(float(data.get("delay_time", 0.7)))
+        self.delay_stereo_offset_var.set(float(data.get("delay_stereo_offset", 0.0)))
+        self.delay_feedback_var.set(float(data.get("delay_feedback", 0.2)))
+        self.delay_wet_level_var.set(float(data.get("delay_wet_level", 0.5)))
+        self.lowpass_enabled_var.set(bool(data.get("lowpass_enabled", False)))
+        self.filter_type_var.set(str(data.get("filter_type", "lowpass_4pl")))
+        self.lowpass_frequency_var.set(float(data.get("lowpass_frequency", 22000.0)))
+        self.filter_resonance_var.set(float(data.get("filter_resonance", 0.7)))
+        self.notch_enabled_var.set(bool(data.get("notch_enabled", False)))
+        self.notch_frequency_var.set(float(data.get("notch_frequency", 10000.0)))
+        self.notch_q_var.set(float(data.get("notch_q", 0.7)))
+        self.peak_enabled_var.set(bool(data.get("peak_enabled", False)))
+        self.peak_frequency_var.set(float(data.get("peak_frequency", 10000.0)))
+        self.peak_q_var.set(float(data.get("peak_q", 0.7)))
+        self.peak_gain_var.set(float(data.get("peak_gain", 1.0)))
+        self.gain_enabled_var.set(bool(data.get("gain_enabled", False)))
+        self.gain_level_var.set(float(data.get("gain_level", 0.0)))
+        self.reverb_enabled_var.set(bool(data.get("reverb_enabled", False)))
+        self.reverb_room_size_var.set(float(data.get("reverb_room_size", 0.7)))
+        self.reverb_damping_var.set(float(data.get("reverb_damping", 0.3)))
+        self.reverb_wet_level_var.set(float(data.get("reverb_wet_level", 0.5)))
+        self.chorus_enabled_var.set(bool(data.get("chorus_enabled", False)))
+        self.chorus_mix_var.set(float(data.get("chorus_mix", 0.5)))
+        self.chorus_mod_depth_var.set(float(data.get("chorus_mod_depth", 0.2)))
+        self.chorus_mod_rate_var.set(float(data.get("chorus_mod_rate", 0.2)))
+        self.phaser_enabled_var.set(bool(data.get("phaser_enabled", False)))
+        self.phaser_mix_var.set(float(data.get("phaser_mix", 0.5)))
+        self.phaser_mod_depth_var.set(float(data.get("phaser_mod_depth", 0.2)))
+        self.phaser_mod_rate_var.set(float(data.get("phaser_mod_rate", 0.2)))
+        self.phaser_center_frequency_var.set(float(data.get("phaser_center_frequency", 400.0)))
+        self.phaser_feedback_var.set(float(data.get("phaser_feedback", 0.7)))
+        self.convolution_enabled_var.set(bool(data.get("convolution_enabled", False)))
+        self.reverb_ir_var.set(str(data.get("reverb_ir_file", "")))
+        self.reverb_mix_var.set(float(data.get("reverb_mix", 0.0)))
+        self.pitch_shift_enabled_var.set(bool(data.get("pitch_shift_enabled", False)))
+        self.pitch_shift_var.set(float(data.get("pitch_shift", 0.0)))
+        self.pitch_shift_mix_var.set(float(data.get("pitch_shift_mix", 0.5)))
+        self.wave_folder_enabled_var.set(bool(data.get("wave_folder_enabled", False)))
+        self.wave_folder_drive_var.set(float(data.get("wave_folder_drive", 1.0)))
+        self.wave_folder_threshold_var.set(float(data.get("wave_folder_threshold", 0.25)))
+        self.wave_shaper_enabled_var.set(bool(data.get("wave_shaper_enabled", False)))
+        self.wave_shaper_drive_var.set(float(data.get("wave_shaper_drive", 1.0)))
+        self.wave_shaper_drive_boost_var.set(float(data.get("wave_shaper_drive_boost", 1.0)))
+        self.wave_shaper_output_level_var.set(float(data.get("wave_shaper_output_level", 0.1)))
+        self.stereo_simulator_enabled_var.set(bool(data.get("stereo_simulator_enabled", False)))
+        self.stereo_simulator_algorithm_var.set(str(data.get("stereo_simulator_algorithm", "adt")))
+        self.stereo_simulator_width_var.set(float(data.get("stereo_simulator_width", 0.5)))
+        self.stereo_simulator_delay_time_var.set(float(data.get("stereo_simulator_delay_time", 0.005)))
+        self.stereo_simulator_mod_rate_var.set(float(data.get("stereo_simulator_mod_rate", 0.5)))
+        self.stereo_simulator_mod_depth_var.set(float(data.get("stereo_simulator_mod_depth", 0.3)))
+        self.bit_crusher_enabled_var.set(bool(data.get("bit_crusher_enabled", False)))
+        self.bit_crusher_bit_depth_var.set(int(data.get("bit_crusher_bit_depth", 24)))
+        self.bit_crusher_sample_rate_reduction_var.set(int(data.get("bit_crusher_sample_rate_reduction", 1)))
+        self.bit_crusher_mix_var.set(float(data.get("bit_crusher_mix", 1.0)))
+        self.ds_knob_tone_var.set(bool(data.get("ds_knob_tone", True)))
+        self.ds_knob_filter_resonance_var.set(bool(data.get("ds_knob_filter_resonance", False)))
+        self.ds_knob_notch_frequency_var.set(bool(data.get("ds_knob_notch_frequency", False)))
+        self.ds_knob_notch_q_var.set(bool(data.get("ds_knob_notch_q", False)))
+        self.ds_knob_peak_frequency_var.set(bool(data.get("ds_knob_peak_frequency", False)))
+        self.ds_knob_peak_q_var.set(bool(data.get("ds_knob_peak_q", False)))
+        self.ds_knob_peak_gain_var.set(bool(data.get("ds_knob_peak_gain", False)))
+        self.ds_knob_gain_level_var.set(bool(data.get("ds_knob_gain_level", False)))
+        self.ds_knob_reverb_wet_var.set(bool(data.get("ds_knob_reverb_wet", True)))
+        self.ds_knob_reverb_room_var.set(bool(data.get("ds_knob_reverb_room", False)))
+        self.ds_knob_reverb_damping_var.set(bool(data.get("ds_knob_reverb_damping", False)))
+        self.ds_knob_delay_wet_var.set(bool(data.get("ds_knob_delay_wet", True)))
+        self.ds_knob_delay_time_var.set(bool(data.get("ds_knob_delay_time", False)))
+        self.ds_knob_delay_stereo_offset_var.set(bool(data.get("ds_knob_delay_stereo_offset", False)))
+        self.ds_knob_delay_feedback_var.set(bool(data.get("ds_knob_delay_feedback", False)))
+        self.ds_knob_chorus_mix_var.set(bool(data.get("ds_knob_chorus_mix", True)))
+        self.ds_knob_chorus_depth_var.set(bool(data.get("ds_knob_chorus_depth", False)))
+        self.ds_knob_chorus_rate_var.set(bool(data.get("ds_knob_chorus_rate", False)))
+        self.ds_knob_phaser_mix_var.set(bool(data.get("ds_knob_phaser_mix", False)))
+        self.ds_knob_phaser_depth_var.set(bool(data.get("ds_knob_phaser_depth", False)))
+        self.ds_knob_phaser_rate_var.set(bool(data.get("ds_knob_phaser_rate", False)))
+        self.ds_knob_phaser_frequency_var.set(bool(data.get("ds_knob_phaser_frequency", False)))
+        self.ds_knob_phaser_feedback_var.set(bool(data.get("ds_knob_phaser_feedback", False)))
+        self.ds_knob_convolution_mix_var.set(bool(data.get("ds_knob_convolution_mix", False)))
+        self.ds_knob_pitch_shift_var.set(bool(data.get("ds_knob_pitch_shift", False)))
+        self.ds_knob_pitch_shift_mix_var.set(bool(data.get("ds_knob_pitch_shift_mix", False)))
+        self.ds_knob_wave_folder_drive_var.set(bool(data.get("ds_knob_wave_folder_drive", False)))
+        self.ds_knob_wave_folder_threshold_var.set(bool(data.get("ds_knob_wave_folder_threshold", False)))
+        self.ds_knob_wave_shaper_drive_var.set(bool(data.get("ds_knob_wave_shaper_drive", False)))
+        self.ds_knob_wave_shaper_boost_var.set(bool(data.get("ds_knob_wave_shaper_boost", False)))
+        self.ds_knob_wave_shaper_output_var.set(bool(data.get("ds_knob_wave_shaper_output", False)))
+        self.ds_knob_stereo_width_var.set(bool(data.get("ds_knob_stereo_width", False)))
+        self.ds_knob_bit_depth_var.set(bool(data.get("ds_knob_bit_depth", False)))
+        self.ds_knob_bit_crusher_mix_var.set(bool(data.get("ds_knob_bit_crusher_mix", False)))
+        self.low_note = int(data["low_note"]) if data.get("low_note") is not None else None
+        self.high_note = int(data["high_note"]) if data.get("high_note") is not None else None
+        self.low_var.set(midi_to_name(self.low_note) if self.low_note is not None else "not set")
+        self.high_var.set(midi_to_name(self.high_note) if self.high_note is not None else "not set")
+        self.low_entry_var.set(midi_to_name(self.low_note) if self.low_note is not None else "")
+        self.high_entry_var.set(midi_to_name(self.high_note) if self.high_note is not None else "")
+        self.step_var.set(int(data.get("step", 1)))
+        self.pad_start_var.set(str(data.get("pad_start", midi_to_name(DEFAULT_PAD_START_NOTE))))
+        self.pad_note = int(data.get("next_pad_note", DEFAULT_PAD_START_NOTE))
+        self.samples = [SampleInfo.from_dict(item) for item in data.get("samples", [])]
+        self._rebuild_trees_from_project()
+        self._log(f"Opened project: {path}")
+
+    def _rebuild_trees_from_project(self) -> None:
+        for item in self.note_tree.get_children():
+            self.note_tree.delete(item)
+        for item in self.pad_tree.get_children():
+            self.pad_tree.delete(item)
+        self.note_rows.clear()
+        if self.low_note is not None and self.high_note is not None:
+            notes = note_range(self.low_note, self.high_note, self.step_var.get())
+            ranges = dict((root, (lo, hi)) for root, lo, hi in build_key_ranges(notes))
+            for note in notes:
+                lo, hi = ranges[note]
+                recorded = next((sample for sample in self.samples if sample.mode == "pitched" and sample.root_note == note), None)
+                self.note_rows[note] = str(recorded.path) if recorded else ""
+                self.note_tree.insert("", "end", iid=str(note), values=(midi_to_name(note), mapping_text(lo, hi), recorded.path.name if recorded else ""))
+            self._refresh_pitched_mappings()
+        for sample in self.samples:
+            if sample.mode == "pad":
+                self.pad_tree.insert("", "end", values=(midi_to_name(sample.root_note), sample.label, sample.path.name))
+        self._refresh_export_mapping()
+
+    def _log(self, text: str) -> None:
+        self.log.insert("end", text + "\n")
+        self.log.see("end")
+        self.status_var.set(text)
+
+    def _run_worker(self, label: str, func) -> None:
+        self.status_var.set(label)
+        threading.Thread(target=lambda: self._worker_wrapper(func), daemon=True).start()
+
+    def _worker_wrapper(self, func) -> None:
+        try:
+            result = func()
+            self.queue.put(("ok", result))
+        except Exception as exc:  # pragma: no cover - GUI error path
+            self.queue.put(("error", exc))
+
+    def _drain_queue(self) -> None:
+        try:
+            while True:
+                kind, payload = self.queue.get_nowait()
+                if kind == "error":
+                    self._log(f"Error: {payload}")
+                    messagebox.showerror("SampleSmith", str(payload))
+                elif callable(payload):
+                    payload()
+                elif payload:
+                    self._log(str(payload))
+        except queue.Empty:
+            pass
+        self.after(100, self._drain_queue)
+
+    def _parse_note_entry(self, text: str) -> int:
+        text = text.strip()
+        if not text:
+            raise ValueError("Enter a note, e.g. C2, F#3, or a MIDI number.")
+        try:
+            midi_note = int(text)
+        except ValueError:
+            midi_note = name_to_midi(text)
+        if not 0 <= midi_note <= 127:
+            raise ValueError("MIDI note must be between 0 and 127.")
+        return midi_note
+
+    def _set_note_from_entry(self, which: str) -> None:
+        try:
+            midi_note = self._parse_note_entry(self.low_entry_var.get() if which == "low" else self.high_entry_var.get())
+        except ValueError as exc:
+            messagebox.showerror("SampleSmith", str(exc))
+            return
+        note_name = midi_to_name(midi_note)
+        if which == "low":
+            self.low_note = midi_note
+            self.low_var.set(note_name)
+            self.low_entry_var.set(note_name)
+        else:
+            self.high_note = midi_note
+            self.high_var.set(note_name)
+            self.high_entry_var.set(note_name)
+        self._log(f"Set {which} note to {note_name}")
+
+    def _detect_note(self, which: str) -> None:
+        if not messagebox.askokcancel("SampleSmith", f"After pressing OK, sing/play your {which} usable note for 2.5 seconds."):
+            return
+
+        def work():
+            audio = self._audio()
+            raw = audio.record(2.5)
+            freq = audio.detect_pitch(raw)
+            if freq is None:
+                raise RuntimeError("Could not detect a clear pitch. Try again, or use pad mode for noisy sounds.")
+            midi = freq_to_midi(freq)
+            name = midi_to_name(midi)
+
+            def apply():
+                if messagebox.askyesno("Confirm pitch", f"I think that was {name} ({freq:.1f} Hz). Accept?"):
+                    if which == "low":
+                        self.low_note = midi
+                        self.low_var.set(name)
+                        self.low_entry_var.set(name)
+                    else:
+                        self.high_note = midi
+                        self.high_var.set(name)
+                        self.high_entry_var.set(name)
+                    self._log(f"Set {which} note to {name}")
+            return apply
+
+        self._run_worker("Detecting pitch...", work)
+
+    def _build_note_list(self) -> None:
+        if self.low_note is None or self.high_note is None:
+            messagebox.showwarning("SampleSmith", "Record lowest and highest notes first.")
+            return
+        for item in self.note_tree.get_children():
+            self.note_tree.delete(item)
+        self.note_rows.clear()
+        notes = note_range(self.low_note, self.high_note, self.step_var.get())
+        ranges = dict((root, (lo, hi)) for root, lo, hi in build_key_ranges(notes))
+        for note in notes:
+            iid = str(note)
+            lo, hi = ranges[note]
+            self.note_rows[note] = ""
+            self.note_tree.insert("", "end", iid=iid, values=(midi_to_name(note), mapping_text(lo, hi), ""))
+        self._log("Built note list with full-keyboard sampler mapping")
+
+    def _selected_note(self) -> int | None:
+        selected = self.note_tree.selection()
+        if not selected:
+            messagebox.showwarning("SampleSmith", "Select a note first.")
+            return None
+        return int(selected[0])
+
+    def _play_selected_reference(self) -> None:
+        note = self._selected_note()
+        if note is None:
+            return
+        self._run_worker(f"Playing {midi_to_name(note)}", lambda: (self._audio().play_tone(note), f"Played {midi_to_name(note)}")[1])
+
+    def _record_selected_note(self) -> None:
+        note = self._selected_note()
+        if note is not None:
+            self._record_note(note)
+
+    def _record_all_missing(self) -> None:
+        notes = [int(item) for item in self.note_tree.get_children() if not self.note_rows.get(int(item))]
+        if not notes:
+            self._log("No missing pitched samples")
+            return
+        self._record_note_sequence(notes)
+
+    def _record_note_sequence(self, notes: list[int]) -> None:
+        if not notes:
+            return
+        note = notes.pop(0)
+        self._record_note(note, after=lambda: self._record_note_sequence(notes))
+
+    def _record_note(self, note: int, after=None) -> None:
+        note_name = midi_to_name(note)
+        if not messagebox.askokcancel("SampleSmith", f"Ready to record {note_name}? I will play the reference first."):
+            return
+        path = self._sample_path(note_name.replace("#", "sharp"))
+
+        def work():
+            audio = self._audio()
+            audio.play_tone(note)
+            time.sleep(0.3)
+            raw = audio.record(self.record_seconds_var.get())
+            trimmed = audio.trim(raw)
+            audio.write_wav(path, trimmed)
+            ranges = dict((root, (lo, hi)) for root, lo, hi in build_key_ranges([int(i) for i in self.note_tree.get_children()]))
+            lo, hi = ranges[note]
+            info = SampleInfo(path=path, root_note=note, lo_note=lo, hi_note=hi, label=note_name, mode="pitched")
+
+            def apply():
+                self._upsert_sample(info)
+                self.note_rows[note] = str(path)
+                self._refresh_pitched_mappings()
+                mapped = next(sample for sample in self.samples if sample.mode == "pitched" and sample.root_note == note)
+                preset = self._write_preset()
+                self._log(f"Recorded {note_name}: {path.name} — maps {mapping_text(mapped.lo_note, mapped.hi_note)}")
+                self._log(f"Updated Decent Sampler instrument: {preset.name}")
+                self._auto_save_project()
+                if after:
+                    after()
+            return apply
+
+        self._run_worker(f"Recording {note_name}...", work)
+
+    def _record_pad(self) -> None:
+        label = self.pad_label_var.get().strip()
+        if not label:
+            messagebox.showwarning("SampleSmith", "Enter a pad label first.")
+            return
+        if not self.pad_tree.get_children():
+            try:
+                self.pad_note = int(self.pad_start_var.get())
+            except ValueError:
+                self.pad_note = name_to_midi(self.pad_start_var.get())
+        midi_note = self.pad_note
+        self.pad_note += 1
+        path = self._sample_path(f"pad_{midi_to_name(midi_note).replace('#', 'sharp')}_{slugify(label)}")
+        if not messagebox.askokcancel("SampleSmith", f"Ready to record pad {midi_to_name(midi_note)}: {label}?"):
+            self.pad_note -= 1
+            return
+
+        def work():
+            audio = self._audio()
+            raw = audio.record(self.record_seconds_var.get())
+            trimmed = audio.trim(raw)
+            audio.write_wav(path, trimmed)
+            info = SampleInfo(path=path, root_note=midi_note, lo_note=midi_note, hi_note=midi_note, label=label, mode="pad")
+
+            def apply():
+                self._upsert_sample(info)
+                self.pad_tree.insert("", "end", values=(midi_to_name(midi_note), label, path.name))
+                self.pad_label_var.set("")
+                preset = self._write_preset()
+                self._log(f"Recorded pad {midi_to_name(midi_note)}: {path.name}")
+                self._log(f"Updated Decent Sampler instrument: {preset.name}")
+                self._auto_save_project()
+            return apply
+
+        self._run_worker(f"Recording pad {label}...", work)
+
+    def _upsert_sample(self, info: SampleInfo) -> None:
+        self.samples = [sample for sample in self.samples if not (sample.mode == info.mode and sample.root_note == info.root_note)]
+        self.samples.append(info)
+        self.samples.sort(key=lambda sample: (sample.mode, sample.root_note, sample.path.name))
+
+    def _spread_recorded_pitched_samples(self) -> list[SampleInfo]:
+        pitched = [sample for sample in self.samples if sample.mode == "pitched"]
+        pads = [sample for sample in self.samples if sample.mode == "pad"]
+        ranges = dict((root, (lo, hi)) for root, lo, hi in build_overlapping_key_ranges([sample.root_note for sample in pitched]))
+        spread = [
+            SampleInfo(path=sample.path, root_note=sample.root_note, lo_note=ranges[sample.root_note][0], hi_note=ranges[sample.root_note][1], label=sample.label, mode=sample.mode)
+            for sample in pitched
+        ]
+        return sorted(spread + pads, key=lambda sample: (sample.mode, sample.root_note, sample.path.name))
+
+    def _refresh_pitched_mappings(self) -> None:
+        for sample in self._spread_recorded_pitched_samples():
+            if sample.mode != "pitched" or str(sample.root_note) not in self.note_tree.get_children():
+                continue
+            file_name = sample.path.name if self.note_rows.get(sample.root_note) else ""
+            self.note_tree.item(str(sample.root_note), values=(midi_to_name(sample.root_note), mapping_text(sample.lo_note, sample.hi_note), file_name))
+
+    def _refresh_export_mapping(self) -> None:
+        for item in self.export_tree.get_children():
+            self.export_tree.delete(item)
+        for sample in self._spread_recorded_pitched_samples():
+            self.export_tree.insert(
+                "",
+                "end",
+                values=(
+                    sample.path.name,
+                    mapping_text(sample.lo_note, sample.hi_note),
+                    exported_root_text(sample.root_note, self.root_note_offset_var.get()),
+                    sample.mode,
+                ),
+            )
+
+    def _import_first_wav_loop_marker(self) -> None:
+        for sample in self.samples:
+            marker = read_wav_smpl_loop_points(sample.path)
+            if marker is None:
+                continue
+            start, end = marker
+            self.loop_start_var.set(str(start))
+            self.loop_end_var.set(str(end))
+            self.loop_enabled_var.set(True)
+            self._log(f"Imported WAV loop marker from {sample.path.name}: {start}–{end}")
+            self._on_output_parameter_changed()
+            return
+        messagebox.showinfo(
+            "SampleSmith",
+            "No embedded WAV smpl loop markers found in the recorded samples. Enter loop start/end manually.",
+        )
+
+    def _write_preset(self) -> Path:
+        samples = self._spread_recorded_pitched_samples()
+        preset = generate_dspreset(
+            self.name_var.get(),
+            self._instrument_dir(),
+            samples,
+            loop_enabled=self.loop_enabled_var.get(),
+            loop_start=optional_non_negative_int(self.loop_start_var.get()),
+            loop_end=optional_non_negative_int(self.loop_end_var.get()),
+            loop_crossfade=self.loop_crossfade_var.get(),
+            loop_crossfade_mode=self.loop_crossfade_mode_var.get(),
+            amp_env_enabled=self.amp_env_enabled_var.get(),
+            amp_attack=self.amp_attack_var.get(),
+            amp_decay=self.amp_decay_var.get(),
+            amp_sustain=self.amp_sustain_var.get(),
+            amp_release=self.amp_release_var.get(),
+            ds_knob_amp_env=self.ds_knob_amp_env_var.get(),
+            root_note_offset=self.root_note_offset_var.get(),
+            delay_enabled=self.delay_enabled_var.get(),
+            delay_time=self.delay_time_var.get(),
+            delay_stereo_offset=self.delay_stereo_offset_var.get(),
+            delay_feedback=self.delay_feedback_var.get(),
+            delay_wet_level=self.delay_wet_level_var.get(),
+            lowpass_enabled=self.lowpass_enabled_var.get(),
+            filter_type=self.filter_type_var.get(),
+            lowpass_frequency=self.lowpass_frequency_var.get(),
+            filter_resonance=self.filter_resonance_var.get(),
+            notch_enabled=self.notch_enabled_var.get(),
+            notch_frequency=self.notch_frequency_var.get(),
+            notch_q=self.notch_q_var.get(),
+            peak_enabled=self.peak_enabled_var.get(),
+            peak_frequency=self.peak_frequency_var.get(),
+            peak_q=self.peak_q_var.get(),
+            peak_gain=self.peak_gain_var.get(),
+            gain_enabled=self.gain_enabled_var.get(),
+            gain_level=self.gain_level_var.get(),
+            reverb_enabled=self.reverb_enabled_var.get(),
+            reverb_room_size=self.reverb_room_size_var.get(),
+            reverb_damping=self.reverb_damping_var.get(),
+            reverb_wet_level=self.reverb_wet_level_var.get(),
+            chorus_enabled=self.chorus_enabled_var.get(),
+            chorus_mix=self.chorus_mix_var.get(),
+            chorus_mod_depth=self.chorus_mod_depth_var.get(),
+            chorus_mod_rate=self.chorus_mod_rate_var.get(),
+            phaser_enabled=self.phaser_enabled_var.get(),
+            phaser_mix=self.phaser_mix_var.get(),
+            phaser_mod_depth=self.phaser_mod_depth_var.get(),
+            phaser_mod_rate=self.phaser_mod_rate_var.get(),
+            phaser_center_frequency=self.phaser_center_frequency_var.get(),
+            phaser_feedback=self.phaser_feedback_var.get(),
+            convolution_enabled=self.convolution_enabled_var.get(),
+            reverb_ir_file=self.reverb_ir_var.get(),
+            reverb_mix=self.reverb_mix_var.get(),
+            pitch_shift_enabled=self.pitch_shift_enabled_var.get(),
+            pitch_shift=self.pitch_shift_var.get(),
+            pitch_shift_mix=self.pitch_shift_mix_var.get(),
+            wave_folder_enabled=self.wave_folder_enabled_var.get(),
+            wave_folder_drive=self.wave_folder_drive_var.get(),
+            wave_folder_threshold=self.wave_folder_threshold_var.get(),
+            wave_shaper_enabled=self.wave_shaper_enabled_var.get(),
+            wave_shaper_drive=self.wave_shaper_drive_var.get(),
+            wave_shaper_drive_boost=self.wave_shaper_drive_boost_var.get(),
+            wave_shaper_output_level=self.wave_shaper_output_level_var.get(),
+            stereo_simulator_enabled=self.stereo_simulator_enabled_var.get(),
+            stereo_simulator_algorithm=self.stereo_simulator_algorithm_var.get(),
+            stereo_simulator_width=self.stereo_simulator_width_var.get(),
+            stereo_simulator_delay_time=self.stereo_simulator_delay_time_var.get(),
+            stereo_simulator_mod_rate=self.stereo_simulator_mod_rate_var.get(),
+            stereo_simulator_mod_depth=self.stereo_simulator_mod_depth_var.get(),
+            bit_crusher_enabled=self.bit_crusher_enabled_var.get(),
+            bit_crusher_bit_depth=self.bit_crusher_bit_depth_var.get(),
+            bit_crusher_sample_rate_reduction=self.bit_crusher_sample_rate_reduction_var.get(),
+            bit_crusher_mix=self.bit_crusher_mix_var.get(),
+            ds_knob_tone=self.ds_knob_tone_var.get(),
+            ds_knob_filter_resonance=self.ds_knob_filter_resonance_var.get(),
+            ds_knob_notch_frequency=self.ds_knob_notch_frequency_var.get(),
+            ds_knob_notch_q=self.ds_knob_notch_q_var.get(),
+            ds_knob_peak_frequency=self.ds_knob_peak_frequency_var.get(),
+            ds_knob_peak_q=self.ds_knob_peak_q_var.get(),
+            ds_knob_peak_gain=self.ds_knob_peak_gain_var.get(),
+            ds_knob_gain_level=self.ds_knob_gain_level_var.get(),
+            ds_knob_reverb_wet=self.ds_knob_reverb_wet_var.get(),
+            ds_knob_reverb_room=self.ds_knob_reverb_room_var.get(),
+            ds_knob_reverb_damping=self.ds_knob_reverb_damping_var.get(),
+            ds_knob_delay_wet=self.ds_knob_delay_wet_var.get(),
+            ds_knob_delay_time=self.ds_knob_delay_time_var.get(),
+            ds_knob_delay_stereo_offset=self.ds_knob_delay_stereo_offset_var.get(),
+            ds_knob_delay_feedback=self.ds_knob_delay_feedback_var.get(),
+            ds_knob_chorus_mix=self.ds_knob_chorus_mix_var.get(),
+            ds_knob_chorus_depth=self.ds_knob_chorus_depth_var.get(),
+            ds_knob_chorus_rate=self.ds_knob_chorus_rate_var.get(),
+            ds_knob_phaser_mix=self.ds_knob_phaser_mix_var.get(),
+            ds_knob_phaser_depth=self.ds_knob_phaser_depth_var.get(),
+            ds_knob_phaser_rate=self.ds_knob_phaser_rate_var.get(),
+            ds_knob_phaser_frequency=self.ds_knob_phaser_frequency_var.get(),
+            ds_knob_phaser_feedback=self.ds_knob_phaser_feedback_var.get(),
+            ds_knob_convolution_mix=self.ds_knob_convolution_mix_var.get(),
+            ds_knob_pitch_shift=self.ds_knob_pitch_shift_var.get(),
+            ds_knob_pitch_shift_mix=self.ds_knob_pitch_shift_mix_var.get(),
+            ds_knob_wave_folder_drive=self.ds_knob_wave_folder_drive_var.get(),
+            ds_knob_wave_folder_threshold=self.ds_knob_wave_folder_threshold_var.get(),
+            ds_knob_wave_shaper_drive=self.ds_knob_wave_shaper_drive_var.get(),
+            ds_knob_wave_shaper_boost=self.ds_knob_wave_shaper_boost_var.get(),
+            ds_knob_wave_shaper_output=self.ds_knob_wave_shaper_output_var.get(),
+            ds_knob_stereo_width=self.ds_knob_stereo_width_var.get(),
+            ds_knob_bit_depth=self.ds_knob_bit_depth_var.get(),
+            ds_knob_bit_crusher_mix=self.ds_knob_bit_crusher_mix_var.get(),
+        )
+        self._refresh_export_mapping()
+        return preset
+
+    def _on_output_parameter_changed(self) -> None:
+        self._output_update_after_id = None
+        if not self.samples:
+            self._auto_save_project()
+            return
+        preset = self._write_preset()
+        self._log(f"Updated Decent Sampler instrument: {preset.name}")
+        self._auto_save_project()
+
+    def _generate_preset(self) -> None:
+        if not self.samples:
+            messagebox.showwarning("SampleSmith", "No recorded samples yet.")
+            return
+        preset = self._write_preset()
+        self._log(f"Generated {preset}")
+        messagebox.showinfo("SampleSmith", f"Generated:\n{preset}")
+
+    def _open_output_folder(self) -> None:
+        folder = self._instrument_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        self._log(f"Output folder: {folder}")
+
+
+def main() -> None:
+    app = SampleSmithApp()
+    app.mainloop()
