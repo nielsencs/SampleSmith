@@ -516,9 +516,8 @@ def generate_dspreset(
         sample_loop_enabled = loop_enabled if sample.loop_enabled is None else sample.loop_enabled
         attrs = {
             "path": sample.path.relative_to(output_dir).as_posix(),
-            # Carl's DS/Reaper octave convention needs displayed C4 to export
-            # as rootNote 72. root_note_offset is ignored; keep this fixed and
-            # explicit rather than exposing a pitch-shift kludge.
+            # rootNote is a MIDI note number. root_note_offset is ignored for
+            # compatibility with older project/export callers that may pass it.
             "rootNote": str(decent_sampler_root_note(sample.root_note)),
             "loNote": str(sample.lo_note),
             "hiNote": str(sample.hi_note),

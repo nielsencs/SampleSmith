@@ -13,10 +13,6 @@ A4_MIDI = 69
 A4_HZ = 440.0
 DEFAULT_SAMPLE_RATE = 44100
 DEFAULT_PAD_START_NOTE = 36  # C2
-# In Carl's Decent Sampler/Reaper workflow, a note shown as C4 corresponds to
-# rootNote 72 in the .dspreset. Keep this as an explicit export convention,
-# not a user-facing pitch-shift knob.
-DECENT_SAMPLER_ROOT_NOTE_OFFSET = 12
 
 
 def slugify(value: str) -> str:
@@ -88,15 +84,15 @@ def mapping_text(lo_note: int, hi_note: int) -> str:
 
 
 def decent_sampler_root_note(root_note: int) -> int:
-    return clamp_midi_note(root_note + DECENT_SAMPLER_ROOT_NOTE_OFFSET)
+    return clamp_midi_note(root_note)
 
 
 def exported_root_text(root_note: int, root_note_offset: int = 0) -> str:
     # root_note_offset is kept only for compatibility with older call sites.
-    # SampleSmith uses one fixed DS export convention: displayed C4 exports as
-    # DS rootNote 72, which Decent Sampler/Reaper shows/plays as C4 here.
+    # Decent Sampler rootNote is a MIDI note number, so export the stored root
+    # literally and let host octave-label differences be diagnosed separately.
     exported = decent_sampler_root_note(root_note)
-    return f"MIDI {exported} (DS {midi_to_name(root_note)})"
+    return f"MIDI {exported} ({midi_to_name(exported)})"
 
 
 @dataclass
