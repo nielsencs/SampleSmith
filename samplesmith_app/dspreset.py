@@ -494,17 +494,17 @@ def generate_dspreset(
         for title, specs in knob_groups:
             add_knob_group(title, specs)
 
-    groups = ET.SubElement(root, "groups")
-    group_attrs = {"attack": f"{amp_attack:.3f}", "release": f"{amp_release:.3f}"}
+    groups_attrs = {"attack": f"{amp_attack:.3f}", "release": f"{amp_release:.3f}"}
     if amp_env_enabled:
-        group_attrs.update(
+        groups_attrs.update(
             {
                 "ampEnvEnabled": "true",
                 "decay": f"{amp_decay:.3f}",
                 "sustain": f"{amp_sustain:.3f}",
             }
         )
-    group = ET.SubElement(groups, "group", group_attrs)
+    groups = ET.SubElement(root, "groups", groups_attrs)
+    group = ET.SubElement(groups, "group")
     for sample in samples:
         sample_loop_start = sample.loop_start if sample.loop_start is not None else loop_start
         sample_loop_end = sample.loop_end if sample.loop_end is not None else loop_end
