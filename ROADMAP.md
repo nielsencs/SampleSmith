@@ -48,7 +48,7 @@ Wishlist:
 
 - draw loop start and loop end markers over the waveform
 - shade the loop region
-- show crossfade length visually near the loop boundary
+- improve the first-pass crossfade display so crossfade length is even clearer near the loop boundary
 - make invalid loop/crossfade settings obvious
 - show imported WAV loop markers separately from SampleSmith's edited loop points
 - show sample positions and time values while hovering/dragging

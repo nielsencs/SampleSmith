@@ -1700,6 +1700,7 @@ class LoopEditorDialog(tk.Toplevel):
         self.loop_end_var = tk.StringVar(value="" if sample.loop_end is None else str(sample.loop_end))
         self.loop_crossfade_var = tk.DoubleVar(value=0.0 if sample.loop_crossfade is None else sample.loop_crossfade)
         self.loop_crossfade_mode_var = tk.StringVar(value=sample.loop_crossfade_mode or "equal_power")
+        self.visual_status_var = tk.StringVar(value="Crossfade display shows the fade-out tail before loop end and fade-in head after loop start.")
         self.audition_status_var = tk.StringVar(value="Audition raw exposes the end→start join; Audition xfade uses the current crossfade setting.")
 
         outer = ttk.Frame(self, padding=10)
@@ -1709,6 +1710,7 @@ class LoopEditorDialog(tk.Toplevel):
 
         self.canvas = tk.Canvas(outer, width=self.canvas_width, height=self.canvas_height, bg="#101010", highlightthickness=1, highlightbackground="#666666")
         self.canvas.pack(fill="x")
+        ttk.Label(outer, textvariable=self.visual_status_var, foreground="#555555").pack(anchor="w", pady=(3, 0))
         self.canvas.bind("<Button-1>", self._start_drag)
         self.canvas.bind("<B1-Motion>", self._drag)
         self.canvas.bind("<ButtonRelease-1>", self._end_drag)
@@ -1749,7 +1751,7 @@ class LoopEditorDialog(tk.Toplevel):
         ttk.Button(buttons, text="Apply", command=self._apply).pack(side="right", padx=6)
         ttk.Label(outer, textvariable=self.audition_status_var, foreground="#555555").pack(anchor="w", pady=(6, 0))
 
-        for var in (self.loop_start_var, self.loop_end_var):
+        for var in (self.loop_start_var, self.loop_end_var, self.loop_crossfade_var, self.loop_crossfade_mode_var):
             var.trace_add("write", lambda *_args: self._draw())
         self._draw()
         self.wait_window(self)
@@ -1817,6 +1819,22 @@ class LoopEditorDialog(tk.Toplevel):
         x = max(0, min(self.zoom_width - 1, x))
         return int(round(left + (x / (self.zoom_width - 1)) * (right - left)))
 
+    def _requested_crossfade_frames(self) -> int:
+        try:
+            return max(0, int(float(self.loop_crossfade_var.get())))
+        except (tk.TclError, ValueError):
+            return 0
+
+    def _effective_crossfade_frames(self, start: int, end: int) -> int:
+        requested = self._requested_crossfade_frames()
+        if requested <= 0 or end <= start:
+            return 0
+        return max(0, min(requested, (end - start) // 2))
+
+    def _x_for_zoom_frame(self, frame: int, left: int, right: int) -> int:
+        span = max(1, right - left)
+        return int(round((frame - left) / span * (self.zoom_width - 1)))
+
     def _draw(self) -> None:
         if not hasattr(self, "canvas"):
             return
@@ -1831,21 +1849,69 @@ class LoopEditorDialog(tk.Toplevel):
         end_x = self._x_for_frame(end)
         if self.loop_enabled_var.get():
             self.canvas.create_rectangle(start_x, 0, end_x, self.canvas_height, fill="#24402c", stipple="gray25", outline="")
+            crossfade = self._effective_crossfade_frames(start, end)
+            requested_crossfade = self._requested_crossfade_frames()
+            if crossfade > 0:
+                fade_out_x = self._x_for_frame(end - crossfade)
+                fade_in_x = self._x_for_frame(start + crossfade)
+                self.canvas.create_rectangle(fade_out_x, 0, end_x, self.canvas_height, fill="#ffcc00", stipple="gray50", outline="#ffcc00")
+                self.canvas.create_rectangle(start_x, 0, fade_in_x, self.canvas_height, fill="#00c7be", stipple="gray50", outline="#00c7be")
+                self.canvas.create_text(
+                    max(6, min(self.canvas_width - 6, (fade_out_x + end_x) // 2)),
+                    32,
+                    text="xfade out",
+                    fill="#ffcc00",
+                )
+                self.canvas.create_text(
+                    max(6, min(self.canvas_width - 6, (start_x + fade_in_x) // 2)),
+                    self.canvas_height - 32,
+                    text="xfade in",
+                    fill="#00c7be",
+                )
+                status = f"Crossfade visualised: {crossfade:,} frames fade out before end + fade in after start ({self.loop_crossfade_mode_var.get()})."
+                if requested_crossfade != crossfade:
+                    status += f" Requested {requested_crossfade:,} frames was clamped to half the loop length."
+                self.visual_status_var.set(status)
+            elif requested_crossfade > 0:
+                self.visual_status_var.set("Crossfade is set, but the loop is too short to display an effective crossfade.")
+            else:
+                self.visual_status_var.set("Crossfade display shows the fade-out tail before loop end and fade-in head after loop start.")
+        else:
+            self.visual_status_var.set("Loop is disabled for this WAV; enable it to visualise the loop region and crossfade.")
         self.canvas.create_line(start_x, 0, start_x, self.canvas_height, fill="#30d158", width=3, tags=("start",))
         self.canvas.create_line(end_x, 0, end_x, self.canvas_height, fill="#ff453a", width=3, tags=("end",))
         self.canvas.create_text(start_x + 4, 12, text=f"start {start}", anchor="w", fill="#30d158")
         self.canvas.create_text(end_x - 4, self.canvas_height - 12, text=f"end {end}", anchor="e", fill="#ff453a")
         if hasattr(self, "start_zoom_canvas"):
-            self._draw_zoom(self.start_zoom_canvas, start, "#30d158", "start")
-            self._draw_zoom(self.end_zoom_canvas, end, "#ff453a", "end")
+            self._draw_zoom(self.start_zoom_canvas, start, "#30d158", "start", start, end)
+            self._draw_zoom(self.end_zoom_canvas, end, "#ff453a", "end", start, end)
 
-    def _draw_zoom(self, canvas: tk.Canvas, center_frame: int, color: str, label: str) -> None:
+    def _draw_zoom(self, canvas: tk.Canvas, center_frame: int, color: str, label: str, loop_start: int, loop_end: int) -> None:
         canvas.delete("all")
         mid = self.zoom_height // 2
         scale = (self.zoom_height // 2) - 12
         canvas.create_line(0, mid, self.zoom_width, mid, fill="#555555")
         left, right = self._zoom_window(center_frame)
         span = max(1, right - left)
+        if self.loop_enabled_var.get():
+            crossfade = self._effective_crossfade_frames(loop_start, loop_end)
+            regions = [
+                (loop_start, loop_end, "#24402c", "gray25"),
+            ]
+            if crossfade > 0:
+                regions.extend(
+                    [
+                        (loop_end - crossfade, loop_end, "#ffcc00", "gray50"),
+                        (loop_start, loop_start + crossfade, "#00c7be", "gray50"),
+                    ]
+                )
+            for region_start, region_end, fill, stipple in regions:
+                visible_start = max(left, region_start)
+                visible_end = min(right, region_end)
+                if visible_end > visible_start:
+                    x1 = self._x_for_zoom_frame(visible_start, left, right)
+                    x2 = self._x_for_zoom_frame(visible_end, left, right)
+                    canvas.create_rectangle(x1, 0, x2, self.zoom_height, fill=fill, stipple=stipple, outline="")
         for x in range(self.zoom_width):
             start = left + int((x / self.zoom_width) * span)
             end = left + int(((x + 1) / self.zoom_width) * span)
