@@ -1765,6 +1765,7 @@ class LoopEditorDialog(tk.Toplevel):
         self.loop_end_var = tk.StringVar(value="" if sample.loop_end is None else str(sample.loop_end))
         self.loop_crossfade_var = tk.DoubleVar(value=0.0 if sample.loop_crossfade is None else sample.loop_crossfade)
         self.loop_crossfade_mode_var = tk.StringVar(value=sample.loop_crossfade_mode or "equal_power")
+        self.invert_wheel_zoom_var = tk.BooleanVar(value=False)
         self.visual_status_var = tk.StringVar(value="Crossfade display shows the fade-out tail before loop end and fade-in head after loop start.")
         self.audition_status_var = tk.StringVar(value="Audition raw exposes the end→start join; Audition xfade uses the current crossfade setting.")
 
@@ -1792,6 +1793,10 @@ class LoopEditorDialog(tk.Toplevel):
         self.end_zoom_canvas.pack(fill="x", padx=6, pady=6)
         self.start_zoom_canvas.bind("<Button-1>", lambda event: self._set_zoom_frame("start", event.x))
         self.end_zoom_canvas.bind("<Button-1>", lambda event: self._set_zoom_frame("end", event.x))
+        for zoom_canvas in (self.start_zoom_canvas, self.end_zoom_canvas):
+            zoom_canvas.bind("<MouseWheel>", self._on_closeup_mousewheel)
+            zoom_canvas.bind("<Button-4>", self._on_closeup_mousewheel)
+            zoom_canvas.bind("<Button-5>", self._on_closeup_mousewheel)
 
         zoom_controls = ttk.Frame(outer)
         zoom_controls.pack(fill="x", pady=(6, 0))
@@ -1801,6 +1806,7 @@ class LoopEditorDialog(tk.Toplevel):
         ttk.Button(zoom_controls, text="Reset", command=self._reset_closeup_zoom).pack(side="left", padx=(2, 8))
         self.zoom_status_var = tk.StringVar(value=self._zoom_status_text())
         ttk.Label(zoom_controls, textvariable=self.zoom_status_var, foreground="#555555").pack(side="left")
+        ttk.Checkbutton(zoom_controls, text="Invert wheel zoom", variable=self.invert_wheel_zoom_var).pack(side="left", padx=(10, 0))
 
         controls = ttk.Frame(outer)
         controls.pack(fill="x", pady=10)
@@ -1905,6 +1911,21 @@ class LoopEditorDialog(tk.Toplevel):
 
     def _reset_closeup_zoom(self) -> None:
         self._set_closeup_zoom(self.default_zoom_half_frames)
+
+    def _on_closeup_mousewheel(self, event) -> str:
+        if getattr(event, "num", None) == 4:
+            zoom_in = True
+        elif getattr(event, "num", None) == 5:
+            zoom_in = False
+        else:
+            zoom_in = getattr(event, "delta", 0) > 0
+        if self.invert_wheel_zoom_var.get():
+            zoom_in = not zoom_in
+        if zoom_in:
+            self._zoom_in_closeups()
+        else:
+            self._zoom_out_closeups()
+        return "break"
 
     def _zoom_frame_for_x(self, center_frame: int, x: int) -> int:
         left, right = self._zoom_window(center_frame)
