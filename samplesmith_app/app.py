@@ -273,13 +273,15 @@ class SampleSmithApp(tk.Tk):
         review.pack(side="right", fill="y", padx=(8, 0))
         self.selected_sample_title_var = tk.StringVar(value="Select a pitched note or pad")
         ttk.Label(review, textvariable=self.selected_sample_title_var, wraplength=260, justify="left", font=("TkDefaultFont", 10, "bold")).pack(fill="x", padx=8, pady=(8, 4))
+        action_row = ttk.Frame(review)
+        action_row.pack(fill="x", padx=8, pady=(0, 6))
         self.panel_action_buttons = []
         for text, command in (
-            ("Play selected reference", self._play_panel_reference),
-            ("Record selected sample", self._record_panel_sample),
+            ("Play selected reference", self._play_selected_reference),
+            ("Record selected sample", self._record_selected_note),
         ):
-            button = ttk.Button(review, text=text, command=command)
-            button.pack(fill="x", padx=8, pady=(0, 4))
+            button = ttk.Button(action_row, text=text, command=command)
+            button.pack(side="left", fill="x", expand=True, padx=(0, 4))
             self.panel_action_buttons.append(button)
         self.recording_review_status_var = tk.StringVar(value="No WAV loaded.")
         ttk.Label(review, textvariable=self.recording_review_status_var, wraplength=260, justify="left").pack(fill="x", padx=8, pady=(2, 6))
@@ -1450,7 +1452,7 @@ class SampleSmithApp(tk.Tk):
         values = self.pad_tree.item(selected[0], "values")
         title = str(values[1]) if len(values) > 1 else "Selected pad"
         self.selected_sample_title_var.set(title)
-        self._set_panel_action_controls_enabled(False, True)
+        self._set_panel_action_controls_enabled(False, False)
         sample = self._sample_for_pad_tree_item(selected[0])
         if sample is not None:
             self._load_existing_sample_for_review(sample, confirm_discard=False)
@@ -1467,41 +1469,6 @@ class SampleSmithApp(tk.Tk):
             return int(selected[0])
         except ValueError:
             return None
-
-    def _selected_panel_sample(self) -> SampleInfo | None:
-        note = self._selected_panel_pitched_note()
-        if note is not None:
-            return self._sample_for_pitched_note(note)
-        if self.selected_panel_kind == "pad":
-            selected_pad = self.pad_tree.selection()
-        else:
-            selected_pad = ()
-        if selected_pad:
-            return self._sample_for_pad_tree_item(selected_pad[0])
-        return None
-
-    def _play_panel_reference(self) -> None:
-        note = self._selected_panel_pitched_note()
-        if note is None:
-            return
-
-        def work():
-            self._audio().play_tone(note)
-            return f"Played {midi_to_name(note)}"
-
-        self._run_worker(f"Playing {midi_to_name(note)}", work)
-
-    def _record_panel_sample(self) -> None:
-        if self.pending_recording_review and self.pending_recording_review.get("on_record_take"):
-            self._record_review_take()
-            return
-        note = self._selected_panel_pitched_note()
-        if note is not None:
-            self._record_note(note)
-            return
-        sample = self._selected_panel_sample()
-        if sample is not None:
-            self._record_existing_sample_again(sample)
 
     def _record_all_missing(self) -> None:
         notes = [int(item) for item in self.note_tree.get_children() if not self.note_rows.get(int(item))]
