@@ -236,11 +236,11 @@ class SampleSmithApp(tk.Tk):
         self.note_tree.column("file", width=420)
         self.note_tree.tag_configure("generated", foreground="#666666")
         self.note_tree.pack(fill="both", expand=True, pady=8)
+        self.note_tree.bind("<<TreeviewSelect>>", self._on_pitched_selection_changed)
         buttons = ttk.Frame(self.pitched_tab)
         buttons.pack(fill="x")
         ttk.Button(buttons, text="Play selected reference", command=self._play_selected_reference).pack(side="left")
         ttk.Button(buttons, text="Record selected sample", command=self._record_selected_note).pack(side="left", padx=6)
-        ttk.Button(buttons, text="Review selected sample", command=self._review_selected_pitched_sample).pack(side="left", padx=(0, 6))
         ttk.Button(buttons, text="Record all missing", command=self._record_all_missing).pack(side="left")
         ttk.Button(buttons, text="Generate bridge WAVs", command=self._generate_bridge_wavs_now).pack(side="left", padx=6)
 
@@ -254,7 +254,6 @@ class SampleSmithApp(tk.Tk):
         self.pad_start_var = tk.StringVar(value=midi_to_name(DEFAULT_PAD_START_NOTE))
         ttk.Entry(controls, textvariable=self.pad_start_var, width=8).pack(side="left")
         ttk.Button(controls, text="Record pad", command=self._record_pad).pack(side="left", padx=8)
-        ttk.Button(controls, text="Review selected pad", command=self._review_selected_pad_sample).pack(side="left", padx=(0, 8))
 
         self.pad_tree = ttk.Treeview(self.pads_tab, columns=("note", "label", "file"), show="headings", height=14)
         self.pad_tree.heading("note", text="Maps to pad")
@@ -264,6 +263,7 @@ class SampleSmithApp(tk.Tk):
         self.pad_tree.column("label", width=160, stretch=False)
         self.pad_tree.column("file", width=520)
         self.pad_tree.pack(fill="both", expand=True, pady=8)
+        self.pad_tree.bind("<<TreeviewSelect>>", self._on_pad_selection_changed)
 
     def _build_recording_review_panel(self, parent) -> None:
         review = ttk.LabelFrame(parent, text="Recording review")
@@ -1342,43 +1342,34 @@ class SampleSmithApp(tk.Tk):
         if note is not None:
             self._record_note(note)
 
-    def _selected_pitched_sample(self) -> SampleInfo | None:
-        note = self._selected_note()
-        if note is None:
-            return None
+    def _sample_for_pitched_note(self, note: int) -> SampleInfo | None:
         sample = next((sample for sample in self.samples if sample.mode == "pitched" and sample.root_note == note and not sample.generated), None)
         if sample is None:
             sample = next((sample for sample in self.samples if sample.mode == "pitched" and sample.root_note == note), None)
-        if sample is None:
-            messagebox.showwarning("SampleSmith", "The selected note does not have a WAV to review yet.")
-            return None
         return sample
 
-    def _review_selected_pitched_sample(self) -> None:
-        sample = self._selected_pitched_sample()
-        if sample is not None:
-            self._load_existing_sample_for_review(sample)
-
-    def _selected_pad_sample(self) -> SampleInfo | None:
-        selected = self.pad_tree.selection()
+    def _on_pitched_selection_changed(self, _event=None) -> None:
+        selected = self.note_tree.selection()
         if not selected:
-            messagebox.showwarning("SampleSmith", "Select a pad first.")
-            return None
-        values = self.pad_tree.item(selected[0], "values")
+            return
+        sample = self._sample_for_pitched_note(int(selected[0]))
+        if sample is not None:
+            self._load_existing_sample_for_review(sample, confirm_discard=False)
+
+    def _sample_for_pad_tree_item(self, item_id: str) -> SampleInfo | None:
+        values = self.pad_tree.item(item_id, "values")
         if len(values) < 3:
-            messagebox.showwarning("SampleSmith", "The selected pad does not have a WAV to review yet.")
             return None
         file_name = str(values[2])
-        sample = next((sample for sample in self.samples if sample.mode == "pad" and sample.path.name == file_name), None)
-        if sample is None:
-            messagebox.showwarning("SampleSmith", "The selected pad does not have a WAV to review yet.")
-            return None
-        return sample
+        return next((sample for sample in self.samples if sample.mode == "pad" and sample.path.name == file_name), None)
 
-    def _review_selected_pad_sample(self) -> None:
-        sample = self._selected_pad_sample()
+    def _on_pad_selection_changed(self, _event=None) -> None:
+        selected = self.pad_tree.selection()
+        if not selected:
+            return
+        sample = self._sample_for_pad_tree_item(selected[0])
         if sample is not None:
-            self._load_existing_sample_for_review(sample)
+            self._load_existing_sample_for_review(sample, confirm_discard=False)
 
     def _record_all_missing(self) -> None:
         notes = [int(item) for item in self.note_tree.get_children() if not self.note_rows.get(int(item))]
@@ -1488,11 +1479,15 @@ class SampleSmithApp(tk.Tk):
         self._clear_pending_recording_review()
         return True
 
-    def _load_existing_sample_for_review(self, sample: SampleInfo) -> None:
-        if not self._confirm_discard_pending_review():
-            return
+    def _load_existing_sample_for_review(self, sample: SampleInfo, confirm_discard: bool = True) -> None:
+        if confirm_discard:
+            if not self._confirm_discard_pending_review():
+                return
+        elif self.pending_recording_review:
+            self._clear_pending_recording_review()
         if not sample.path.exists():
-            messagebox.showwarning("SampleSmith", f"Could not find this WAV:\n\n{sample.path}")
+            if confirm_discard:
+                messagebox.showwarning("SampleSmith", f"Could not find this WAV:\n\n{sample.path}")
             return
         try:
             raw, sample_rate = self._audio().read_audio(sample.path)
