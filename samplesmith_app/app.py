@@ -49,6 +49,7 @@ class SampleSmithApp(tk.Tk):
         self.pending_recording_review: dict[str, object] | None = None
         self._updating_review_trim_fields = False
         self.selected_panel_kind: str | None = None
+        self._review_load_token = 0
         self._build_ui()
         self.blank_project_data = self._project_data()
         self.after(100, self._drain_queue)
@@ -1430,7 +1431,7 @@ class SampleSmithApp(tk.Tk):
         self._set_panel_action_controls_enabled(True, True)
         sample = self._sample_for_pitched_note(note)
         if sample is not None:
-            self._load_existing_sample_for_review(sample, confirm_discard=False)
+            self._schedule_sample_review_load(sample)
         else:
             self._clear_pending_recording_review()
 
@@ -1455,9 +1456,21 @@ class SampleSmithApp(tk.Tk):
         self._set_panel_action_controls_enabled(False, False)
         sample = self._sample_for_pad_tree_item(selected[0])
         if sample is not None:
-            self._load_existing_sample_for_review(sample, confirm_discard=False)
+            self._schedule_sample_review_load(sample)
         else:
             self._clear_pending_recording_review()
+
+    def _schedule_sample_review_load(self, sample: SampleInfo) -> None:
+        self._review_load_token += 1
+        token = self._review_load_token
+        self.recording_review_status_var.set(f"Loading {sample.path.name}...")
+        self._set_review_controls_enabled(False)
+        self.after(1, lambda: self._load_scheduled_sample_review(sample, token))
+
+    def _load_scheduled_sample_review(self, sample: SampleInfo, token: int) -> None:
+        if token != self._review_load_token:
+            return
+        self._load_existing_sample_for_review(sample, confirm_discard=False)
 
     def _selected_panel_pitched_note(self) -> int | None:
         if self.selected_panel_kind != "pitched":
@@ -1816,8 +1829,16 @@ class SampleSmithApp(tk.Tk):
             return
         reviewed = self._review_selected_audio()
         on_keep = self.pending_recording_review["on_keep"]
-        self._clear_pending_recording_review()
         on_keep(reviewed)
+        if self.pending_recording_review:
+            self.pending_recording_review["raw_audio"] = reviewed
+            self.pending_recording_review["trim_start"] = 0
+            self.pending_recording_review["trim_end"] = len(reviewed)
+            self._sync_review_trim_fields()
+            self.recording_review_status_var.set(self._review_status_text())
+            self._set_review_controls_enabled(True)
+            self._refresh_reset_button_state()
+            self._draw_review_waveform()
 
     def _record_review_take(self) -> None:
         if not self.pending_recording_review:
