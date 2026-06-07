@@ -46,6 +46,7 @@ class SampleSmithApp(tk.Tk):
         self.pad_note = DEFAULT_PAD_START_NOTE
         self._output_update_after_id: str | None = None
         self.pending_recording_review: dict[str, object] | None = None
+        self._updating_review_trim_fields = False
         self._build_ui()
         self.blank_project_data = self._project_data()
         self.after(100, self._drain_queue)
@@ -273,21 +274,35 @@ class SampleSmithApp(tk.Tk):
         self.recording_review_status_var = tk.StringVar(value="No sample selected. Click a row with a WAV to review it here.")
         ttk.Label(review, textvariable=self.recording_review_status_var, wraplength=260, justify="left").pack(fill="x", padx=8, pady=(8, 6))
 
+        self.review_canvas_width = 260
+        self.review_canvas_height = 120
+        self.recording_review_canvas = tk.Canvas(review, width=self.review_canvas_width, height=self.review_canvas_height, bg="#101010", highlightthickness=1, highlightbackground="#666666")
+        self.recording_review_canvas.pack(fill="x", padx=8, pady=(0, 6))
+        self.recording_review_canvas.bind("<Button-1>", self._set_review_trim_start_from_canvas)
+        self.recording_review_canvas.bind("<Button-3>", self._set_review_trim_end_from_canvas)
+
         trim_row = ttk.Frame(review)
         trim_row.pack(fill="x", padx=8, pady=(0, 6))
-        ttk.Label(trim_row, text="Trim dB").pack(side="left")
-        self.recording_review_trim_var = tk.DoubleVar(value=self.threshold_var.get())
-        self.recording_review_trim_spinbox = ttk.Spinbox(trim_row, textvariable=self.recording_review_trim_var, from_=-80, to=-10, increment=1, width=8)
-        self.recording_review_trim_spinbox.pack(side="left", padx=4)
+        ttk.Label(trim_row, text="Start").pack(side="left")
+        self.recording_review_start_var = tk.IntVar(value=0)
+        self.recording_review_start_spinbox = ttk.Spinbox(trim_row, textvariable=self.recording_review_start_var, from_=0, to=0, increment=1, width=8, command=self._on_review_trim_fields_changed)
+        self.recording_review_start_spinbox.pack(side="left", padx=(4, 8))
+        ttk.Label(trim_row, text="End").pack(side="left")
+        self.recording_review_end_var = tk.IntVar(value=0)
+        self.recording_review_end_spinbox = ttk.Spinbox(trim_row, textvariable=self.recording_review_end_var, from_=0, to=0, increment=1, width=8, command=self._on_review_trim_fields_changed)
+        self.recording_review_end_spinbox.pack(side="left", padx=4)
+        self.recording_review_start_var.trace_add("write", lambda *_: self._on_review_trim_fields_changed())
+        self.recording_review_end_var.trace_add("write", lambda *_: self._on_review_trim_fields_changed())
+
+        ttk.Label(review, text="Left-click waveform to set start; right-click to set end.", foreground="#666666", wraplength=260, justify="left").pack(fill="x", padx=8, pady=(0, 8))
 
         ttk.Label(review, text="Takes / round-robin slots will live here.", foreground="#666666", wraplength=260, justify="left").pack(fill="x", padx=8, pady=(0, 8))
         self.recording_review_buttons = []
         for text, command in (
-            ("Play raw", self._play_review_raw),
-            ("Play trimmed", self._play_review_trimmed),
-            ("Trim again", self._trim_review_again),
-            ("Keep", self._keep_review_recording),
-            ("Redo", self._redo_review_recording),
+            ("Play full", self._play_review_full),
+            ("Play selection", self._play_review_selection),
+            ("Keep selection", self._keep_review_recording),
+            ("Record take", self._record_review_take),
             ("Clear", self._clear_review_recording),
         ):
             button = ttk.Button(review, text=text, command=command)
@@ -298,8 +313,10 @@ class SampleSmithApp(tk.Tk):
 
     def _set_review_controls_enabled(self, enabled: bool) -> None:
         state = "normal" if enabled else "disabled"
-        if hasattr(self, "recording_review_trim_spinbox"):
-            self.recording_review_trim_spinbox.configure(state=state)
+        if hasattr(self, "recording_review_start_spinbox"):
+            self.recording_review_start_spinbox.configure(state=state)
+        if hasattr(self, "recording_review_end_spinbox"):
+            self.recording_review_end_spinbox.configure(state=state)
         for button in getattr(self, "recording_review_buttons", []):
             button.configure(state=state)
 
@@ -1434,7 +1451,7 @@ class SampleSmithApp(tk.Tk):
                 audio.play_tone(note)
                 time.sleep(0.3)
             raw = audio.record(self.record_seconds_var.get())
-            trimmed = audio.trim(raw)
+            selection = raw
             ranges = dict((root, (lo, hi)) for root, lo, hi in build_key_ranges([int(i) for i in self.note_tree.get_children()]))
             lo, hi = ranges[note]
             info = SampleInfo(path=path, root_note=note, lo_note=lo, hi_note=hi, label=note_name, mode="pitched")
@@ -1453,7 +1470,7 @@ class SampleSmithApp(tk.Tk):
                     if after:
                         after()
 
-                def redo():
+                def record_take():
                     self._record_note(note, after=after)
 
                 def clear():
@@ -1461,7 +1478,7 @@ class SampleSmithApp(tk.Tk):
                     if after:
                         after()
 
-                self._set_pending_recording_review(f"Review {note_name}", raw, trimmed, keep, redo, clear, clear_label="Discard take")
+                self._set_pending_recording_review(f"Review {note_name}", raw, selection, keep, record_take, clear, clear_label="Discard take")
             return apply
 
         self._run_worker(f"Recording {note_name}...", work)
@@ -1503,8 +1520,6 @@ class SampleSmithApp(tk.Tk):
             return
         try:
             raw, sample_rate = self._audio().read_audio(sample.path)
-            engine = self._review_audio_engine(sample_rate)
-            trimmed = engine.trim(raw)
         except Exception as exc:
             messagebox.showerror("SampleSmith", f"Could not load this WAV for review:\n\n{exc}")
             return
@@ -1516,13 +1531,13 @@ class SampleSmithApp(tk.Tk):
             self._log(f"Updated reviewed WAV: {sample.path.name}")
             self._log(f"Updated DecentSampler patch: {preset.name}")
 
-        def redo():
+        def record_take():
             self._record_existing_sample_again(sample)
 
         def clear():
             self._log(f"Cleared review of {sample.path.name}")
 
-        self._set_pending_recording_review(f"Review {sample.label or sample.path.name}", raw, trimmed, keep, redo, clear, sample_rate=sample_rate, clear_label="Clear")
+        self._set_pending_recording_review(f"Review {sample.label or sample.path.name}", raw, raw, keep, record_take, clear, sample_rate=sample_rate, clear_label="Clear")
 
     def _record_existing_sample_again(self, sample: SampleInfo) -> None:
         if sample.path.exists() and not messagebox.askokcancel("SampleSmith", f"Record a new take for {sample.path.name}? The WAV will not be replaced until you press Keep."):
@@ -1534,7 +1549,7 @@ class SampleSmithApp(tk.Tk):
                 audio.play_tone(sample.root_note)
                 time.sleep(0.3)
             raw = audio.record(self.record_seconds_var.get())
-            trimmed = audio.trim(raw)
+            selection = raw
             sample_rate = int(audio.sample_rate)
 
             def apply():
@@ -1545,25 +1560,16 @@ class SampleSmithApp(tk.Tk):
                     self._log(f"Updated reviewed WAV: {sample.path.name}")
                     self._log(f"Updated DecentSampler patch: {preset.name}")
 
-                def redo():
+                def record_take():
                     self._record_existing_sample_again(sample)
 
                 def clear():
                     self._log(f"Cleared review of {sample.path.name}")
 
-                self._set_pending_recording_review(f"Review {sample.label or sample.path.name}", raw, trimmed, keep, redo, clear, sample_rate=sample_rate, clear_label="Discard take")
+                self._set_pending_recording_review(f"Review {sample.label or sample.path.name}", raw, selection, keep, record_take, clear, sample_rate=sample_rate, clear_label="Discard take")
             return apply
 
         self._run_worker(f"Recording {sample.label or sample.path.name}...", work)
-
-    def _review_audio_engine(self, sample_rate: int) -> AudioEngine:
-        return AudioEngine(
-            sample_rate=sample_rate,
-            trim_threshold_db=float(self.recording_review_trim_var.get()),
-            pre_roll_ms=40.0,
-            post_roll_ms=180.0,
-            normalise=self.normalise_var.get(),
-        )
 
     def _duration_text(self, audio, sample_rate: int | None = None) -> str:
         return f"{len(audio) / max(1, int(sample_rate or self.sample_rate_var.get())):.2f}s"
@@ -1573,36 +1579,154 @@ class SampleSmithApp(tk.Tk):
             return "No sample selected. Click a row with a WAV to review it here."
         return (
             f"{self.pending_recording_review['title']} — "
-            f"raw {self._duration_text(self.pending_recording_review['raw_audio'], self.pending_recording_review['sample_rate'])}; "
-            f"trimmed {self._duration_text(self.pending_recording_review['trimmed_audio'], self.pending_recording_review['sample_rate'])}"
+            f"full {self._duration_text(self.pending_recording_review['raw_audio'], self.pending_recording_review['sample_rate'])}; "
+            f"selection {self._duration_text(self._review_selected_audio(), self.pending_recording_review['sample_rate'])}"
         )
 
-    def _set_pending_recording_review(self, title: str, raw_audio, trimmed_audio, on_keep, on_redo, on_clear, sample_rate: int | None = None, clear_label: str = "Clear") -> None:
+    def _set_pending_recording_review(self, title: str, raw_audio, _selection_audio, on_keep, on_record_take, on_clear, sample_rate: int | None = None, clear_label: str = "Clear") -> None:
+        end_frame = max(0, len(raw_audio))
         self.pending_recording_review = {
             "title": title,
             "raw_audio": raw_audio,
-            "trimmed_audio": trimmed_audio,
             "sample_rate": int(sample_rate or self.sample_rate_var.get()),
+            "trim_start": 0,
+            "trim_end": end_frame,
             "on_keep": on_keep,
-            "on_redo": on_redo,
+            "on_record_take": on_record_take,
             "on_clear": on_clear,
         }
-        self.recording_review_trim_var.set(float(self.threshold_var.get()))
+        self._sync_review_trim_fields()
         self.recording_review_status_var.set(self._review_status_text())
         self.recording_review_clear_button.configure(text=clear_label)
         self._set_review_controls_enabled(True)
+        self._draw_review_waveform()
 
     def _clear_pending_recording_review(self) -> None:
         self.pending_recording_review = None
         self.recording_review_status_var.set(self._review_status_text())
         if hasattr(self, "recording_review_clear_button"):
             self.recording_review_clear_button.configure(text="Clear")
+        self.recording_review_canvas.delete("all")
+        self.recording_review_start_var.set(0)
+        self.recording_review_end_var.set(0)
         self._set_review_controls_enabled(False)
 
-    def _play_review_audio(self, which: str) -> None:
+    def _sync_review_trim_fields(self) -> None:
         if not self.pending_recording_review:
             return
-        audio = self.pending_recording_review[which]
+        self._updating_review_trim_fields = True
+        try:
+            frames = len(self.pending_recording_review["raw_audio"])
+            start = int(self.pending_recording_review["trim_start"])
+            end = int(self.pending_recording_review["trim_end"])
+            self.recording_review_start_spinbox.configure(from_=0, to=max(0, frames - 1))
+            self.recording_review_end_spinbox.configure(from_=1 if frames else 0, to=max(0, frames))
+            self.recording_review_start_var.set(start)
+            self.recording_review_end_var.set(end)
+        finally:
+            self._updating_review_trim_fields = False
+
+    def _on_review_trim_fields_changed(self) -> None:
+        if self._updating_review_trim_fields or not self.pending_recording_review:
+            return
+        frames = len(self.pending_recording_review["raw_audio"])
+        if frames <= 0:
+            return
+        try:
+            start = int(self.recording_review_start_var.get())
+            end = int(self.recording_review_end_var.get())
+        except (tk.TclError, ValueError):
+            return
+        start = max(0, min(frames - 1, start))
+        end = max(start + 1, min(frames, end))
+        self.pending_recording_review["trim_start"] = start
+        self.pending_recording_review["trim_end"] = end
+        self.recording_review_status_var.set(self._review_status_text())
+        self._draw_review_waveform()
+
+    def _review_frame_at_x(self, x: int) -> int:
+        if not self.pending_recording_review:
+            return 0
+        frames = max(1, len(self.pending_recording_review["raw_audio"]))
+        width = int(self.recording_review_canvas.winfo_width() or self.review_canvas_width)
+        if width < 10:
+            width = self.review_canvas_width
+        return max(0, min(frames - 1, int((max(0, min(width - 1, x)) / max(1, width - 1)) * (frames - 1))))
+
+    def _set_review_trim_start_from_canvas(self, event) -> None:
+        if not self.pending_recording_review:
+            return
+        frame = self._review_frame_at_x(event.x)
+        end = int(self.pending_recording_review["trim_end"])
+        self.pending_recording_review["trim_start"] = max(0, min(frame, max(0, end - 1)))
+        self._sync_review_trim_fields()
+        self.recording_review_status_var.set(self._review_status_text())
+        self._draw_review_waveform()
+
+    def _set_review_trim_end_from_canvas(self, event) -> None:
+        if not self.pending_recording_review:
+            return
+        frame = self._review_frame_at_x(event.x) + 1
+        frames = len(self.pending_recording_review["raw_audio"])
+        start = int(self.pending_recording_review["trim_start"])
+        self.pending_recording_review["trim_end"] = max(start + 1, min(frames, frame))
+        self._sync_review_trim_fields()
+        self.recording_review_status_var.set(self._review_status_text())
+        self._draw_review_waveform()
+
+    def _review_selected_audio(self):
+        if not self.pending_recording_review:
+            return []
+        audio = self.pending_recording_review["raw_audio"]
+        start = int(self.pending_recording_review.get("trim_start", 0))
+        end = int(self.pending_recording_review.get("trim_end", len(audio)))
+        return audio[start:end]
+
+    def _frame_peak(self, frame) -> float:
+        try:
+            return max(abs(float(value)) for value in frame)
+        except TypeError:
+            return abs(float(frame))
+
+    def _draw_review_waveform(self) -> None:
+        canvas = self.recording_review_canvas
+        canvas.delete("all")
+        if not self.pending_recording_review:
+            return
+        audio = self.pending_recording_review["raw_audio"]
+        frames = len(audio)
+        if frames <= 0:
+            return
+        width = int(canvas.winfo_width() or self.review_canvas_width)
+        height = int(canvas.winfo_height() or self.review_canvas_height)
+        if width < 10:
+            width = self.review_canvas_width
+        if height < 10:
+            height = self.review_canvas_height
+        mid = height // 2
+        start = int(self.pending_recording_review["trim_start"])
+        end = int(self.pending_recording_review["trim_end"])
+        x_start = int(start / max(1, frames) * width)
+        x_end = int(end / max(1, frames) * width)
+        canvas.create_rectangle(x_start, 0, max(x_start + 1, x_end), height, fill="#1d3d54", outline="")
+        step = max(1, frames // width)
+        peaks = []
+        for x in range(width):
+            left = min(frames, x * step)
+            right = min(frames, max(left + 1, (x + 1) * step))
+            peak = max((self._frame_peak(audio[i]) for i in range(left, right)), default=0.0)
+            peaks.append(peak)
+        scale = max(peaks) or 1.0
+        for x, peak in enumerate(peaks):
+            y = int((peak / scale) * (height / 2 - 4))
+            canvas.create_line(x, mid - y, x, mid + y, fill="#d8d8d8")
+        canvas.create_line(0, mid, width, mid, fill="#444444")
+        canvas.create_line(x_start, 0, x_start, height, fill="#63d471", width=2)
+        canvas.create_line(x_end, 0, x_end, height, fill="#ff6b6b", width=2)
+
+    def _play_review_audio(self, audio) -> None:
+        if not self.pending_recording_review:
+            return
         sample_rate = int(self.pending_recording_review["sample_rate"])
 
         def work():
@@ -1613,45 +1737,31 @@ class SampleSmithApp(tk.Tk):
 
         threading.Thread(target=work, daemon=True).start()
 
-    def _play_review_raw(self) -> None:
-        self._play_review_audio("raw_audio")
+    def _play_review_full(self) -> None:
+        self._play_review_audio(self.pending_recording_review["raw_audio"] if self.pending_recording_review else [])
 
-    def _play_review_trimmed(self) -> None:
-        self._play_review_audio("trimmed_audio")
-
-    def _trim_review_again(self) -> None:
-        if not self.pending_recording_review:
-            return
-        try:
-            engine = self._review_audio_engine(int(self.pending_recording_review["sample_rate"]))
-            self.pending_recording_review["trimmed_audio"] = engine.trim(self.pending_recording_review["raw_audio"])
-            self.threshold_var.set(float(self.recording_review_trim_var.get()))
-            self.recording_review_status_var.set(self._review_status_text())
-        except Exception as exc:
-            messagebox.showerror("SampleSmith", f"Could not trim recording:\n\n{exc}")
+    def _play_review_selection(self) -> None:
+        self._play_review_audio(self._review_selected_audio())
 
     def _keep_review_recording(self) -> None:
         if not self.pending_recording_review:
             return
-        reviewed = self.pending_recording_review["trimmed_audio"]
+        reviewed = self._review_selected_audio()
         on_keep = self.pending_recording_review["on_keep"]
-        self.threshold_var.set(float(self.recording_review_trim_var.get()))
         self._clear_pending_recording_review()
         on_keep(reviewed)
 
-    def _redo_review_recording(self) -> None:
+    def _record_review_take(self) -> None:
         if not self.pending_recording_review:
             return
-        on_redo = self.pending_recording_review["on_redo"]
-        self.threshold_var.set(float(self.recording_review_trim_var.get()))
+        on_record_take = self.pending_recording_review["on_record_take"]
         self._clear_pending_recording_review()
-        on_redo()
+        on_record_take()
 
     def _clear_review_recording(self) -> None:
         if not self.pending_recording_review:
             return
         on_clear = self.pending_recording_review["on_clear"]
-        self.threshold_var.set(float(self.recording_review_trim_var.get()))
         self._clear_pending_recording_review()
         on_clear()
 
@@ -1675,7 +1785,7 @@ class SampleSmithApp(tk.Tk):
         def work():
             audio = self._audio()
             raw = audio.record(self.record_seconds_var.get())
-            trimmed = audio.trim(raw)
+            selection = raw
             info = SampleInfo(path=path, root_note=midi_note, lo_note=midi_note, hi_note=midi_note, label=label, mode="pad")
 
             def apply():
@@ -1689,7 +1799,7 @@ class SampleSmithApp(tk.Tk):
                     self._log(f"Updated DecentSampler patch: {preset.name}")
                     self._auto_save_project()
 
-                def redo():
+                def record_take():
                     self.pad_note -= 1
                     self._record_pad()
 
@@ -1697,7 +1807,7 @@ class SampleSmithApp(tk.Tk):
                     self.pad_note -= 1
                     self._log(f"Discarded take for pad {label}")
 
-                self._set_pending_recording_review(f"Review pad {label}", raw, trimmed, keep, redo, clear, clear_label="Discard take")
+                self._set_pending_recording_review(f"Review pad {label}", raw, selection, keep, record_take, clear, clear_label="Discard take")
             return apply
 
         self._run_worker(f"Recording pad {label}...", work)
