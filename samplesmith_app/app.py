@@ -185,8 +185,10 @@ class SampleSmithApp(tk.Tk):
         ttk.Checkbutton(project, text="Play reference before pitched recording", variable=self.play_reference_before_record_var).grid(row=3, column=2, columnspan=3, sticky="w", pady=(6, 0), padx=4)
         project.columnconfigure(3, weight=1)
 
-        tabs = ttk.Notebook(outer)
-        tabs.pack(fill="both", expand=True, pady=8)
+        main_area = ttk.Frame(outer)
+        main_area.pack(fill="both", expand=True, pady=8)
+        tabs = ttk.Notebook(main_area)
+        tabs.pack(side="left", fill="both", expand=True)
         self.pitched_tab = ttk.Frame(tabs, padding=8)
         self.pads_tab = ttk.Frame(tabs, padding=8)
         self.decent_sampler_tab = ttk.Frame(tabs, padding=8)
@@ -197,7 +199,7 @@ class SampleSmithApp(tk.Tk):
         self._build_pads_tab()
         self._build_decent_sampler_tab()
         self._bind_output_parameter_traces()
-        self._build_recording_review_panel(outer)
+        self._build_recording_review_panel(main_area)
 
         bottom = ttk.Frame(outer)
         bottom.pack(fill="x")
@@ -266,14 +268,19 @@ class SampleSmithApp(tk.Tk):
         self.pad_tree.bind("<<TreeviewSelect>>", self._on_pad_selection_changed)
 
     def _build_recording_review_panel(self, parent) -> None:
-        review = ttk.LabelFrame(parent, text="Recording review")
-        review.pack(fill="x", pady=(0, 8))
-        self.recording_review_status_var = tk.StringVar(value="No recording waiting. Record a note or pad, then review it here.")
-        ttk.Label(review, textvariable=self.recording_review_status_var).pack(side="left", padx=(6, 10), pady=6)
-        ttk.Label(review, text="Trim dB").pack(side="left")
+        review = ttk.LabelFrame(parent, text="Selected sample")
+        review.pack(side="right", fill="y", padx=(8, 0))
+        self.recording_review_status_var = tk.StringVar(value="No sample selected. Click a row with a WAV to review it here.")
+        ttk.Label(review, textvariable=self.recording_review_status_var, wraplength=260, justify="left").pack(fill="x", padx=8, pady=(8, 6))
+
+        trim_row = ttk.Frame(review)
+        trim_row.pack(fill="x", padx=8, pady=(0, 6))
+        ttk.Label(trim_row, text="Trim dB").pack(side="left")
         self.recording_review_trim_var = tk.DoubleVar(value=self.threshold_var.get())
-        self.recording_review_trim_spinbox = ttk.Spinbox(review, textvariable=self.recording_review_trim_var, from_=-80, to=-10, increment=1, width=8)
+        self.recording_review_trim_spinbox = ttk.Spinbox(trim_row, textvariable=self.recording_review_trim_var, from_=-80, to=-10, increment=1, width=8)
         self.recording_review_trim_spinbox.pack(side="left", padx=4)
+
+        ttk.Label(review, text="Takes / round-robin slots will live here.", foreground="#666666", wraplength=260, justify="left").pack(fill="x", padx=8, pady=(0, 8))
         self.recording_review_buttons = []
         for text, command in (
             ("Play raw", self._play_review_raw),
@@ -284,7 +291,7 @@ class SampleSmithApp(tk.Tk):
             ("Skip", self._skip_review_recording),
         ):
             button = ttk.Button(review, text=text, command=command)
-            button.pack(side="left", padx=(2, 0))
+            button.pack(fill="x", padx=8, pady=(0, 4))
             self.recording_review_buttons.append(button)
         self._set_review_controls_enabled(False)
 
@@ -1355,6 +1362,8 @@ class SampleSmithApp(tk.Tk):
         sample = self._sample_for_pitched_note(int(selected[0]))
         if sample is not None:
             self._load_existing_sample_for_review(sample, confirm_discard=False)
+        else:
+            self._clear_pending_recording_review()
 
     def _sample_for_pad_tree_item(self, item_id: str) -> SampleInfo | None:
         values = self.pad_tree.item(item_id, "values")
@@ -1370,6 +1379,8 @@ class SampleSmithApp(tk.Tk):
         sample = self._sample_for_pad_tree_item(selected[0])
         if sample is not None:
             self._load_existing_sample_for_review(sample, confirm_discard=False)
+        else:
+            self._clear_pending_recording_review()
 
     def _record_all_missing(self) -> None:
         notes = [int(item) for item in self.note_tree.get_children() if not self.note_rows.get(int(item))]
@@ -1558,7 +1569,7 @@ class SampleSmithApp(tk.Tk):
 
     def _review_status_text(self) -> str:
         if not self.pending_recording_review:
-            return "No recording waiting. Record a note or pad, then review it here."
+            return "No sample selected. Click a row with a WAV to review it here."
         return (
             f"{self.pending_recording_review['title']} — "
             f"raw {self._duration_text(self.pending_recording_review['raw_audio'], self.pending_recording_review['sample_rate'])}; "
