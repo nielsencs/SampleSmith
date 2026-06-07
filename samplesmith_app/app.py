@@ -1549,15 +1549,8 @@ class SampleSmithApp(tk.Tk):
         self._run_worker(f"Recording {note_name}...", work)
 
     def _confirm_recording(self, prompt: str, path: Path) -> bool:
-        if self.pending_recording_review and not messagebox.askokcancel(
-            "SampleSmith",
-            "There is already a recording waiting in the Recording review panel. Discard it and start another recording?",
-        ):
-            return False
         if self.pending_recording_review:
             self._clear_pending_recording_review()
-        if path.exists():
-            return messagebox.askokcancel("SampleSmith", f"{path.name} already exists. Replace it?\n\n{prompt}")
         if self.confirm_before_record_var.get():
             return messagebox.askokcancel("SampleSmith", prompt)
         return True
@@ -1610,9 +1603,6 @@ class SampleSmithApp(tk.Tk):
         self._set_pending_recording_review(f"Review {sample.label or sample.path.name}", raw, raw, keep, record_take, sample_rate=sample_rate, reset=reset)
 
     def _record_existing_sample_again(self, sample: SampleInfo) -> None:
-        if sample.path.exists() and not messagebox.askokcancel("SampleSmith", f"Record a new take for {sample.path.name}? The WAV will not be replaced until you press Keep."):
-            return
-
         def work():
             audio = self._audio()
             if sample.mode == "pitched" and sample.root_note is not None and self.play_reference_before_record_var.get():
