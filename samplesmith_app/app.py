@@ -668,6 +668,11 @@ class SampleSmithApp(tk.Tk):
     def _default_project_path(self) -> Path:
         return self._instrument_dir() / f"{slugify(self.name_var.get())}.samplesmith.json"
 
+    def _project_path_for_name(self, name: str, output: str | None = None) -> Path:
+        output_root = Path(output or self.output_var.get()).expanduser()
+        slug = slugify(name)
+        return output_root / slug / f"{slug}.samplesmith.json"
+
     def _project_data(self) -> dict[str, object]:
         return {
             "version": 2,
@@ -798,25 +803,57 @@ class SampleSmithApp(tk.Tk):
     def _new_project_data(self) -> dict[str, object]:
         data = dict(self.blank_project_data)
         data["output"] = self.output_var.get()
+        base_name = str(data.get("name", "CarlSampler") or "CarlSampler")
+        name = base_name
+        suffix = 2
+        while self._project_path_for_name(name, str(data["output"])).exists():
+            name = f"{base_name}{suffix}"
+            suffix += 1
+        data["name"] = name
         return data
 
-    def _current_project_differs_from_blank(self) -> bool:
+    def _current_project_has_unsaved_changes(self) -> bool:
         current = self._project_data()
-        blank = self._new_project_data()
+        if self.project_path is not None and self.project_path.exists():
+            try:
+                saved = json.loads(self.project_path.read_text(encoding="utf-8"))
+                return current != self._migrate_project_note_convention(saved)
+            except Exception:
+                return True
+        blank = dict(self.blank_project_data)
         blank["output"] = current.get("output", blank.get("output"))
-        return current != blank or self.project_path is not None
+        return current != blank
+
+    def _confirm_replace_current_project(self, action: str) -> bool:
+        if not self._current_project_has_unsaved_changes():
+            return True
+        choice = messagebox.askyesnocancel(
+            "SampleSmith",
+            f"Save the current project before {action}?\n\n"
+            "Yes saves first. No discards unsaved changes. Cancel keeps the current project open.",
+        )
+        if choice is None:
+            return False
+        if choice is False:
+            return True
+        try:
+            if self.project_path is None:
+                return self._save_project_dialog() is not None
+            saved = self._save_project()
+            self._log(f"Saved project: {saved}")
+            return True
+        except Exception as exc:
+            messagebox.showerror("SampleSmith", f"Could not save the current project:\n\n{exc}")
+            return False
 
     def _new_project(self) -> None:
-        if self._current_project_differs_from_blank() and not messagebox.askyesno(
-            "SampleSmith",
-            "Start a new blank project?\n\nThis clears the current SampleSmith app state, but does not delete saved projects or WAV files.",
-        ):
+        if not self._confirm_replace_current_project("starting a new blank project"):
             return
         self._load_project_data(self._new_project_data(), None)
         self.log.delete("1.0", "end")
         self._log("Started new blank project.")
 
-    def _save_project_dialog(self) -> None:
+    def _save_project_dialog(self) -> Path | None:
         initial = self.project_path or self._default_project_path()
         chosen = filedialog.asksaveasfilename(
             initialdir=str(initial.parent),
@@ -825,9 +862,10 @@ class SampleSmithApp(tk.Tk):
             filetypes=[("SampleSmith project", "*.samplesmith.json"), ("JSON", "*.json"), ("All files", "*.*")],
         )
         if not chosen:
-            return
+            return None
         saved = self._save_project(Path(chosen))
         self._log(f"Saved project: {saved}")
+        return saved
 
     def _stray_wav_candidates(self) -> list[Path]:
         roots = [self._instrument_dir(), self._instrument_dir() / "Samples"]
@@ -923,7 +961,7 @@ class SampleSmithApp(tk.Tk):
             initialdir=str(self._instrument_dir()),
             filetypes=[("SampleSmith project", "*.samplesmith.json"), ("JSON", "*.json"), ("All files", "*.*")],
         )
-        if chosen:
+        if chosen and self._confirm_replace_current_project("opening another project"):
             self._open_project(Path(chosen))
 
     @staticmethod
