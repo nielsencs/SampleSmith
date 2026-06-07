@@ -14,16 +14,18 @@ The goal is practical Decent Sampler instrument building for ordinary musicians 
 
 ## Near-term priorities
 
-### 1. Sharpen WAV recording and handling
+### 1. Sharpen recording and file handling
 
+- remove unnecessary preamble/friction for straightforward single-sample recording
 - clearer keep / redo / skip controls after recording a note or pad
 - make it easier to record several takes for the same note
 - review samples for clipping, very low level, silence, and too-short recordings
-- show basic WAV facts in the GUI: duration, sample rate, channels, peak level, RMS-ish loudness
+- show basic audio-file facts in the GUI: duration, sample rate, channels, peak level, RMS-ish loudness
 - make normalise/trim behaviour more visible and less surprising
 - preserve original recordings where useful, with processed/export-ready copies clearly marked
-- improve stray-WAV review so imported files can be assigned to notes, pads, velocity layers, or round-robin takes
-- support replacing one recorded WAV without disturbing the rest of the instrument
+- support FLAC as well as WAV where Decent Sampler/project workflow allows it
+- improve stray-file review so imported audio files can be assigned to notes, pads, velocity layers, or round-robin takes
+- support replacing one recorded audio file without disturbing the rest of the instrument
 
 ### 2. Round-robin takes
 
@@ -67,6 +69,7 @@ Wishlist:
 - snap markers to zero crossings when helpful
 - optional auto-find nearby zero crossing
 - audition raw loop and crossfaded loop from inside the editor
+- keep loop audition playing until Stop, but restart playback automatically after every loop/crossfade edit so the user hears the change immediately
 - keyboard shortcuts for play/stop, zoom, nudge, and marker selection
 - undo/redo for loop edits
 
@@ -89,12 +92,20 @@ Wishlist:
 - make overlap/blend zones easier to understand visually
 - provide a warning when mappings overlap in a surprising way
 
+### Bridge samples
+
+- keep bridge audio generation optional and explicit, not a hidden export side effect
+- allow bridge generation for one selected missing note
+- allow bridge generation for a selected range of missing notes
+- make generated bridge files clearly provisional and easy to replace with real recordings later
+
 ### Import-first workflow
 
-- import a folder of WAVs and infer notes from filenames where possible
-- support common filename patterns like `Instrument_C3_01.wav`, `C#4_rr2.wav`, or `note60_vel90.wav`
+- import a folder of WAV/FLAC files and infer notes from filenames where possible
+- have stray-audio review guess the likely note/root from filenames before asking the user
+- support common filename patterns like `Instrument_C3_01.wav`, `C#4_rr2.wav`, `note60_vel90.wav`, or `root_72_take_2.flac`
 - offer a review screen before accepting inferred mappings
-- allow drag/drop of WAV files if Tkinter support is practical
+- allow drag/drop of audio files if Tkinter support is practical
 
 ### Better note and pitch handling
 
@@ -147,5 +158,5 @@ Wishlist:
 - Should velocity layers come before or after round-robin?
 - Should original WAVs and processed WAVs both be kept, or is that too much clutter for early versions?
 - How much waveform editing should SampleSmith own, versus expecting Audacity/Reaper for heavy editing?
-- Should bridge WAVs remain a visible/manual feature only, or eventually become a more guided workflow?
+- Should bridge audio remain a visible/manual feature only, or eventually become a more guided workflow?
 - How should SampleSmith present Decent Sampler features that are version-dependent or only partly documented?
