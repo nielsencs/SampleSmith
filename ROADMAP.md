@@ -69,7 +69,7 @@ Wishlist:
 - snap markers to zero crossings when helpful
 - optional auto-find nearby zero crossing
 - audition raw loop and crossfaded loop from inside the editor
-- keep loop audition playing until Stop, but restart playback automatically after every loop/crossfade edit so the user hears the change immediately
+- refine loop audition restart behaviour after edits, including status messages and edge cases when edits temporarily make the loop invalid
 - keyboard shortcuts for play/stop, zoom, nudge, and marker selection
 - undo/redo for loop edits
 

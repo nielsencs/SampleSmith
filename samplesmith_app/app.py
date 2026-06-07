@@ -1749,6 +1749,8 @@ class LoopEditorDialog(tk.Toplevel):
         self.dragging: str | None = None
         self.audition_stop_event: threading.Event | None = None
         self.audition_thread: threading.Thread | None = None
+        self.audition_mode: str | None = None
+        self.audition_restart_after_id: str | None = None
         try:
             self.frames, self.sample_rate, self.peaks, self.waveform, self.audio = self._load_waveform(sample.path, self.canvas_width)
         except RuntimeError:
@@ -1814,7 +1816,7 @@ class LoopEditorDialog(tk.Toplevel):
         ttk.Label(outer, textvariable=self.audition_status_var, foreground="#555555").pack(anchor="w", pady=(6, 0))
 
         for var in (self.loop_start_var, self.loop_end_var, self.loop_crossfade_var, self.loop_crossfade_mode_var):
-            var.trace_add("write", lambda *_args: self._draw())
+            var.trace_add("write", lambda *_args: self._on_loop_edit())
         self._draw()
         self.wait_window(self)
 
@@ -2053,10 +2055,35 @@ class LoopEditorDialog(tk.Toplevel):
         if self.winfo_exists():
             self.audition_status_var.set(text)
 
-    def _start_loop_audition(self, mode: str = "raw") -> None:
+    def _on_loop_edit(self) -> None:
+        self._draw()
+        self._schedule_audition_restart()
+
+    def _schedule_audition_restart(self) -> None:
+        if self.audition_mode is None:
+            return
+        if self.audition_restart_after_id is not None:
+            self.after_cancel(self.audition_restart_after_id)
+        self.audition_restart_after_id = self.after(250, self._restart_loop_audition)
+
+    def _restart_loop_audition(self) -> None:
+        self.audition_restart_after_id = None
+        mode = self.audition_mode
+        if mode is None:
+            return
+        self._stop_loop_audition(join=False, keep_mode=True, update_status=False)
+        self._start_loop_audition(mode, automatic=True)
+
+    def _start_loop_audition(self, mode: str = "raw", automatic: bool = False) -> None:
+        if self.audition_restart_after_id is not None:
+            self.after_cancel(self.audition_restart_after_id)
+            self.audition_restart_after_id = None
         start, end = self._loop_points()
         if end <= start + 8:
-            messagebox.showwarning("SampleSmith", "Choose a longer loop region before auditioning.")
+            if automatic:
+                self._set_audition_status("Loop edit made the region too short to audition. Adjust the loop or press Stop.")
+            else:
+                messagebox.showwarning("SampleSmith", "Choose a longer loop region before auditioning.")
             return
         crossfade = 0
         if mode == "xfade":
@@ -2065,10 +2092,14 @@ class LoopEditorDialog(tk.Toplevel):
             except (TypeError, ValueError, tk.TclError):
                 crossfade = 0
             if crossfade <= 0:
-                messagebox.showwarning("SampleSmith", "Set a crossfade above 0 before auditioning with crossfade.")
+                if automatic:
+                    self._set_audition_status("Crossfade audition is still active, but crossfade is now 0. Increase it or press Stop.")
+                else:
+                    messagebox.showwarning("SampleSmith", "Set a crossfade above 0 before auditioning with crossfade.")
                 return
         self.loop_enabled_var.set(True)
-        self._stop_loop_audition(join=False)
+        self.audition_mode = mode
+        self._stop_loop_audition(join=False, keep_mode=True, update_status=False)
         stop_event = threading.Event()
         self.audition_stop_event = stop_event
         self.audition_thread = threading.Thread(
@@ -2082,7 +2113,10 @@ class LoopEditorDialog(tk.Toplevel):
         else:
             self._set_audition_status(f"Auditioning raw loop {start}–{end}. Press Stop to end playback.")
 
-    def _stop_loop_audition(self, join: bool = True) -> None:
+    def _stop_loop_audition(self, join: bool = True, keep_mode: bool = False, update_status: bool = True) -> None:
+        if not keep_mode and self.audition_restart_after_id is not None:
+            self.after_cancel(self.audition_restart_after_id)
+            self.audition_restart_after_id = None
         if self.audition_stop_event is not None:
             self.audition_stop_event.set()
         try:
@@ -2095,7 +2129,9 @@ class LoopEditorDialog(tk.Toplevel):
             self.audition_thread.join(timeout=0.3)
         self.audition_thread = None
         self.audition_stop_event = None
-        if hasattr(self, "audition_status_var"):
+        if not keep_mode:
+            self.audition_mode = None
+        if update_status and hasattr(self, "audition_status_var"):
             self._set_audition_status("Audition stopped. Audition raw exposes the join; Audition xfade uses the current crossfade setting.")
 
     def _loop_audition_worker(
