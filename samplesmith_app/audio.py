@@ -40,6 +40,11 @@ class AudioEngine:
         sd.play(audio, self.sample_rate)
         sd.wait()
 
+    def play_audio(self, audio) -> None:
+        _, sd, _ = self._deps()
+        sd.play(audio, self.sample_rate)
+        sd.wait()
+
     def record(self, seconds: float):
         np, sd, _ = self._deps()
         audio = sd.rec(int(seconds * self.sample_rate), samplerate=self.sample_rate, channels=1, dtype="float32")
