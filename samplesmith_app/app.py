@@ -288,11 +288,12 @@ class SampleSmithApp(tk.Tk):
             ("Trim again", self._trim_review_again),
             ("Keep", self._keep_review_recording),
             ("Redo", self._redo_review_recording),
-            ("Skip", self._skip_review_recording),
+            ("Clear", self._clear_review_recording),
         ):
             button = ttk.Button(review, text=text, command=command)
             button.pack(fill="x", padx=8, pady=(0, 4))
             self.recording_review_buttons.append(button)
+        self.recording_review_clear_button = self.recording_review_buttons[-1]
         self._set_review_controls_enabled(False)
 
     def _set_review_controls_enabled(self, enabled: bool) -> None:
@@ -1455,12 +1456,12 @@ class SampleSmithApp(tk.Tk):
                 def redo():
                     self._record_note(note, after=after)
 
-                def skip():
-                    self._log(f"Skipped {note_name}")
+                def clear():
+                    self._log(f"Discarded take for {note_name}")
                     if after:
                         after()
 
-                self._set_pending_recording_review(f"Review {note_name}", raw, trimmed, keep, redo, skip)
+                self._set_pending_recording_review(f"Review {note_name}", raw, trimmed, keep, redo, clear, clear_label="Discard take")
             return apply
 
         self._run_worker(f"Recording {note_name}...", work)
@@ -1518,10 +1519,10 @@ class SampleSmithApp(tk.Tk):
         def redo():
             self._record_existing_sample_again(sample)
 
-        def skip():
-            self._log(f"Skipped review of {sample.path.name}")
+        def clear():
+            self._log(f"Cleared review of {sample.path.name}")
 
-        self._set_pending_recording_review(f"Review {sample.label or sample.path.name}", raw, trimmed, keep, redo, skip, sample_rate=sample_rate)
+        self._set_pending_recording_review(f"Review {sample.label or sample.path.name}", raw, trimmed, keep, redo, clear, sample_rate=sample_rate, clear_label="Clear")
 
     def _record_existing_sample_again(self, sample: SampleInfo) -> None:
         if sample.path.exists() and not messagebox.askokcancel("SampleSmith", f"Record a new take for {sample.path.name}? The WAV will not be replaced until you press Keep."):
@@ -1547,10 +1548,10 @@ class SampleSmithApp(tk.Tk):
                 def redo():
                     self._record_existing_sample_again(sample)
 
-                def skip():
-                    self._log(f"Skipped review of {sample.path.name}")
+                def clear():
+                    self._log(f"Cleared review of {sample.path.name}")
 
-                self._set_pending_recording_review(f"Review {sample.label or sample.path.name}", raw, trimmed, keep, redo, skip, sample_rate=sample_rate)
+                self._set_pending_recording_review(f"Review {sample.label or sample.path.name}", raw, trimmed, keep, redo, clear, sample_rate=sample_rate, clear_label="Discard take")
             return apply
 
         self._run_worker(f"Recording {sample.label or sample.path.name}...", work)
@@ -1576,7 +1577,7 @@ class SampleSmithApp(tk.Tk):
             f"trimmed {self._duration_text(self.pending_recording_review['trimmed_audio'], self.pending_recording_review['sample_rate'])}"
         )
 
-    def _set_pending_recording_review(self, title: str, raw_audio, trimmed_audio, on_keep, on_redo, on_skip, sample_rate: int | None = None) -> None:
+    def _set_pending_recording_review(self, title: str, raw_audio, trimmed_audio, on_keep, on_redo, on_clear, sample_rate: int | None = None, clear_label: str = "Clear") -> None:
         self.pending_recording_review = {
             "title": title,
             "raw_audio": raw_audio,
@@ -1584,15 +1585,18 @@ class SampleSmithApp(tk.Tk):
             "sample_rate": int(sample_rate or self.sample_rate_var.get()),
             "on_keep": on_keep,
             "on_redo": on_redo,
-            "on_skip": on_skip,
+            "on_clear": on_clear,
         }
         self.recording_review_trim_var.set(float(self.threshold_var.get()))
         self.recording_review_status_var.set(self._review_status_text())
+        self.recording_review_clear_button.configure(text=clear_label)
         self._set_review_controls_enabled(True)
 
     def _clear_pending_recording_review(self) -> None:
         self.pending_recording_review = None
         self.recording_review_status_var.set(self._review_status_text())
+        if hasattr(self, "recording_review_clear_button"):
+            self.recording_review_clear_button.configure(text="Clear")
         self._set_review_controls_enabled(False)
 
     def _play_review_audio(self, which: str) -> None:
@@ -1643,13 +1647,13 @@ class SampleSmithApp(tk.Tk):
         self._clear_pending_recording_review()
         on_redo()
 
-    def _skip_review_recording(self) -> None:
+    def _clear_review_recording(self) -> None:
         if not self.pending_recording_review:
             return
-        on_skip = self.pending_recording_review["on_skip"]
+        on_clear = self.pending_recording_review["on_clear"]
         self.threshold_var.set(float(self.recording_review_trim_var.get()))
         self._clear_pending_recording_review()
-        on_skip()
+        on_clear()
 
     def _record_pad(self) -> None:
         label = self.pad_label_var.get().strip()
@@ -1689,11 +1693,11 @@ class SampleSmithApp(tk.Tk):
                     self.pad_note -= 1
                     self._record_pad()
 
-                def skip():
+                def clear():
                     self.pad_note -= 1
-                    self._log(f"Skipped pad {label}")
+                    self._log(f"Discarded take for pad {label}")
 
-                self._set_pending_recording_review(f"Review pad {label}", raw, trimmed, keep, redo, skip)
+                self._set_pending_recording_review(f"Review pad {label}", raw, trimmed, keep, redo, clear, clear_label="Discard take")
             return apply
 
         self._run_worker(f"Recording pad {label}...", work)
