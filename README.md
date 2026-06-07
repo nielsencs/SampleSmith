@@ -4,7 +4,7 @@ SampleSmith is a GUI tool for turning recorded sounds into playable Decent Sampl
 
 It is built for the practical Reaper / Decent Sampler / Audacity sort of workflow: make a sound, record it, map it sensibly, and get a `.dspreset` plus WAV samples that can be opened in Decent Sampler.
 
-The aim is practical sample-instrument usefulness rather than laboratory purity. If you only record one pitched sample, SampleSmith spreads it across the keyboard. If you record several, it maps them into overlapping ranges so each sample keeps its home note while still giving you the transformed low/high sample-instrument sounds that can be musically useful.
+The aim is practical playable-instrument usefulness rather than laboratory purity. If you only record one pitched sample, SampleSmith spreads it across the keyboard. If you record several, it maps them into overlapping ranges so each sample keeps its home note while still giving you transformed low/high sounds that can be musically useful.
 
 ## What it does
 
