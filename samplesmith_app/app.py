@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import queue
 import threading
 import time
@@ -176,7 +177,7 @@ class SampleSmithApp(tk.Tk):
         ttk.Button(project, text="New project", command=self._new_project).grid(row=2, column=0, sticky="w", pady=(6, 0))
         ttk.Button(project, text="Open project", command=self._open_project_dialog).grid(row=2, column=1, sticky="w", pady=(6, 0), padx=4)
         ttk.Button(project, text="Save project", command=self._save_project_dialog).grid(row=2, column=2, sticky="w", pady=(6, 0), padx=4)
-        ttk.Button(project, text="Review stray WAVs", command=self._review_stray_wavs).grid(row=2, column=3, sticky="w", pady=(6, 0), padx=4)
+        ttk.Button(project, text="Review stray audio", command=self._review_stray_wavs).grid(row=2, column=3, sticky="w", pady=(6, 0), padx=4)
         project.columnconfigure(3, weight=1)
 
         tabs = ttk.Notebook(outer)
@@ -867,6 +868,28 @@ class SampleSmithApp(tk.Tk):
         self._log(f"Saved project: {saved}")
         return saved
 
+    @staticmethod
+    def _guess_note_from_audio_filename(path: Path) -> str:
+        stem = path.stem
+        note_match = re.search(r"(?<![A-Za-z0-9])([A-Ga-g])([#b♯♭]?)(-?\d)(?![A-Za-z0-9])", stem)
+        if note_match:
+            letter = note_match.group(1).upper()
+            accidental = note_match.group(2).replace("♯", "#").replace("♭", "b")
+            octave = note_match.group(3)
+            guessed = f"{letter}{accidental}{octave}"
+            try:
+                name_to_midi(guessed)
+            except ValueError:
+                pass
+            else:
+                return guessed
+        number_match = re.search(r"(?i)(?:note|root|key|midi)[_-]?(\d{1,3})(?!\d)", stem)
+        if number_match:
+            note_number = int(number_match.group(1))
+            if 0 <= note_number <= 127:
+                return str(note_number)
+        return ""
+
     def _stray_wav_candidates(self) -> list[Path]:
         roots = [self._instrument_dir(), self._instrument_dir() / "Samples"]
         if self.project_path is not None:
@@ -883,29 +906,30 @@ class SampleSmithApp(tk.Tk):
             if resolved_root in seen_roots:
                 continue
             seen_roots.add(resolved_root)
-            for wav in sorted(root.glob("*.wav")):
-                resolved_wav = wav.resolve()
+            audio_files = sorted(path for path in root.iterdir() if path.is_file() and path.suffix.lower() in {".wav", ".flac"})
+            for audio_file in audio_files:
+                resolved_wav = audio_file.resolve()
                 if resolved_wav in known or resolved_wav in seen_wavs:
                     continue
                 seen_wavs.add(resolved_wav)
-                strays.append(wav)
+                strays.append(audio_file)
         return strays
 
     def _review_stray_wavs(self) -> None:
         strays = self._stray_wav_candidates()
         if not strays:
-            self._log("No stray WAV files found in this instrument/project folder.")
-            messagebox.showinfo("SampleSmith", "No stray WAV files found in this instrument/project folder.")
+            self._log("No stray WAV/FLAC files found in this instrument/project folder.")
+            messagebox.showinfo("SampleSmith", "No stray WAV/FLAC files found in this instrument/project folder.")
             return
         preview = "\n".join(str(path.relative_to(self._instrument_dir())) if path.is_relative_to(self._instrument_dir()) else str(path) for path in strays[:12])
         if len(strays) > 12:
             preview += f"\n… and {len(strays) - 12} more"
         if not messagebox.askyesno(
             "SampleSmith",
-            "Found WAV files in the project/instrument folders that are not in the current mapping.\n\n"
+            "Found WAV/FLAC files in the project/instrument folders that are not in the current mapping.\n\n"
             f"{preview}\n\nReview and import any of these now?",
         ):
-            self._log(f"Stray WAV review skipped ({len(strays)} found).")
+            self._log(f"Stray audio review skipped ({len(strays)} found).")
             return
         imported = 0
         for wav in strays:
@@ -916,7 +940,7 @@ class SampleSmithApp(tk.Tk):
                 "SampleSmith",
                 "Enter its root note for pitched mapping (e.g. C4 or 72).\n"
                 "Leave blank to import as the next unpitched pad.",
-                initialvalue="",
+                initialvalue=self._guess_note_from_audio_filename(wav),
             )
             if note_text is None:
                 continue
@@ -933,21 +957,21 @@ class SampleSmithApp(tk.Tk):
                 info = SampleInfo(path=wav, root_note=root_note, lo_note=root_note, hi_note=root_note, label=wav.stem, mode="pitched")
                 self._upsert_sample(info)
                 imported += 1
-                self._log(f"Imported stray pitched WAV: {wav.name} as {midi_to_name(root_note)}")
+                self._log(f"Imported stray pitched audio: {wav.name} as {midi_to_name(root_note)}")
             else:
                 midi_note = self.pad_note
                 self.pad_note += 1
                 info = SampleInfo(path=wav, root_note=midi_note, lo_note=midi_note, hi_note=midi_note, label=wav.stem, mode="pad")
                 self._upsert_sample(info)
                 imported += 1
-                self._log(f"Imported stray pad WAV: {wav.name} as {midi_to_name(midi_note)}")
+                self._log(f"Imported stray pad audio: {wav.name} as {midi_to_name(midi_note)}")
         if imported:
             self._rebuild_trees_from_project()
             preset = self._write_preset()
             self._auto_save_project()
-            self._log(f"Imported {imported} stray WAV(s) and updated {preset.name}")
+            self._log(f"Imported {imported} stray audio file(s) and updated {preset.name}")
         else:
-            self._log("No stray WAVs imported.")
+            self._log("No stray audio files imported.")
 
     def _auto_save_project(self) -> None:
         try:
@@ -1129,10 +1153,10 @@ class SampleSmithApp(tk.Tk):
         strays = self._stray_wav_candidates()
         if not strays:
             return
-        if messagebox.askyesno("SampleSmith", f"Found {len(strays)} stray WAV file(s) in this project/instrument folder. Review them now?"):
+        if messagebox.askyesno("SampleSmith", f"Found {len(strays)} stray audio file(s) in this project/instrument folder. Review them now?"):
             self._review_stray_wavs()
         else:
-            self._log(f"Stray WAVs found but not imported: {len(strays)}")
+            self._log(f"Stray audio files found but not imported: {len(strays)}")
 
     def _rebuild_trees_from_project(self) -> None:
         for item in self.note_tree.get_children():

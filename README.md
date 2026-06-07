@@ -63,7 +63,7 @@ Set the instrument name and output folder, choose **Pitched** or **Unpitched / P
 
 Use **New project** to clear the current app state and start a blank unsaved project; it does not delete saved projects or WAV files. If the current project has unsaved changes, SampleSmith asks whether to save, discard, or cancel first. New projects also avoid reusing an existing default project folder blindly. Use **Open project** to return to an existing SampleSmith project; it has the same save/discard/cancel guard.
 
-Use **Review stray WAVs** if you have copied or recorded WAV files into the current instrument/project folders outside SampleSmith. SampleSmith checks only the current instrument folder, its `Samples/` folder, and the project file's own folder one level deep; it does not recurse into neighbouring project folders, and it asks before importing anything into the mapping.
+Use **Review stray audio** if you have copied or recorded WAV/FLAC files into the current instrument/project folders outside SampleSmith. SampleSmith checks only the current instrument folder, its `Samples/` folder, and the project file's own folder one level deep; it does not recurse into neighbouring project folders, guesses root notes from filenames where it can, and asks before importing anything into the mapping.
 
 Output defaults to:
 

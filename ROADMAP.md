@@ -102,7 +102,7 @@ Wishlist:
 ### Import-first workflow
 
 - import a folder of WAV/FLAC files and infer notes from filenames where possible
-- have stray-audio review guess the likely note/root from filenames before asking the user
+- refine stray-audio note/root filename guessing and show confidence before accepting inferred mappings
 - support common filename patterns like `Instrument_C3_01.wav`, `C#4_rr2.wav`, `note60_vel90.wav`, or `root_72_take_2.flac`
 - offer a review screen before accepting inferred mappings
 - allow drag/drop of audio files if Tkinter support is practical
