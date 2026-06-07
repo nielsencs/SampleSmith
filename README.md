@@ -131,18 +131,18 @@ The **Effective exported sample mapping** table shows which WAV will play on whi
 
 ## Current limits / next improvements
 
-SampleSmith is useful now, but still growing.
+SampleSmith is useful now, but still growing. The broader wishlist lives in [ROADMAP.md](ROADMAP.md).
 
 Likely next steps:
 
-- add a small GUI or single-key controls for keep/redo/skip
+- sharpen WAV recording/review handling, including keep/redo/skip and quality checks
+- add round-robin takes so one note or pad can have multiple natural-sounding sample variants
+- improve waveform loop visualisation, especially loop region and crossfade display
+- add more precise waveform zoom, marker dragging, nudging, and auditioning
 - add velocity layers
-- add round-robin takes
-- improve loop-point detection/preview for sustained notes
 - refine Decent Sampler UI controls
 - add Reaper-specific helper/export workflow
 - support manual note correction more elegantly
-- add a review pass for clipped/quiet/too-short samples
 
 ## Notes
 
