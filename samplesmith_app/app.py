@@ -187,7 +187,7 @@ class SampleSmithApp(tk.Tk):
         self.decent_sampler_tab = ttk.Frame(tabs, padding=8)
         tabs.add(self.pitched_tab, text="Pitched")
         tabs.add(self.pads_tab, text="Unpitched / Pads")
-        tabs.add(self.decent_sampler_tab, text="Decent Sampler")
+        tabs.add(self.decent_sampler_tab, text="DecentSampler")
         self._build_pitched_tab()
         self._build_pads_tab()
         self._build_decent_sampler_tab()
@@ -271,7 +271,7 @@ class SampleSmithApp(tk.Tk):
         ds_tabs.add(shape_tab, text="Shape")
         ds_tabs.add(mapping_tab, text="Mapping")
 
-        export = ttk.LabelFrame(basics_tab, text="Decent Sampler output")
+        export = ttk.LabelFrame(basics_tab, text="DecentSampler output")
         export.pack(fill="x")
         ttk.Checkbutton(export, text="Loop samples by default", variable=self.loop_enabled_var, command=self._on_output_parameter_changed).grid(row=0, column=0, sticky="w", padx=6, pady=6)
 
@@ -459,7 +459,7 @@ class SampleSmithApp(tk.Tk):
         ttk.Label(
             notes,
             text=(
-                "Decent Sampler settings are split into sub-tabs. Loop controls here are fallback/default values; "
+                "DecentSampler settings are split into sub-tabs. Loop controls here are fallback/default values; "
                 "per-WAV loop edits are shown in the mapping table and take priority during export. "
                 "Generated bridge WAVs are marked provisional/derived in the mapping table and saved under Samples/generated."
             ),
@@ -1363,7 +1363,7 @@ class SampleSmithApp(tk.Tk):
                 mapped = next(sample for sample in self.samples if sample.mode == "pitched" and sample.root_note == note)
                 preset = self._write_preset()
                 self._log(f"Recorded {note_name}: {path.name} — maps {mapping_text(mapped.lo_note, mapped.hi_note)}")
-                self._log(f"Updated Decent Sampler patch: {preset.name}")
+                self._log(f"Updated DecentSampler patch: {preset.name}")
                 self._auto_save_project()
                 if after:
                     after()
@@ -1401,7 +1401,7 @@ class SampleSmithApp(tk.Tk):
                 self.pad_label_var.set("")
                 preset = self._write_preset()
                 self._log(f"Recorded pad {midi_to_name(midi_note)}: {path.name}")
-                self._log(f"Updated Decent Sampler patch: {preset.name}")
+                self._log(f"Updated DecentSampler patch: {preset.name}")
                 self._auto_save_project()
             return apply
 
@@ -1721,7 +1721,7 @@ class SampleSmithApp(tk.Tk):
             self._auto_save_project()
             return
         preset = self._write_preset()
-        self._log(f"Updated Decent Sampler patch: {preset.name}")
+        self._log(f"Updated DecentSampler patch: {preset.name}")
         self._auto_save_project()
 
     def _generate_preset(self) -> None:

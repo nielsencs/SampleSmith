@@ -9,8 +9,8 @@ from pathlib import Path
 
 NOTE_NAMES_SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 NOTE_ALIASES = {"DB": "C#", "EB": "D#", "GB": "F#", "AB": "G#", "BB": "A#"}
-# Decent Sampler's screen keyboard labels C4 as key/note number 72. SampleSmith
-# follows that convention because its purpose is to build Decent Sampler patches.
+# DecentSampler's screen keyboard labels C4 as key/note number 72. SampleSmith
+# follows that convention because its purpose is to build DecentSampler patches.
 # Acoustic frequency conversion uses DS A4 = key 81 so DS C4 still sounds as
 # middle C (~261.63 Hz).
 A4_MIDI = 81
@@ -72,7 +72,7 @@ def build_overlapping_key_ranges(notes: list[int]) -> list[tuple[int, int, int]]
 
     Example: DS roots C3/C4 (60/72) become C3 -> keys 0-72 and C4 -> keys 60-127.
     The 60-72 overlap is a layered blend zone for now; true key-based crossfades
-    can be added later if/when we add Decent Sampler fade parameters.
+    can be added later if/when we add DecentSampler fade parameters.
     """
     sorted_notes = sorted(notes)
     ranges: list[tuple[int, int, int]] = []

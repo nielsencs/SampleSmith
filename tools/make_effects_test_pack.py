@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Build a local Decent Sampler effects listening test pack for SampleSmith.
+"""Build a local DecentSampler effects listening test pack for SampleSmith.
 
 The generated pack is intentionally not committed. It creates one shared
 Samples/ folder plus one deliberately exaggerated preset per supported Decent
 Sampler effect/filter so a human can open them locally and listen for whether
-each exported effect behaves as expected inside Decent Sampler.
+each exported effect behaves as expected inside DecentSampler.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from samplesmith_app.dspreset import generate_dspreset
 from samplesmith_app.models import SampleInfo
 
 SAMPLE_RATE = 44_100
-ROOT_NOTE = 72  # Decent Sampler C4 / middle C.
+ROOT_NOTE = 72  # DecentSampler C4 / middle C.
 
 
 def _write_pcm16_wav(path: Path, frames: list[float], sample_rate: int = SAMPLE_RATE) -> None:
@@ -96,12 +96,12 @@ def _sample_for(output_dir: Path) -> SampleInfo:
 
 def _write_notes(path: Path, rows: list[tuple[str, str, str]]) -> None:
     lines = [
-        "# SampleSmith Decent Sampler effects listening test pack",
+        "# SampleSmith DecentSampler effects listening test pack",
         "",
-        "Open each `.dspreset` in this folder in Decent Sampler and play around the on-screen C4 key.",
-        "All presets share `Samples/effects_test_C4.wav`. The presets are deliberately exaggerated; the goal is not taste, but to hear whether Decent Sampler applies the exported effect at all.",
+        "Open each `.dspreset` in this folder in DecentSampler and play around the on-screen C4 key.",
+        "All presets share `Samples/effects_test_C4.wav`. The presets are deliberately exaggerated; the goal is not taste, but to hear whether DecentSampler applies the exported effect at all.",
         "",
-        "If the dry control works but an effect preset sounds unchanged, note the Decent Sampler version and the preset name.",
+        "If the dry control works but an effect preset sounds unchanged, note the DecentSampler version and the preset name.",
         "",
         "| Preset | Effect under test | What to listen for |",
         "| --- | --- | --- |",
@@ -157,7 +157,7 @@ def build_pack(output_root: Path) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build a local Decent Sampler effects listening test pack.")
+    parser = argparse.ArgumentParser(description="Build a local DecentSampler effects listening test pack.")
     parser.add_argument(
         "output",
         nargs="?",
@@ -168,7 +168,7 @@ def main() -> None:
     args = parser.parse_args()
     build_pack(args.output.expanduser().resolve())
     print(f"Wrote effects test pack: {args.output.expanduser().resolve()}")
-    print("Open LISTENING_CHECKLIST.md in that folder, then open each .dspreset in Decent Sampler.")
+    print("Open LISTENING_CHECKLIST.md in that folder, then open each .dspreset in DecentSampler.")
 
 
 if __name__ == "__main__":

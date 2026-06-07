@@ -1,14 +1,14 @@
 # SampleSmith roadmap and wishlist
 
-SampleSmith is already useful as a small Decent Sampler instrument builder. This document collects the next ideas before they get lost. It is intentionally broader than the current implementation plan: some items are tiny polish tasks, some are proper feature projects, and some may turn out not to be worth doing.
+SampleSmith is already useful as a small DecentSampler instrument builder. This document collects the next ideas before they get lost. It is intentionally broader than the current implementation plan: some items are tiny polish tasks, some are proper feature projects, and some may turn out not to be worth doing.
 
 ## Current direction
 
-The goal is practical Decent Sampler instrument building for ordinary musicians and sound-tinkerers:
+The goal is practical DecentSampler instrument building for ordinary musicians and sound-tinkerers:
 
 - record or import sounds quickly
 - map them sensibly without needing to hand-write `.dspreset` XML
-- keep Decent Sampler output readable and portable
+- keep DecentSampler output readable and portable
 - help people make playable instruments from imperfect real-world recordings
 - stay focused on the graphical app rather than adding a separate command-line workflow
 
@@ -23,7 +23,7 @@ The goal is practical Decent Sampler instrument building for ordinary musicians 
 - show basic audio-file facts in the GUI: duration, sample rate, channels, peak level, RMS-ish loudness
 - make normalise/trim behaviour more visible and less surprising
 - preserve original recordings where useful, with processed/export-ready copies clearly marked
-- support FLAC as well as WAV where Decent Sampler/project workflow allows it
+- support FLAC as well as WAV where DecentSampler/project workflow allows it
 - improve stray-file review so imported audio files can be assigned to notes, pads, velocity layers, or round-robin takes
 - support replacing one recorded audio file without disturbing the rest of the instrument
 
@@ -34,13 +34,13 @@ Real sampled instruments often use multiple samples for the same note so repeate
 Wishlist:
 
 - allow each note/pad to hold multiple WAV takes
-- export multiple `<sample>` entries for the same key/root/range with Decent Sampler round-robin behaviour
+- export multiple `<sample>` entries for the same key/root/range with DecentSampler round-robin behaviour
 - show takes clearly in the mapping table
 - support add/remove/reorder takes
 - support naming takes, e.g. `soft`, `normal`, `bright`, `growly`, or `take 1/2/3`
 - decide how round-robin interacts with generated bridge WAVs
 - decide how round-robin interacts with velocity layers
-- optionally allow random or sequential playback mode if Decent Sampler supports both well enough
+- optionally allow random or sequential playback mode if DecentSampler supports both well enough
 
 ### 3. Waveform loop visualisation
 
@@ -112,17 +112,17 @@ Wishlist:
 - show detected pitch confidence
 - allow manual correction of detected note/root more elegantly
 - support non-standard tuning reference, e.g. A4 not exactly 440 Hz
-- support detune/cents correction in exported samples if Decent Sampler handles it cleanly
-- keep Decent Sampler's C4/key-72 convention clearly documented
+- support detune/cents correction in exported samples if DecentSampler handles it cleanly
+- keep DecentSampler's C4/key-72 convention clearly documented
 
-## Decent Sampler export polish
+## DecentSampler export polish
 
 - keep generated `.dspreset` XML readable and stable in diffs
-- continue testing effect parameter bindings against Decent Sampler itself
+- continue testing effect parameter bindings against DecentSampler itself
 - manage/copy convolution IR files into the exported instrument folder
-- consider a simple Decent Sampler UI theme/layout choice
+- consider a simple DecentSampler UI theme/layout choice
 - support more visible controls for sample start, loop, tone, envelope, and effects where bindings are verified
-- document which exported features need newer Decent Sampler versions
+- document which exported features need newer DecentSampler versions
 - add an export summary: samples, mappings, loops, effects, visible controls
 
 ## Reaper / DAW workflow ideas
@@ -136,7 +136,7 @@ Wishlist:
 ## Quality checks and tests
 
 - automated export smoke tests for `.dspreset` structure
-- tests for mapping ranges and Decent Sampler key convention
+- tests for mapping ranges and DecentSampler key convention
 - tests for project save/load compatibility
 - tests for WAV marker parsing
 - tests for round-robin and velocity-layer export once implemented
@@ -159,4 +159,4 @@ Wishlist:
 - Should original WAVs and processed WAVs both be kept, or is that too much clutter for early versions?
 - How much waveform editing should SampleSmith own, versus expecting Audacity/Reaper for heavy editing?
 - Should bridge audio remain a visible/manual feature only, or eventually become a more guided workflow?
-- How should SampleSmith present Decent Sampler features that are version-dependent or only partly documented?
+- How should SampleSmith present DecentSampler features that are version-dependent or only partly documented?

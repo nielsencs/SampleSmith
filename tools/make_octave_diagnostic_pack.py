@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Build a small Decent Sampler octave/MIDI diagnostic pack.
+"""Build a small DecentSampler octave/MIDI diagnostic pack.
 
-This confirms Decent Sampler standalone's screen-key numbering. Decent
+This confirms DecentSampler standalone's screen-key numbering. Decent
 Sampler uses key/root number 72 for its displayed C4 key. This pack uses a
 middle-C/C4 tone so the key-72 preset should play unshifted from DS C4.
 """
@@ -62,12 +62,12 @@ def _write_readme(path: Path) -> None:
             [
                 "# SampleSmith octave/MIDI diagnostic pack",
                 "",
-                "This pack confirms Decent Sampler standalone's screen-key/root-note convention.",
+                "This pack confirms DecentSampler standalone's screen-key/root-note convention.",
                 "",
                 "The WAV is a generated middle-C/C4 tone at about 261.63 Hz.",
-                "Decent Sampler `rootNote`, `loNote`, and `hiNote` are key/root numbers. Its screen keyboard labels key 72 as C4.",
+                "DecentSampler `rootNote`, `loNote`, and `hiNote` are key/root numbers. Its screen keyboard labels key 72 as C4.",
                 "",
-                "Open each preset in Decent Sampler standalone and click the on-screen C4 key:",
+                "Open each preset in DecentSampler standalone and click the on-screen C4 key:",
                 "",
                 "| Preset | rootNote | Expected result from DS C4 screen key |",
                 "| --- | ---: | --- |",
@@ -96,7 +96,7 @@ def build_pack(output_root: Path) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build a Decent Sampler octave/MIDI diagnostic pack.")
+    parser = argparse.ArgumentParser(description="Build a DecentSampler octave/MIDI diagnostic pack.")
     parser.add_argument(
         "output",
         nargs="?",
@@ -108,7 +108,7 @@ def main() -> None:
     output = args.output.expanduser().resolve()
     build_pack(output)
     print(f"Wrote octave diagnostic pack: {output}")
-    print("Open README.md in that folder, then test the two .dspreset files in Decent Sampler.")
+    print("Open README.md in that folder, then test the two .dspreset files in DecentSampler.")
 
 
 if __name__ == "__main__":

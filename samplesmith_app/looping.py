@@ -7,7 +7,7 @@ from pathlib import Path
 def read_wav_smpl_loop_points(path: Path) -> tuple[int, int] | None:
     """Read the first WAV smpl-loop start/end pair if present.
 
-    Decent Sampler can use embedded WAV loop markers when explicit loopStart /
+    DecentSampler can use embedded WAV loop markers when explicit loopStart /
     loopEnd attributes are absent. SampleSmith keeps this small parser as a safe
     dependency-free first step toward importing those markers into the GUI.
     """

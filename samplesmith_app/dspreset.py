@@ -1,4 +1,4 @@
-"""Decent Sampler .dspreset generation for SampleSmith."""
+"""DecentSampler .dspreset generation for SampleSmith."""
 
 from __future__ import annotations
 
