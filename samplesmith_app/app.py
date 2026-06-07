@@ -6,6 +6,7 @@ import json
 import math
 import re
 import queue
+import shutil
 import threading
 import time
 import tkinter as tk
@@ -47,6 +48,7 @@ class SampleSmithApp(tk.Tk):
         self._output_update_after_id: str | None = None
         self.pending_recording_review: dict[str, object] | None = None
         self._updating_review_trim_fields = False
+        self.selected_panel_kind: str | None = None
         self._build_ui()
         self.blank_project_data = self._project_data()
         self.after(100, self._drain_queue)
@@ -242,8 +244,6 @@ class SampleSmithApp(tk.Tk):
         self.note_tree.bind("<<TreeviewSelect>>", self._on_pitched_selection_changed)
         buttons = ttk.Frame(self.pitched_tab)
         buttons.pack(fill="x")
-        ttk.Button(buttons, text="Play selected reference", command=self._play_selected_reference).pack(side="left")
-        ttk.Button(buttons, text="Record selected sample", command=self._record_selected_note).pack(side="left", padx=6)
         ttk.Button(buttons, text="Record all missing", command=self._record_all_missing).pack(side="left")
         ttk.Button(buttons, text="Generate bridge WAVs", command=self._generate_bridge_wavs_now).pack(side="left", padx=6)
 
@@ -271,8 +271,18 @@ class SampleSmithApp(tk.Tk):
     def _build_recording_review_panel(self, parent) -> None:
         review = ttk.LabelFrame(parent, text="Selected sample")
         review.pack(side="right", fill="y", padx=(8, 0))
-        self.recording_review_status_var = tk.StringVar(value="No sample selected. Click a row with a WAV to review it here.")
-        ttk.Label(review, textvariable=self.recording_review_status_var, wraplength=260, justify="left").pack(fill="x", padx=8, pady=(8, 6))
+        self.selected_sample_title_var = tk.StringVar(value="Select a pitched note or pad")
+        ttk.Label(review, textvariable=self.selected_sample_title_var, wraplength=260, justify="left", font=("TkDefaultFont", 10, "bold")).pack(fill="x", padx=8, pady=(8, 4))
+        self.panel_action_buttons = []
+        for text, command in (
+            ("Play selected reference", self._play_panel_reference),
+            ("Record selected sample", self._record_panel_sample),
+        ):
+            button = ttk.Button(review, text=text, command=command)
+            button.pack(fill="x", padx=8, pady=(0, 4))
+            self.panel_action_buttons.append(button)
+        self.recording_review_status_var = tk.StringVar(value="No WAV loaded.")
+        ttk.Label(review, textvariable=self.recording_review_status_var, wraplength=260, justify="left").pack(fill="x", padx=8, pady=(2, 6))
 
         self.review_canvas_width = 260
         self.review_canvas_height = 120
@@ -302,14 +312,14 @@ class SampleSmithApp(tk.Tk):
             ("Play full", self._play_review_full),
             ("Play selection", self._play_review_selection),
             ("Keep selection", self._keep_review_recording),
-            ("Record take", self._record_review_take),
-            ("Clear", self._clear_review_recording),
+            ("Reset from backup", self._reset_review_recording),
         ):
             button = ttk.Button(review, text=text, command=command)
             button.pack(fill="x", padx=8, pady=(0, 4))
             self.recording_review_buttons.append(button)
-        self.recording_review_clear_button = self.recording_review_buttons[-1]
+        self.recording_review_reset_button = self.recording_review_buttons[-1]
         self._set_review_controls_enabled(False)
+        self._set_panel_action_controls_enabled(False, False)
 
     def _set_review_controls_enabled(self, enabled: bool) -> None:
         state = "normal" if enabled else "disabled"
@@ -319,6 +329,12 @@ class SampleSmithApp(tk.Tk):
             self.recording_review_end_spinbox.configure(state=state)
         for button in getattr(self, "recording_review_buttons", []):
             button.configure(state=state)
+
+    def _set_panel_action_controls_enabled(self, can_play_reference: bool, can_record: bool) -> None:
+        if not hasattr(self, "panel_action_buttons"):
+            return
+        self.panel_action_buttons[0].configure(state="normal" if can_play_reference else "disabled")
+        self.panel_action_buttons[1].configure(state="normal" if can_record else "disabled")
 
     def _build_decent_sampler_tab(self) -> None:
         ds_tabs = ttk.Notebook(self.decent_sampler_tab)
@@ -717,6 +733,32 @@ class SampleSmithApp(tk.Tk):
 
     def _sample_path(self, label: str) -> Path:
         return self._instrument_dir() / "Samples" / f"{slugify(self.name_var.get())}_{label}.wav"
+
+    def _backup_path_for_sample(self, path: Path) -> Path:
+        return path.parent / ".samplesmith-backups" / f"{path.name}.original.wav"
+
+    def _ensure_sample_backup(self, path: Path) -> Path | None:
+        if not path.exists():
+            return None
+        backup = self._backup_path_for_sample(path)
+        if not backup.exists():
+            backup.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, backup)
+            self._log(f"Saved original backup: {backup.relative_to(self._instrument_dir()) if backup.is_relative_to(self._instrument_dir()) else backup}")
+        return backup
+
+    def _restore_sample_backup(self, path: Path) -> bool:
+        backup = self._backup_path_for_sample(path)
+        if not backup.exists():
+            messagebox.showinfo("SampleSmith", "No original backup exists for this WAV yet.")
+            return False
+        shutil.copy2(backup, path)
+        self._log(f"Restored original WAV: {path.name}")
+        return True
+
+    def _write_reviewed_wav(self, path: Path, audio, sample_rate: int | None = None) -> None:
+        self._ensure_sample_backup(path)
+        self._audio().write_wav(path, audio, sample_rate=sample_rate)
 
     def _bridge_sample_path(self, target_note: int, low_root: int, high_root: int) -> Path:
         target = midi_to_name(target_note).replace("#", "sharp")
@@ -1376,8 +1418,15 @@ class SampleSmithApp(tk.Tk):
     def _on_pitched_selection_changed(self, _event=None) -> None:
         selected = self.note_tree.selection()
         if not selected:
+            self.selected_panel_kind = None
+            self.selected_sample_title_var.set("Select a pitched note or pad")
+            self._set_panel_action_controls_enabled(False, False)
             return
-        sample = self._sample_for_pitched_note(int(selected[0]))
+        self.selected_panel_kind = "pitched"
+        note = int(selected[0])
+        self.selected_sample_title_var.set(f"{midi_to_name(note)}")
+        self._set_panel_action_controls_enabled(True, True)
+        sample = self._sample_for_pitched_note(note)
         if sample is not None:
             self._load_existing_sample_for_review(sample, confirm_discard=False)
         else:
@@ -1393,12 +1442,66 @@ class SampleSmithApp(tk.Tk):
     def _on_pad_selection_changed(self, _event=None) -> None:
         selected = self.pad_tree.selection()
         if not selected:
+            self.selected_panel_kind = None
+            self.selected_sample_title_var.set("Select a pitched note or pad")
+            self._set_panel_action_controls_enabled(False, False)
             return
+        self.selected_panel_kind = "pad"
+        values = self.pad_tree.item(selected[0], "values")
+        title = str(values[1]) if len(values) > 1 else "Selected pad"
+        self.selected_sample_title_var.set(title)
+        self._set_panel_action_controls_enabled(False, True)
         sample = self._sample_for_pad_tree_item(selected[0])
         if sample is not None:
             self._load_existing_sample_for_review(sample, confirm_discard=False)
         else:
             self._clear_pending_recording_review()
+
+    def _selected_panel_pitched_note(self) -> int | None:
+        if self.selected_panel_kind != "pitched":
+            return None
+        selected = self.note_tree.selection()
+        if not selected:
+            return None
+        try:
+            return int(selected[0])
+        except ValueError:
+            return None
+
+    def _selected_panel_sample(self) -> SampleInfo | None:
+        note = self._selected_panel_pitched_note()
+        if note is not None:
+            return self._sample_for_pitched_note(note)
+        if self.selected_panel_kind == "pad":
+            selected_pad = self.pad_tree.selection()
+        else:
+            selected_pad = ()
+        if selected_pad:
+            return self._sample_for_pad_tree_item(selected_pad[0])
+        return None
+
+    def _play_panel_reference(self) -> None:
+        note = self._selected_panel_pitched_note()
+        if note is None:
+            return
+
+        def work():
+            self._audio().play_tone(note)
+            return f"Played {midi_to_name(note)}"
+
+        self._run_worker(f"Playing {midi_to_name(note)}", work)
+
+    def _record_panel_sample(self) -> None:
+        if self.pending_recording_review and self.pending_recording_review.get("on_record_take"):
+            self._record_review_take()
+            return
+        note = self._selected_panel_pitched_note()
+        if note is not None:
+            self._record_note(note)
+            return
+        sample = self._selected_panel_sample()
+        if sample is not None:
+            self._record_existing_sample_again(sample)
 
     def _record_all_missing(self) -> None:
         notes = [int(item) for item in self.note_tree.get_children() if not self.note_rows.get(int(item))]
@@ -1458,7 +1561,7 @@ class SampleSmithApp(tk.Tk):
 
             def apply():
                 def keep(reviewed):
-                    audio.write_wav(path, reviewed)
+                    self._write_reviewed_wav(path, reviewed)
                     self._upsert_sample(info)
                     self.note_rows[note] = str(path)
                     self._refresh_pitched_mappings()
@@ -1473,12 +1576,7 @@ class SampleSmithApp(tk.Tk):
                 def record_take():
                     self._record_note(note, after=after)
 
-                def clear():
-                    self._log(f"Discarded take for {note_name}")
-                    if after:
-                        after()
-
-                self._set_pending_recording_review(f"Review {note_name}", raw, selection, keep, record_take, clear, clear_label="Discard take")
+                self._set_pending_recording_review(f"Review {note_name}", raw, selection, keep, record_take)
             return apply
 
         self._run_worker(f"Recording {note_name}...", work)
@@ -1520,12 +1618,13 @@ class SampleSmithApp(tk.Tk):
             return
         try:
             raw, sample_rate = self._audio().read_audio(sample.path)
+            self._ensure_sample_backup(sample.path)
         except Exception as exc:
             messagebox.showerror("SampleSmith", f"Could not load this WAV for review:\n\n{exc}")
             return
 
         def keep(reviewed):
-            self._audio().write_wav(sample.path, reviewed, sample_rate=sample_rate)
+            self._write_reviewed_wav(sample.path, reviewed, sample_rate=sample_rate)
             preset = self._write_preset()
             self._auto_save_project()
             self._log(f"Updated reviewed WAV: {sample.path.name}")
@@ -1534,10 +1633,14 @@ class SampleSmithApp(tk.Tk):
         def record_take():
             self._record_existing_sample_again(sample)
 
-        def clear():
-            self._log(f"Cleared review of {sample.path.name}")
+        def reset():
+            if self._restore_sample_backup(sample.path):
+                preset = self._write_preset()
+                self._auto_save_project()
+                self._log(f"Updated DecentSampler patch: {preset.name}")
+                self._load_existing_sample_for_review(sample, confirm_discard=False)
 
-        self._set_pending_recording_review(f"Review {sample.label or sample.path.name}", raw, raw, keep, record_take, clear, sample_rate=sample_rate, clear_label="Clear")
+        self._set_pending_recording_review(f"Review {sample.label or sample.path.name}", raw, raw, keep, record_take, sample_rate=sample_rate, reset=reset)
 
     def _record_existing_sample_again(self, sample: SampleInfo) -> None:
         if sample.path.exists() and not messagebox.askokcancel("SampleSmith", f"Record a new take for {sample.path.name}? The WAV will not be replaced until you press Keep."):
@@ -1554,7 +1657,7 @@ class SampleSmithApp(tk.Tk):
 
             def apply():
                 def keep(reviewed):
-                    audio.write_wav(sample.path, reviewed, sample_rate=sample_rate)
+                    self._write_reviewed_wav(sample.path, reviewed, sample_rate=sample_rate)
                     preset = self._write_preset()
                     self._auto_save_project()
                     self._log(f"Updated reviewed WAV: {sample.path.name}")
@@ -1563,10 +1666,14 @@ class SampleSmithApp(tk.Tk):
                 def record_take():
                     self._record_existing_sample_again(sample)
 
-                def clear():
-                    self._log(f"Cleared review of {sample.path.name}")
+                def reset():
+                    if self._restore_sample_backup(sample.path):
+                        preset = self._write_preset()
+                        self._auto_save_project()
+                        self._log(f"Updated DecentSampler patch: {preset.name}")
+                        self._load_existing_sample_for_review(sample, confirm_discard=False)
 
-                self._set_pending_recording_review(f"Review {sample.label or sample.path.name}", raw, selection, keep, record_take, clear, sample_rate=sample_rate, clear_label="Discard take")
+                self._set_pending_recording_review(f"Review {sample.label or sample.path.name}", raw, selection, keep, record_take, sample_rate=sample_rate, reset=reset)
             return apply
 
         self._run_worker(f"Recording {sample.label or sample.path.name}...", work)
@@ -1576,14 +1683,14 @@ class SampleSmithApp(tk.Tk):
 
     def _review_status_text(self) -> str:
         if not self.pending_recording_review:
-            return "No sample selected. Click a row with a WAV to review it here."
+            return "No WAV loaded yet. Record sample to capture one, or select a row with an existing WAV."
         return (
             f"{self.pending_recording_review['title']} — "
             f"full {self._duration_text(self.pending_recording_review['raw_audio'], self.pending_recording_review['sample_rate'])}; "
             f"selection {self._duration_text(self._review_selected_audio(), self.pending_recording_review['sample_rate'])}"
         )
 
-    def _set_pending_recording_review(self, title: str, raw_audio, _selection_audio, on_keep, on_record_take, on_clear, sample_rate: int | None = None, clear_label: str = "Clear") -> None:
+    def _set_pending_recording_review(self, title: str, raw_audio, _selection_audio, on_keep, on_record_take, sample_rate: int | None = None, reset=None) -> None:
         end_frame = max(0, len(raw_audio))
         self.pending_recording_review = {
             "title": title,
@@ -1593,23 +1700,27 @@ class SampleSmithApp(tk.Tk):
             "trim_end": end_frame,
             "on_keep": on_keep,
             "on_record_take": on_record_take,
-            "on_clear": on_clear,
+            "on_reset": reset,
         }
         self._sync_review_trim_fields()
         self.recording_review_status_var.set(self._review_status_text())
-        self.recording_review_clear_button.configure(text=clear_label)
         self._set_review_controls_enabled(True)
+        self._refresh_reset_button_state()
         self._draw_review_waveform()
 
     def _clear_pending_recording_review(self) -> None:
         self.pending_recording_review = None
         self.recording_review_status_var.set(self._review_status_text())
-        if hasattr(self, "recording_review_clear_button"):
-            self.recording_review_clear_button.configure(text="Clear")
         self.recording_review_canvas.delete("all")
         self.recording_review_start_var.set(0)
         self.recording_review_end_var.set(0)
         self._set_review_controls_enabled(False)
+
+    def _refresh_reset_button_state(self) -> None:
+        if not hasattr(self, "recording_review_reset_button"):
+            return
+        can_reset = bool(self.pending_recording_review and self.pending_recording_review.get("on_reset"))
+        self.recording_review_reset_button.configure(state="normal" if can_reset else "disabled")
 
     def _sync_review_trim_fields(self) -> None:
         if not self.pending_recording_review:
@@ -1758,12 +1869,13 @@ class SampleSmithApp(tk.Tk):
         self._clear_pending_recording_review()
         on_record_take()
 
-    def _clear_review_recording(self) -> None:
+    def _reset_review_recording(self) -> None:
         if not self.pending_recording_review:
             return
-        on_clear = self.pending_recording_review["on_clear"]
-        self._clear_pending_recording_review()
-        on_clear()
+        on_reset = self.pending_recording_review.get("on_reset")
+        if not on_reset:
+            return
+        on_reset()
 
     def _record_pad(self) -> None:
         label = self.pad_label_var.get().strip()
@@ -1790,7 +1902,7 @@ class SampleSmithApp(tk.Tk):
 
             def apply():
                 def keep(reviewed):
-                    audio.write_wav(path, reviewed)
+                    self._write_reviewed_wav(path, reviewed)
                     self._upsert_sample(info)
                     self.pad_tree.insert("", "end", values=(midi_to_name(midi_note), label, path.name))
                     self.pad_label_var.set("")
@@ -1803,11 +1915,7 @@ class SampleSmithApp(tk.Tk):
                     self.pad_note -= 1
                     self._record_pad()
 
-                def clear():
-                    self.pad_note -= 1
-                    self._log(f"Discarded take for pad {label}")
-
-                self._set_pending_recording_review(f"Review pad {label}", raw, selection, keep, record_take, clear, clear_label="Discard take")
+                self._set_pending_recording_review(f"Review pad {label}", raw, selection, keep, record_take)
             return apply
 
         self._run_worker(f"Recording pad {label}...", work)

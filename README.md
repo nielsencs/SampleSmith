@@ -59,7 +59,7 @@ From this folder:
 python samplesmith.py
 ```
 
-Set the instrument name and output folder, choose **Pitched** or **Unpitched / Pads**, then record. By default, single recordings start immediately; enable **Confirm before recording** if you want the old ready-check prompt. Pitched recordings can also play a reference tone first, controlled by **Play reference before pitched recording**. After capture, the right-hand **Selected sample** panel lets you see the waveform, choose sample start/end, play the full take or selected region, keep the selection, record another take, or clear/discard the take. Click an existing pitched-sample or pad row to load its WAV into the same panel for playback, waveform trimming, or re-recording; clicking an empty row clears it. Starting a new recording into an existing filename still asks first. Each kept recording writes/updates both the `.dspreset` and the `.samplesmith.json` project file automatically; the generate/save buttons are there for manual regeneration.
+Set the instrument name and output folder, choose **Pitched** or **Unpitched / Pads**, then record. By default, single recordings start immediately; enable **Confirm before recording** if you want the old ready-check prompt. Pitched recordings can also play a reference tone first, controlled by **Play reference before pitched recording**. The right-hand **Selected sample** panel is the working area for the selected note or pad: play the reference tone, record the selected sample, see the waveform, choose sample start/end, play the full take or selected region, keep the selection, record another take, or reset an edited WAV from its original backup. Click an existing pitched-sample or pad row to load its WAV into the same panel for playback, waveform trimming, re-recording, or reset. Before SampleSmith overwrites an existing WAV from this panel, it keeps the original under `.samplesmith-backups/`. Starting a new recording into an existing filename still asks first. Each kept recording writes/updates both the `.dspreset` and the `.samplesmith.json` project file automatically; the generate/save buttons are there for manual regeneration.
 
 Use **New project** to clear the current app state and start a blank unsaved project; it does not delete saved projects or WAV files. If the current project has unsaved changes, SampleSmith asks whether to save, discard, or cancel first. New projects also avoid reusing an existing default project folder blindly. Use **Open project** to return to an existing SampleSmith project; it has the same save/discard/cancel guard.
 
@@ -135,7 +135,7 @@ SampleSmith is useful now, but still growing. The broader wishlist lives in [ROA
 
 Likely next steps:
 
-- sharpen WAV recording/review handling, including keep/redo/clear and quality checks
+- sharpen WAV recording/review handling, including waveform selection, original backups/reset, round-robin takes, and quality checks
 - add round-robin takes so one note or pad can have multiple natural-sounding sample variants
 - keep improving waveform loop visualisation beyond the first-pass loop/crossfade display
 - add more precise waveform zoom, marker dragging, nudging, and auditioning
