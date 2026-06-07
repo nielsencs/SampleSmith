@@ -1,6 +1,6 @@
 # SampleSmith roadmap and wishlist
 
-SampleSmith is already useful as a small GUI-first Decent Sampler instrument builder. This document collects the next ideas before they get lost. It is intentionally broader than the current implementation plan: some items are tiny polish tasks, some are proper feature projects, and some may turn out not to be worth doing.
+SampleSmith is already useful as a small Decent Sampler instrument builder. This document collects the next ideas before they get lost. It is intentionally broader than the current implementation plan: some items are tiny polish tasks, some are proper feature projects, and some may turn out not to be worth doing.
 
 ## Current direction
 
@@ -10,7 +10,7 @@ The goal is practical sampler-building for ordinary musicians and sound-tinkerer
 - map them sensibly without needing to hand-write `.dspreset` XML
 - keep Decent Sampler output readable and portable
 - help people make playable instruments from imperfect real-world recordings
-- stay GUI-first rather than becoming a command-line utility with a token window
+- stay focused on the graphical app rather than adding a separate command-line workflow
 
 ## Near-term priorities
 
