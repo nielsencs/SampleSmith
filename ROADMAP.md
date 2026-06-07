@@ -62,7 +62,7 @@ Once loop visualisation is clear, improve the editor.
 
 Wishlist:
 
-- zoom in/out around loop start and loop end independently
+- refine zoom controls around loop start and loop end, including possible independent start/end zoom levels
 - pan through a zoomed waveform
 - drag handles for sample start/end, loop start/end, and crossfade length
 - nudge selected marker by one sample / small time increment / larger time increment

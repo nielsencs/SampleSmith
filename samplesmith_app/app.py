@@ -1745,6 +1745,7 @@ class LoopEditorDialog(tk.Toplevel):
         self.canvas_height = 220
         self.zoom_width = 420
         self.zoom_height = 120
+        self.default_zoom_half_frames = 1200
         self.zoom_half_frames = 1200
         self.dragging: str | None = None
         self.audition_stop_event: threading.Event | None = None
@@ -1781,9 +1782,9 @@ class LoopEditorDialog(tk.Toplevel):
 
         zooms = ttk.Frame(outer)
         zooms.pack(fill="x", pady=(8, 0))
-        start_zoom = ttk.LabelFrame(zooms, text=f"Loop start close-up — click waveform to set (±{self.zoom_half_frames:,} frames)")
+        start_zoom = ttk.LabelFrame(zooms, text="Loop start close-up — click waveform to set")
         start_zoom.pack(side="left", fill="x", expand=True, padx=(0, 6))
-        end_zoom = ttk.LabelFrame(zooms, text=f"Loop end close-up — click waveform to set (±{self.zoom_half_frames:,} frames)")
+        end_zoom = ttk.LabelFrame(zooms, text="Loop end close-up — click waveform to set")
         end_zoom.pack(side="left", fill="x", expand=True, padx=(6, 0))
         self.start_zoom_canvas = tk.Canvas(start_zoom, width=self.zoom_width, height=self.zoom_height, bg="#101010", cursor="crosshair", highlightthickness=1, highlightbackground="#666666")
         self.start_zoom_canvas.pack(fill="x", padx=6, pady=6)
@@ -1791,6 +1792,15 @@ class LoopEditorDialog(tk.Toplevel):
         self.end_zoom_canvas.pack(fill="x", padx=6, pady=6)
         self.start_zoom_canvas.bind("<Button-1>", lambda event: self._set_zoom_frame("start", event.x))
         self.end_zoom_canvas.bind("<Button-1>", lambda event: self._set_zoom_frame("end", event.x))
+
+        zoom_controls = ttk.Frame(outer)
+        zoom_controls.pack(fill="x", pady=(6, 0))
+        ttk.Label(zoom_controls, text="Close-up zoom").pack(side="left")
+        ttk.Button(zoom_controls, text="−", width=3, command=self._zoom_in_closeups).pack(side="left", padx=(6, 2))
+        ttk.Button(zoom_controls, text="+", width=3, command=self._zoom_out_closeups).pack(side="left", padx=2)
+        ttk.Button(zoom_controls, text="Reset", command=self._reset_closeup_zoom).pack(side="left", padx=(2, 8))
+        self.zoom_status_var = tk.StringVar(value=self._zoom_status_text())
+        ttk.Label(zoom_controls, textvariable=self.zoom_status_var, foreground="#555555").pack(side="left")
 
         controls = ttk.Frame(outer)
         controls.pack(fill="x", pady=10)
@@ -1877,6 +1887,24 @@ class LoopEditorDialog(tk.Toplevel):
         if right <= left:
             right = min(self.frames - 1, left + 1)
         return left, right
+
+    def _zoom_status_text(self) -> str:
+        return f"±{self.zoom_half_frames:,} frames ({(self.zoom_half_frames / max(1, self.sample_rate)):.3f}s each side)"
+
+    def _set_closeup_zoom(self, half_frames: int) -> None:
+        self.zoom_half_frames = max(8, min(max(8, self.frames // 2), int(half_frames)))
+        if hasattr(self, "zoom_status_var"):
+            self.zoom_status_var.set(self._zoom_status_text())
+        self._draw()
+
+    def _zoom_in_closeups(self) -> None:
+        self._set_closeup_zoom(max(8, self.zoom_half_frames // 2))
+
+    def _zoom_out_closeups(self) -> None:
+        self._set_closeup_zoom(self.zoom_half_frames * 2)
+
+    def _reset_closeup_zoom(self) -> None:
+        self._set_closeup_zoom(self.default_zoom_half_frames)
 
     def _zoom_frame_for_x(self, center_frame: int, x: int) -> int:
         left, right = self._zoom_window(center_frame)
