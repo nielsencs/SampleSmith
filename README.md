@@ -4,7 +4,7 @@ SampleSmith is a GUI tool for turning recorded sounds into playable Decent Sampl
 
 It is built for the practical Reaper / Decent Sampler / Audacity sort of workflow: make a sound, record it, map it sensibly, and get a `.dspreset` plus WAV samples that can be opened in Decent Sampler.
 
-The aim is classic sampler usefulness rather than laboratory purity. If you only record one pitched sample, SampleSmith spreads it across the keyboard. If you record several, it maps them into overlapping ranges so each sample keeps its home note while still giving you the transformed low/high sampler sounds that can be musically useful.
+The aim is practical sample-instrument usefulness rather than laboratory purity. If you only record one pitched sample, SampleSmith spreads it across the keyboard. If you record several, it maps them into overlapping ranges so each sample keeps its home note while still giving you the transformed low/high sample-instrument sounds that can be musically useful.
 
 ## What it does
 
@@ -68,7 +68,7 @@ Use **Review stray WAVs** if you have copied or recorded WAV files into the curr
 Output defaults to:
 
 ```text
-captured-samplers/<InstrumentName>/
+samplesmith-projects/<InstrumentName>/
   <InstrumentName>.dspreset
   <InstrumentName>.samplesmith.json
   Samples/
@@ -98,7 +98,7 @@ This recreates `octave-diagnostic-pack/` with one generated middle-C/C4 tone sam
 
 ## Pitched mapping behaviour
 
-Default pitched behaviour is classic sampler spreading: SampleSmith generates a playable instrument from whatever samples have actually been recorded, even one sample.
+Default pitched behaviour is classic sample spreading: SampleSmith generates a playable instrument from whatever samples have actually been recorded, even one sample.
 
 - One recorded pitched sample maps across the whole keyboard.
 - Multiple pitched samples map from the previous recorded root note to the next recorded root note.

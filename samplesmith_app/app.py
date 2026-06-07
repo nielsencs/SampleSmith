@@ -54,8 +54,8 @@ class SampleSmithApp(tk.Tk):
 
         project = ttk.LabelFrame(outer, text="Project")
         project.pack(fill="x")
-        self.name_var = tk.StringVar(value="CarlSampler")
-        self.output_var = tk.StringVar(value=str(Path.cwd() / "captured-samplers"))
+        self.name_var = tk.StringVar(value="NewInstrument")
+        self.output_var = tk.StringVar(value=str(Path.cwd() / "samplesmith-projects"))
         self.sample_rate_var = tk.IntVar(value=DEFAULT_SAMPLE_RATE)
         self.record_seconds_var = tk.DoubleVar(value=4.0)
         self.threshold_var = tk.DoubleVar(value=-45.0)
@@ -163,7 +163,7 @@ class SampleSmithApp(tk.Tk):
         self.ds_knob_bit_crusher_rate_var = tk.BooleanVar(value=False)
         self.ds_knob_bit_crusher_mix_var = tk.BooleanVar(value=False)
 
-        ttk.Label(project, text="Name").grid(row=0, column=0, sticky="w")
+        ttk.Label(project, text="Instrument name").grid(row=0, column=0, sticky="w")
         ttk.Entry(project, textvariable=self.name_var, width=28).grid(row=0, column=1, sticky="ew", padx=4)
         ttk.Label(project, text="Output").grid(row=0, column=2, sticky="w")
         ttk.Entry(project, textvariable=self.output_var, width=46).grid(row=0, column=3, sticky="ew", padx=4)
@@ -803,7 +803,7 @@ class SampleSmithApp(tk.Tk):
     def _new_project_data(self) -> dict[str, object]:
         data = dict(self.blank_project_data)
         data["output"] = self.output_var.get()
-        base_name = str(data.get("name", "CarlSampler") or "CarlSampler")
+        base_name = str(data.get("name", "NewInstrument") or "NewInstrument")
         name = base_name
         suffix = 2
         while self._project_path_for_name(name, str(data["output"])).exists():
@@ -998,8 +998,8 @@ class SampleSmithApp(tk.Tk):
     def _load_project_data(self, data: dict[str, object], project_path: Path | None) -> None:
         data = self._migrate_project_note_convention(data)
         self.project_path = project_path
-        self.name_var.set(str(data.get("name", "CarlSampler")))
-        self.output_var.set(str(data.get("output", str(Path.cwd() / "captured-samplers"))))
+        self.name_var.set(str(data.get("name", "NewInstrument")))
+        self.output_var.set(str(data.get("output", str(Path.cwd() / "samplesmith-projects"))))
         self.sample_rate_var.set(int(data.get("sample_rate", DEFAULT_SAMPLE_RATE)))
         self.record_seconds_var.set(float(data.get("record_seconds", 4.0)))
         self.threshold_var.set(float(data.get("trim_threshold_db", -45.0)))
@@ -1256,7 +1256,7 @@ class SampleSmithApp(tk.Tk):
             lo, hi = ranges[note]
             self.note_rows[note] = ""
             self.note_tree.insert("", "end", iid=iid, values=(midi_to_name(note), mapping_text(lo, hi), ""))
-        self._log("Built note list with full-keyboard sampler mapping")
+        self._log("Built note list with full-keyboard sample mapping")
 
     def _selected_note(self) -> int | None:
         selected = self.note_tree.selection()
@@ -1339,7 +1339,7 @@ class SampleSmithApp(tk.Tk):
                 mapped = next(sample for sample in self.samples if sample.mode == "pitched" and sample.root_note == note)
                 preset = self._write_preset()
                 self._log(f"Recorded {note_name}: {path.name} — maps {mapping_text(mapped.lo_note, mapped.hi_note)}")
-                self._log(f"Updated Decent Sampler instrument: {preset.name}")
+                self._log(f"Updated Decent Sampler patch: {preset.name}")
                 self._auto_save_project()
                 if after:
                     after()
@@ -1377,7 +1377,7 @@ class SampleSmithApp(tk.Tk):
                 self.pad_label_var.set("")
                 preset = self._write_preset()
                 self._log(f"Recorded pad {midi_to_name(midi_note)}: {path.name}")
-                self._log(f"Updated Decent Sampler instrument: {preset.name}")
+                self._log(f"Updated Decent Sampler patch: {preset.name}")
                 self._auto_save_project()
             return apply
 
@@ -1697,7 +1697,7 @@ class SampleSmithApp(tk.Tk):
             self._auto_save_project()
             return
         preset = self._write_preset()
-        self._log(f"Updated Decent Sampler instrument: {preset.name}")
+        self._log(f"Updated Decent Sampler patch: {preset.name}")
         self._auto_save_project()
 
     def _generate_preset(self) -> None:

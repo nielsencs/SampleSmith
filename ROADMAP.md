@@ -4,7 +4,7 @@ SampleSmith is already useful as a small Decent Sampler instrument builder. This
 
 ## Current direction
 
-The goal is practical sampler-building for ordinary musicians and sound-tinkerers:
+The goal is practical sample-instrument building for ordinary musicians and sound-tinkerers:
 
 - record or import sounds quickly
 - map them sensibly without needing to hand-write `.dspreset` XML
@@ -70,7 +70,7 @@ Wishlist:
 - keyboard shortcuts for play/stop, zoom, nudge, and marker selection
 - undo/redo for loop edits
 
-## Medium-term sampler features
+## Medium-term instrument features
 
 ### Velocity layers
 
