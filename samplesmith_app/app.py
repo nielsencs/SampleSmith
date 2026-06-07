@@ -45,6 +45,7 @@ class SampleSmithApp(tk.Tk):
         self.export_samples_by_iid: dict[str, SampleInfo] = {}
         self.pad_note = DEFAULT_PAD_START_NOTE
         self._output_update_after_id: str | None = None
+        self.pending_recording_review: dict[str, object] | None = None
         self._build_ui()
         self.blank_project_data = self._project_data()
         self.after(100, self._drain_queue)
@@ -196,6 +197,7 @@ class SampleSmithApp(tk.Tk):
         self._build_pads_tab()
         self._build_decent_sampler_tab()
         self._bind_output_parameter_traces()
+        self._build_recording_review_panel(outer)
 
         bottom = ttk.Frame(outer)
         bottom.pack(fill="x")
@@ -260,6 +262,36 @@ class SampleSmithApp(tk.Tk):
         self.pad_tree.column("label", width=160, stretch=False)
         self.pad_tree.column("file", width=520)
         self.pad_tree.pack(fill="both", expand=True, pady=8)
+
+    def _build_recording_review_panel(self, parent) -> None:
+        review = ttk.LabelFrame(parent, text="Recording review")
+        review.pack(fill="x", pady=(0, 8))
+        self.recording_review_status_var = tk.StringVar(value="No recording waiting. Record a note or pad, then review it here.")
+        ttk.Label(review, textvariable=self.recording_review_status_var).pack(side="left", padx=(6, 10), pady=6)
+        ttk.Label(review, text="Trim dB").pack(side="left")
+        self.recording_review_trim_var = tk.DoubleVar(value=self.threshold_var.get())
+        self.recording_review_trim_spinbox = ttk.Spinbox(review, textvariable=self.recording_review_trim_var, from_=-80, to=-10, increment=1, width=8)
+        self.recording_review_trim_spinbox.pack(side="left", padx=4)
+        self.recording_review_buttons = []
+        for text, command in (
+            ("Play raw", self._play_review_raw),
+            ("Play trimmed", self._play_review_trimmed),
+            ("Trim again", self._trim_review_again),
+            ("Keep", self._keep_review_recording),
+            ("Redo", self._redo_review_recording),
+            ("Skip", self._skip_review_recording),
+        ):
+            button = ttk.Button(review, text=text, command=command)
+            button.pack(side="left", padx=(2, 0))
+            self.recording_review_buttons.append(button)
+        self._set_review_controls_enabled(False)
+
+    def _set_review_controls_enabled(self, enabled: bool) -> None:
+        state = "normal" if enabled else "disabled"
+        if hasattr(self, "recording_review_trim_spinbox"):
+            self.recording_review_trim_spinbox.configure(state=state)
+        for button in getattr(self, "recording_review_buttons", []):
+            button.configure(state=state)
 
     def _build_decent_sampler_tab(self) -> None:
         ds_tabs = ttk.Notebook(self.decent_sampler_tab)
@@ -1365,50 +1397,132 @@ class SampleSmithApp(tk.Tk):
             info = SampleInfo(path=path, root_note=note, lo_note=lo, hi_note=hi, label=note_name, mode="pitched")
 
             def apply():
-                action, reviewed = self._review_recording(f"Review {note_name}", raw, trimmed)
-                if action == "redo":
+                def keep(reviewed):
+                    audio.write_wav(path, reviewed)
+                    self._upsert_sample(info)
+                    self.note_rows[note] = str(path)
+                    self._refresh_pitched_mappings()
+                    mapped = next(sample for sample in self.samples if sample.mode == "pitched" and sample.root_note == note)
+                    preset = self._write_preset()
+                    self._log(f"Recorded {note_name}: {path.name} — maps {mapping_text(mapped.lo_note, mapped.hi_note)}")
+                    self._log(f"Updated DecentSampler patch: {preset.name}")
+                    self._auto_save_project()
+                    if after:
+                        after()
+
+                def redo():
                     self._record_note(note, after=after)
-                    return
-                if action == "skip":
+
+                def skip():
                     self._log(f"Skipped {note_name}")
                     if after:
                         after()
-                    return
-                audio.write_wav(path, reviewed)
-                self._upsert_sample(info)
-                self.note_rows[note] = str(path)
-                self._refresh_pitched_mappings()
-                mapped = next(sample for sample in self.samples if sample.mode == "pitched" and sample.root_note == note)
-                preset = self._write_preset()
-                self._log(f"Recorded {note_name}: {path.name} — maps {mapping_text(mapped.lo_note, mapped.hi_note)}")
-                self._log(f"Updated DecentSampler patch: {preset.name}")
-                self._auto_save_project()
-                if after:
-                    after()
+
+                self._set_pending_recording_review(f"Review {note_name}", raw, trimmed, keep, redo, skip)
             return apply
 
         self._run_worker(f"Recording {note_name}...", work)
 
     def _confirm_recording(self, prompt: str, path: Path) -> bool:
+        if self.pending_recording_review and not messagebox.askokcancel(
+            "SampleSmith",
+            "There is already a recording waiting in the Recording review panel. Discard it and start another recording?",
+        ):
+            return False
+        if self.pending_recording_review:
+            self._clear_pending_recording_review()
         if path.exists():
             return messagebox.askokcancel("SampleSmith", f"{path.name} already exists. Replace it?\n\n{prompt}")
         if self.confirm_before_record_var.get():
             return messagebox.askokcancel("SampleSmith", prompt)
         return True
 
-    def _review_recording(self, title: str, raw_audio, trimmed_audio):
-        dialog = RecordingReviewDialog(
-            self,
-            title=title,
-            raw_audio=raw_audio,
-            trimmed_audio=trimmed_audio,
-            audio_factory=self._audio,
-            trim_threshold_db=float(self.threshold_var.get()),
+    def _duration_text(self, audio, sample_rate: int | None = None) -> str:
+        return f"{len(audio) / max(1, int(sample_rate or self.sample_rate_var.get())):.2f}s"
+
+    def _review_status_text(self) -> str:
+        if not self.pending_recording_review:
+            return "No recording waiting. Record a note or pad, then review it here."
+        return (
+            f"{self.pending_recording_review['title']} — "
+            f"raw {self._duration_text(self.pending_recording_review['raw_audio'], self.pending_recording_review['sample_rate'])}; "
+            f"trimmed {self._duration_text(self.pending_recording_review['trimmed_audio'], self.pending_recording_review['sample_rate'])}"
         )
-        self.wait_window(dialog)
-        action, reviewed_audio, trim_threshold_db = dialog.result
-        self.threshold_var.set(trim_threshold_db)
-        return action, reviewed_audio
+
+    def _set_pending_recording_review(self, title: str, raw_audio, trimmed_audio, on_keep, on_redo, on_skip) -> None:
+        self.pending_recording_review = {
+            "title": title,
+            "raw_audio": raw_audio,
+            "trimmed_audio": trimmed_audio,
+            "sample_rate": int(self.sample_rate_var.get()),
+            "on_keep": on_keep,
+            "on_redo": on_redo,
+            "on_skip": on_skip,
+        }
+        self.recording_review_trim_var.set(float(self.threshold_var.get()))
+        self.recording_review_status_var.set(self._review_status_text())
+        self._set_review_controls_enabled(True)
+
+    def _clear_pending_recording_review(self) -> None:
+        self.pending_recording_review = None
+        self.recording_review_status_var.set(self._review_status_text())
+        self._set_review_controls_enabled(False)
+
+    def _play_review_audio(self, which: str) -> None:
+        if not self.pending_recording_review:
+            return
+        audio = self.pending_recording_review[which]
+
+        def work():
+            try:
+                self._audio().play_audio(audio)
+            except Exception as exc:
+                self.after(0, lambda: messagebox.showerror("SampleSmith", f"Could not play recording:\n\n{exc}"))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _play_review_raw(self) -> None:
+        self._play_review_audio("raw_audio")
+
+    def _play_review_trimmed(self) -> None:
+        self._play_review_audio("trimmed_audio")
+
+    def _trim_review_again(self) -> None:
+        if not self.pending_recording_review:
+            return
+        try:
+            engine = self._audio()
+            engine.trim_threshold_db = float(self.recording_review_trim_var.get())
+            self.pending_recording_review["trimmed_audio"] = engine.trim(self.pending_recording_review["raw_audio"])
+            self.threshold_var.set(float(self.recording_review_trim_var.get()))
+            self.recording_review_status_var.set(self._review_status_text())
+        except Exception as exc:
+            messagebox.showerror("SampleSmith", f"Could not trim recording:\n\n{exc}")
+
+    def _keep_review_recording(self) -> None:
+        if not self.pending_recording_review:
+            return
+        reviewed = self.pending_recording_review["trimmed_audio"]
+        on_keep = self.pending_recording_review["on_keep"]
+        self.threshold_var.set(float(self.recording_review_trim_var.get()))
+        self._clear_pending_recording_review()
+        on_keep(reviewed)
+
+    def _redo_review_recording(self) -> None:
+        if not self.pending_recording_review:
+            return
+        on_redo = self.pending_recording_review["on_redo"]
+        self.threshold_var.set(float(self.recording_review_trim_var.get()))
+        self._clear_pending_recording_review()
+        on_redo()
+
+    def _skip_review_recording(self) -> None:
+        if not self.pending_recording_review:
+            return
+        on_skip = self.pending_recording_review["on_skip"]
+        self.threshold_var.set(float(self.recording_review_trim_var.get()))
+        self._clear_pending_recording_review()
+        on_skip()
 
     def _record_pad(self) -> None:
         label = self.pad_label_var.get().strip()
@@ -1434,23 +1548,25 @@ class SampleSmithApp(tk.Tk):
             info = SampleInfo(path=path, root_note=midi_note, lo_note=midi_note, hi_note=midi_note, label=label, mode="pad")
 
             def apply():
-                action, reviewed = self._review_recording(f"Review pad {label}", raw, trimmed)
-                if action == "redo":
+                def keep(reviewed):
+                    audio.write_wav(path, reviewed)
+                    self._upsert_sample(info)
+                    self.pad_tree.insert("", "end", values=(midi_to_name(midi_note), label, path.name))
+                    self.pad_label_var.set("")
+                    preset = self._write_preset()
+                    self._log(f"Recorded pad {midi_to_name(midi_note)}: {path.name}")
+                    self._log(f"Updated DecentSampler patch: {preset.name}")
+                    self._auto_save_project()
+
+                def redo():
                     self.pad_note -= 1
                     self._record_pad()
-                    return
-                if action == "skip":
+
+                def skip():
                     self.pad_note -= 1
                     self._log(f"Skipped pad {label}")
-                    return
-                audio.write_wav(path, reviewed)
-                self._upsert_sample(info)
-                self.pad_tree.insert("", "end", values=(midi_to_name(midi_note), label, path.name))
-                self.pad_label_var.set("")
-                preset = self._write_preset()
-                self._log(f"Recorded pad {midi_to_name(midi_note)}: {path.name}")
-                self._log(f"Updated DecentSampler patch: {preset.name}")
-                self._auto_save_project()
+
+                self._set_pending_recording_review(f"Review pad {label}", raw, trimmed, keep, redo, skip)
             return apply
 
         self._run_worker(f"Recording pad {label}...", work)
@@ -1780,80 +1896,6 @@ class SampleSmithApp(tk.Tk):
         self._log(f"Generated {preset}")
         messagebox.showinfo("SampleSmith", f"Generated:\n{preset}")
 
-
-class RecordingReviewDialog(tk.Toplevel):
-    def __init__(self, parent, *, title: str, raw_audio, trimmed_audio, audio_factory, trim_threshold_db: float) -> None:
-        super().__init__(parent)
-        self.title(title)
-        self.transient(parent)
-        self.grab_set()
-        self.raw_audio = raw_audio
-        self.trimmed_audio = trimmed_audio
-        self.audio_factory = audio_factory
-        self.trim_threshold_var = tk.DoubleVar(value=trim_threshold_db)
-        self.result = ("skip", trimmed_audio, trim_threshold_db)
-
-        outer = ttk.Frame(self, padding=10)
-        outer.pack(fill="both", expand=True)
-        ttk.Label(outer, text="Review the recording before SampleSmith writes the WAV.").pack(anchor="w")
-        self.status_var = tk.StringVar(value=self._status_text())
-        ttk.Label(outer, textvariable=self.status_var, foreground="#555555").pack(anchor="w", pady=(2, 8))
-
-        trim_row = ttk.Frame(outer)
-        trim_row.pack(fill="x", pady=(0, 8))
-        ttk.Label(trim_row, text="Trim dB").pack(side="left")
-        ttk.Spinbox(trim_row, textvariable=self.trim_threshold_var, from_=-80, to=-10, increment=1, width=8).pack(side="left", padx=4)
-        ttk.Button(trim_row, text="Trim again", command=self._trim_again).pack(side="left", padx=(4, 0))
-
-        play_row = ttk.Frame(outer)
-        play_row.pack(fill="x", pady=(0, 10))
-        ttk.Button(play_row, text="Play raw", command=lambda: self._play(self.raw_audio)).pack(side="left")
-        ttk.Button(play_row, text="Play trimmed", command=lambda: self._play(self.trimmed_audio)).pack(side="left", padx=6)
-
-        buttons = ttk.Frame(outer)
-        buttons.pack(fill="x")
-        ttk.Button(buttons, text="Keep trimmed", command=self._keep).pack(side="left")
-        ttk.Button(buttons, text="Redo", command=self._redo).pack(side="left", padx=6)
-        ttk.Button(buttons, text="Skip", command=self._skip).pack(side="left")
-
-        self.protocol("WM_DELETE_WINDOW", self._skip)
-
-    def _duration(self, audio) -> float:
-        sample_rate = max(1, int(self.audio_factory().sample_rate))
-        return len(audio) / sample_rate
-
-    def _status_text(self) -> str:
-        return f"Raw {self._duration(self.raw_audio):.2f}s; trimmed {self._duration(self.trimmed_audio):.2f}s"
-
-    def _play(self, audio) -> None:
-        def work():
-            try:
-                self.audio_factory().play_audio(audio)
-            except Exception as exc:
-                self.after(0, lambda: messagebox.showerror("SampleSmith", f"Could not play recording:\n\n{exc}"))
-
-        threading.Thread(target=work, daemon=True).start()
-
-    def _trim_again(self) -> None:
-        try:
-            engine = self.audio_factory()
-            engine.trim_threshold_db = float(self.trim_threshold_var.get())
-            self.trimmed_audio = engine.trim(self.raw_audio)
-            self.status_var.set(self._status_text())
-        except Exception as exc:
-            messagebox.showerror("SampleSmith", f"Could not trim recording:\n\n{exc}")
-
-    def _keep(self) -> None:
-        self.result = ("keep", self.trimmed_audio, float(self.trim_threshold_var.get()))
-        self.destroy()
-
-    def _redo(self) -> None:
-        self.result = ("redo", self.trimmed_audio, float(self.trim_threshold_var.get()))
-        self.destroy()
-
-    def _skip(self) -> None:
-        self.result = ("skip", self.trimmed_audio, float(self.trim_threshold_var.get()))
-        self.destroy()
 
 
 class LoopEditorDialog(tk.Toplevel):
