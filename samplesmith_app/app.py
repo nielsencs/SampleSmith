@@ -61,6 +61,8 @@ class SampleSmithApp(tk.Tk):
         self.record_seconds_var = tk.DoubleVar(value=4.0)
         self.threshold_var = tk.DoubleVar(value=-45.0)
         self.normalise_var = tk.BooleanVar(value=True)
+        self.confirm_before_record_var = tk.BooleanVar(value=False)
+        self.play_reference_before_record_var = tk.BooleanVar(value=True)
         self.loop_enabled_var = tk.BooleanVar(value=False)
         self.loop_start_var = tk.StringVar(value="")
         self.loop_end_var = tk.StringVar(value="")
@@ -178,6 +180,8 @@ class SampleSmithApp(tk.Tk):
         ttk.Button(project, text="Open project", command=self._open_project_dialog).grid(row=2, column=1, sticky="w", pady=(6, 0), padx=4)
         ttk.Button(project, text="Save project", command=self._save_project_dialog).grid(row=2, column=2, sticky="w", pady=(6, 0), padx=4)
         ttk.Button(project, text="Review stray audio", command=self._review_stray_wavs).grid(row=2, column=3, sticky="w", pady=(6, 0), padx=4)
+        ttk.Checkbutton(project, text="Confirm before recording", variable=self.confirm_before_record_var).grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        ttk.Checkbutton(project, text="Play reference before pitched recording", variable=self.play_reference_before_record_var).grid(row=3, column=2, columnspan=3, sticky="w", pady=(6, 0), padx=4)
         project.columnconfigure(3, weight=1)
 
         tabs = ttk.Notebook(outer)
@@ -684,6 +688,8 @@ class SampleSmithApp(tk.Tk):
             "record_seconds": self.record_seconds_var.get(),
             "trim_threshold_db": self.threshold_var.get(),
             "normalise": self.normalise_var.get(),
+            "confirm_before_record": self.confirm_before_record_var.get(),
+            "play_reference_before_record": self.play_reference_before_record_var.get(),
             "loop_enabled": self.loop_enabled_var.get(),
             "loop_start": self.loop_start_var.get(),
             "loop_end": self.loop_end_var.get(),
@@ -1028,6 +1034,8 @@ class SampleSmithApp(tk.Tk):
         self.record_seconds_var.set(float(data.get("record_seconds", 4.0)))
         self.threshold_var.set(float(data.get("trim_threshold_db", -45.0)))
         self.normalise_var.set(bool(data.get("normalise", True)))
+        self.confirm_before_record_var.set(bool(data.get("confirm_before_record", False)))
+        self.play_reference_before_record_var.set(bool(data.get("play_reference_before_record", True)))
         self.loop_enabled_var.set(bool(data.get("loop_enabled", False)))
         self.loop_start_var.set(str(data.get("loop_start", "") or ""))
         self.loop_end_var.set(str(data.get("loop_end", "") or ""))
@@ -1341,14 +1349,15 @@ class SampleSmithApp(tk.Tk):
 
     def _record_note(self, note: int, after=None) -> None:
         note_name = midi_to_name(note)
-        if not messagebox.askokcancel("SampleSmith", f"Ready to record {note_name}? I will play the reference first."):
-            return
         path = self._sample_path(note_name.replace("#", "sharp"))
+        if not self._confirm_recording(f"Ready to record {note_name}?", path):
+            return
 
         def work():
             audio = self._audio()
-            audio.play_tone(note)
-            time.sleep(0.3)
+            if self.play_reference_before_record_var.get():
+                audio.play_tone(note)
+                time.sleep(0.3)
             raw = audio.record(self.record_seconds_var.get())
             trimmed = audio.trim(raw)
             audio.write_wav(path, trimmed)
@@ -1371,6 +1380,13 @@ class SampleSmithApp(tk.Tk):
 
         self._run_worker(f"Recording {note_name}...", work)
 
+    def _confirm_recording(self, prompt: str, path: Path) -> bool:
+        if path.exists():
+            return messagebox.askokcancel("SampleSmith", f"{path.name} already exists. Replace it?\n\n{prompt}")
+        if self.confirm_before_record_var.get():
+            return messagebox.askokcancel("SampleSmith", prompt)
+        return True
+
     def _record_pad(self) -> None:
         label = self.pad_label_var.get().strip()
         if not label:
@@ -1384,7 +1400,7 @@ class SampleSmithApp(tk.Tk):
         midi_note = self.pad_note
         self.pad_note += 1
         path = self._sample_path(f"pad_{midi_to_name(midi_note).replace('#', 'sharp')}_{slugify(label)}")
-        if not messagebox.askokcancel("SampleSmith", f"Ready to record pad {midi_to_name(midi_note)}: {label}?"):
+        if not self._confirm_recording(f"Ready to record pad {midi_to_name(midi_note)}: {label}?", path):
             self.pad_note -= 1
             return
 

@@ -16,7 +16,7 @@ The goal is practical DecentSampler instrument building for ordinary musicians a
 
 ### 1. Sharpen recording and file handling
 
-- remove unnecessary preamble/friction for straightforward single-sample recording
+- continue reducing unnecessary preamble/friction for straightforward single-sample recording
 - clearer keep / redo / skip controls after recording a note or pad
 - make it easier to record several takes for the same note
 - review samples for clipping, very low level, silence, and too-short recordings
