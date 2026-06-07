@@ -23,7 +23,7 @@ The goal is practical Decent Sampler instrument building for ordinary musicians 
 - show basic audio-file facts in the GUI: duration, sample rate, channels, peak level, RMS-ish loudness
 - make normalise/trim behaviour more visible and less surprising
 - preserve original recordings where useful, with processed/export-ready copies clearly marked
-- support flac as well as WAV where Decent Sampler/project workflow allows it
+- support FLAC as well as WAV where Decent Sampler/project workflow allows it
 - improve stray-file review so imported audio files can be assigned to notes, pads, velocity layers, or round-robin takes
 - support replacing one recorded audio file without disturbing the rest of the instrument
 
@@ -101,7 +101,7 @@ Wishlist:
 
 ### Import-first workflow
 
-- import a folder of WAV/flac files and infer notes from filenames where possible
+- import a folder of WAV/FLAC files and infer notes from filenames where possible
 - have stray-audio review guess the likely note/root from filenames before asking the user
 - support common filename patterns like `Instrument_C3_01.wav`, `C#4_rr2.wav`, `note60_vel90.wav`, or `root_72_take_2.flac`
 - offer a review screen before accepting inferred mappings
