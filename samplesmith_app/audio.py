@@ -40,9 +40,9 @@ class AudioEngine:
         sd.play(audio, self.sample_rate)
         sd.wait()
 
-    def play_audio(self, audio) -> None:
+    def play_audio(self, audio, sample_rate: int | None = None) -> None:
         _, sd, _ = self._deps()
-        sd.play(audio, self.sample_rate)
+        sd.play(audio, sample_rate or self.sample_rate)
         sd.wait()
 
     def record(self, seconds: float):
@@ -78,10 +78,15 @@ class AudioEngine:
                 trimmed = (trimmed / peak * 0.9).astype(np.float32)
         return trimmed
 
-    def write_wav(self, path: Path, audio) -> None:
+    def write_wav(self, path: Path, audio, sample_rate: int | None = None) -> None:
         _, _, sf = self._deps()
         path.parent.mkdir(parents=True, exist_ok=True)
-        sf.write(path, audio, self.sample_rate, subtype="PCM_24")
+        sf.write(path, audio, sample_rate or self.sample_rate, subtype="PCM_24")
+
+    def read_audio(self, path: Path):
+        _, _, sf = self._deps()
+        audio, sample_rate = sf.read(path, always_2d=False, dtype="float32")
+        return audio, int(sample_rate)
 
     def detect_pitch(self, audio) -> float | None:
         np, _, _ = self._deps()
