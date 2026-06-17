@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import queue
 import shutil
@@ -50,9 +51,20 @@ class SampleSmithApp(tk.Tk):
         self._updating_review_trim_fields = False
         self.selected_panel_kind: str | None = None
         self._review_load_token = 0
+        self._queue_after_id: str | None = None
         self._build_ui()
         self.blank_project_data = self._project_data()
-        self.after(100, self._drain_queue)
+        self.after_idle(self._open_last_project_if_available)
+        self._queue_after_id = self.after(100, self._drain_queue)
+
+    def destroy(self) -> None:
+        if self._queue_after_id is not None:
+            try:
+                self.after_cancel(self._queue_after_id)
+            except tk.TclError:
+                pass
+            self._queue_after_id = None
+        super().destroy()
 
     def _build_ui(self) -> None:
         outer = ttk.Frame(self, padding=10)
@@ -186,7 +198,7 @@ class SampleSmithApp(tk.Tk):
         ttk.OptionMenu(project, self.sample_format_var, self.sample_format_var.get(), "flac", "wav").grid(row=2, column=1, sticky="w", pady=(6, 0), padx=4)
         ttk.Button(project, text="New project", command=self._new_project).grid(row=2, column=2, sticky="w", pady=(6, 0), padx=4)
         ttk.Button(project, text="Open project", command=self._open_project_dialog).grid(row=2, column=3, sticky="w", pady=(6, 0), padx=4)
-        ttk.Button(project, text="Save project", command=self._save_project_dialog).grid(row=2, column=4, sticky="w", pady=(6, 0), padx=4)
+        ttk.Button(project, text="Save project", command=self._save_project_command).grid(row=2, column=4, sticky="w", pady=(6, 0), padx=4)
         ttk.Button(project, text="Review stray audio", command=self._review_stray_wavs).grid(row=3, column=3, sticky="w", pady=(6, 0), padx=4)
         ttk.Checkbutton(project, text="Confirm before recording", variable=self.confirm_before_record_var).grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
         ttk.Checkbutton(project, text="Play reference before pitched recording", variable=self.play_reference_before_record_var).grid(row=3, column=2, sticky="w", pady=(6, 0), padx=4)
@@ -918,7 +930,47 @@ class SampleSmithApp(tk.Tk):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(self._project_data(), indent=2), encoding="utf-8")
         self.project_path = target
+        self._remember_last_project(target)
         return target
+
+    def _settings_path(self) -> Path:
+        override = os.environ.get("SAMPLESMITH_SETTINGS_PATH")
+        if override:
+            return Path(override).expanduser()
+        return Path.home() / ".samplesmith" / "settings.json"
+
+    def _remember_last_project(self, path: Path) -> None:
+        try:
+            settings_path = self._settings_path()
+            settings_path.parent.mkdir(parents=True, exist_ok=True)
+            settings_path.write_text(json.dumps({"last_project": str(path.expanduser())}, indent=2), encoding="utf-8")
+        except Exception as exc:
+            self._log(f"Could not remember last project: {exc}")
+
+    def _last_project_path(self) -> Path | None:
+        try:
+            settings_path = self._settings_path()
+            if not settings_path.exists():
+                return None
+            value = json.loads(settings_path.read_text(encoding="utf-8")).get("last_project")
+            if not value:
+                return None
+            path = Path(str(value)).expanduser()
+            return path if path.exists() else None
+        except Exception:
+            return None
+
+    def _open_last_project_if_available(self) -> None:
+        if self.project_path is not None:
+            return
+        path = self._last_project_path()
+        if path is None:
+            return
+        try:
+            self._open_project(path, prompt_for_strays=False)
+            self._log(f"Reopened last project: {path.name}")
+        except Exception as exc:
+            self._log(f"Could not reopen last project: {exc}")
 
     def _new_project_data(self) -> dict[str, object]:
         data = dict(self.blank_project_data)
@@ -986,6 +1038,17 @@ class SampleSmithApp(tk.Tk):
         saved = self._save_project(Path(chosen))
         self._log(f"Saved project: {saved}")
         return saved
+
+    def _save_project_command(self) -> Path | None:
+        try:
+            if self.project_path is None:
+                return self._save_project_dialog()
+            saved = self._save_project()
+            self._log(f"Saved project: {saved}")
+            return saved
+        except Exception as exc:
+            messagebox.showerror("SampleSmith", f"Could not save project:\n\n{exc}")
+            return None
 
     @staticmethod
     def _guess_note_from_audio_filename(path: Path) -> str:
@@ -1266,11 +1329,13 @@ class SampleSmithApp(tk.Tk):
         self._rebuild_trees_from_project()
 
 
-    def _open_project(self, path: Path) -> None:
+    def _open_project(self, path: Path, *, prompt_for_strays: bool = True) -> None:
         data = json.loads(path.read_text(encoding="utf-8"))
         self._load_project_data(data, path)
+        self._remember_last_project(path)
         self._log(f"Opened project: {path}")
-        self.after_idle(self._prompt_for_stray_wavs_if_any)
+        if prompt_for_strays:
+            self.after_idle(self._prompt_for_stray_wavs_if_any)
 
     def _prompt_for_stray_wavs_if_any(self) -> None:
         strays = self._stray_wav_candidates()
@@ -1330,7 +1395,7 @@ class SampleSmithApp(tk.Tk):
                     self._log(str(payload))
         except queue.Empty:
             pass
-        self.after(100, self._drain_queue)
+        self._queue_after_id = self.after(100, self._drain_queue)
 
     def _parse_note_entry(self, text: str) -> int:
         text = text.strip()
