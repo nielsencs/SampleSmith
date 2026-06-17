@@ -19,8 +19,9 @@ UI_KNOB_STEP_X = 78
 UI_KNOB_STEP_Y = 76
 UI_KNOB_WIDTH = 70
 UI_KNOB_START_X = 30
-UI_KNOB_START_Y = 58
-UI_KNOB_MAX_X = 680
+UI_KNOB_START_Y = 74
+UI_KNOB_MIN_Y = 62
+UI_KNOB_MAX_X = DECENT_SAMPLER_UI_WIDTH - UI_KNOB_WIDTH
 UI_KNOB_MAX_Y = 230
 UI_GROUP_TITLE_HEIGHT = 20
 
@@ -54,7 +55,7 @@ def tone_control_value_for_frequency(frequency: float) -> float:
 def default_ui_knob_position(index: int) -> tuple[int, int]:
     x = UI_KNOB_START_X + (index % UI_KNOB_COLUMNS) * UI_KNOB_STEP_X
     y = UI_KNOB_START_Y + (index // UI_KNOB_COLUMNS) * UI_KNOB_STEP_Y
-    return min(UI_KNOB_MAX_X, x), min(UI_KNOB_MAX_Y, y)
+    return min(UI_KNOB_MAX_X, x), max(UI_KNOB_MIN_Y, min(UI_KNOB_MAX_Y, y))
 
 
 def ui_layout_position(control_id: str, index: int, ui_layout: dict[str, object] | None) -> tuple[int, int]:
@@ -69,7 +70,7 @@ def ui_layout_position(control_id: str, index: int, ui_layout: dict[str, object]
         y = int(float(raw.get("y", default_y)))
     except (TypeError, ValueError):
         return default_x, default_y
-    return max(0, min(UI_KNOB_MAX_X, x)), max(0, min(UI_KNOB_MAX_Y, y))
+    return max(0, min(UI_KNOB_MAX_X, x)), max(UI_KNOB_MIN_Y, min(UI_KNOB_MAX_Y, y))
 
 def generate_dspreset(
     instrument_name: str,

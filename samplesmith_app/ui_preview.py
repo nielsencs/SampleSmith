@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
 from typing import Protocol
 
@@ -10,11 +11,14 @@ from .dspreset import (
     DECENT_SAMPLER_UI_HEIGHT,
     DECENT_SAMPLER_UI_WIDTH,
     UI_KNOB_COLUMNS,
+    UI_KNOB_MIN_Y,
     UI_KNOB_MAX_X,
     UI_KNOB_MAX_Y,
     UI_KNOB_WIDTH,
     ui_layout_position,
 )
+
+BARE_LAYOUT_IMAGE = Path(__file__).resolve().parent / "assets" / "decent_sampler_bare_layout.png"
 
 
 class UiPreviewOwner(Protocol):
@@ -91,7 +95,7 @@ def normalise_ui_layout(raw_layout: object) -> dict[str, dict[str, int]]:
             continue
         layout[control_id] = {
             "x": max(0, min(UI_KNOB_MAX_X, x)),
-            "y": max(0, min(UI_KNOB_MAX_Y, y)),
+            "y": max(UI_KNOB_MIN_Y, min(UI_KNOB_MAX_Y, y)),
         }
     return layout
 
@@ -101,6 +105,9 @@ class DecentSamplerUiPreview:
         self.owner = owner
         self.canvas_items: dict[str, list[int]] = {}
         self.drag: dict[str, int | str] | None = None
+        self.background_image: tk.PhotoImage | None = None
+        if BARE_LAYOUT_IMAGE.exists():
+            self.background_image = tk.PhotoImage(file=str(BARE_LAYOUT_IMAGE))
 
         tools = ttk.Frame(parent)
         tools.pack(fill="x", pady=(0, 6))
@@ -174,14 +181,17 @@ class DecentSamplerUiPreview:
     def redraw(self) -> None:
         self.canvas.delete("all")
         self.canvas_items = {}
-        self.canvas.create_rectangle(0, 0, DECENT_SAMPLER_UI_WIDTH, DECENT_SAMPLER_UI_HEIGHT, fill="#f6f0e6", outline="#999999")
-        self.canvas.create_text(
-            DECENT_SAMPLER_UI_WIDTH // 2,
-            26,
-            text=self.owner.name_var.get(),
-            fill="#330033",
-            font=("TkDefaultFont", 18, "bold"),
-        )
+        if self.background_image is not None:
+            self.canvas.create_image(0, 0, anchor="nw", image=self.background_image)
+        else:
+            self.canvas.create_rectangle(0, 0, DECENT_SAMPLER_UI_WIDTH, DECENT_SAMPLER_UI_HEIGHT, fill="#f6f0e6", outline="#999999")
+            self.canvas.create_text(
+                DECENT_SAMPLER_UI_WIDTH // 2,
+                26,
+                text=self.owner.name_var.get(),
+                fill="#330033",
+                font=("TkDefaultFont", 18, "bold"),
+            )
         controls = self.visible_controls()
         for control in controls:
             self._draw_knob(str(control["id"]), str(control["label"]), str(control["group"]), int(control["x"]), int(control["y"]))
@@ -234,7 +244,7 @@ class DecentSamplerUiPreview:
                 return
             current = {"x": int(control["x"]), "y": int(control["y"])}
         new_x = max(0, min(UI_KNOB_MAX_X, current["x"] + int(event.x) - int(self.drag["x"])))
-        new_y = max(16, min(UI_KNOB_MAX_Y, current["y"] + int(event.y) - int(self.drag["y"])))
+        new_y = max(UI_KNOB_MIN_Y, min(UI_KNOB_MAX_Y, current["y"] + int(event.y) - int(self.drag["y"])))
         dx = new_x - current["x"]
         dy = new_y - current["y"]
         if dx == 0 and dy == 0:
