@@ -204,13 +204,7 @@ class DecentSamplerUiPreview:
             self.canvas.create_image(0, 0, anchor="nw", image=self.background_image)
         else:
             self.canvas.create_rectangle(0, 0, DECENT_SAMPLER_UI_WIDTH, DECENT_SAMPLER_UI_HEIGHT, fill="#f6f0e6", outline="#999999")
-            self.canvas.create_text(
-                DECENT_SAMPLER_UI_WIDTH // 2,
-                26,
-                text=self.owner.name_var.get(),
-                fill="#330033",
-                font=("TkDefaultFont", 18, "bold"),
-            )
+        self._draw_instrument_name()
         controls = self.visible_controls()
         self._draw_group_panels(controls)
         for control in controls:
@@ -219,6 +213,17 @@ class DecentSamplerUiPreview:
             self.status_var.set(f"{len(controls)} visible DecentSampler knob(s). Drag knobs/groups, or double-click a group rectangle to tidy it.")
         else:
             self.status_var.set("No visible knobs yet. Enable effects and K boxes to add controls.")
+
+    def _draw_instrument_name(self) -> None:
+        name = self.owner.name_var.get().strip() or "Untitled instrument"
+        self.canvas.create_text(
+            PREVIEW_ORIGIN_X + DECENT_SAMPLER_UI_WIDTH // 2,
+            PREVIEW_ORIGIN_Y + 26,
+            text=name,
+            fill="#330033",
+            font=("TkDefaultFont", 18, "bold"),
+            tags=("ui-title",),
+        )
 
     def _draw_group_panels(self, controls: list[dict[str, object]]) -> None:
         groups: dict[str, list[dict[str, object]]] = {}
