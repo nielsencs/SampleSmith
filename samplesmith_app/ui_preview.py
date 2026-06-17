@@ -16,6 +16,7 @@ from .dspreset import (
     UI_KNOB_MAX_Y,
     UI_KNOB_WIDTH,
     UI_GROUP_PADDING,
+    UI_GROUP_TOP_PADDING,
     UI_GROUP_TITLE_HEIGHT,
     UI_KNOB_GAP,
     UI_KNOB_VISIBLE_INSET_X,
@@ -232,7 +233,7 @@ class DecentSamplerUiPreview:
             right = max(int(control["x"]) + PREVIEW_ORIGIN_X + UI_KNOB_VISIBLE_OUTER_INSET_X + UI_KNOB_VISIBLE_OUTER_WIDTH for control in group_controls)
             bottom = max(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_KNOB_VISIBLE_OUTER_INSET_Y + UI_KNOB_VISIBLE_OUTER_WIDTH for control in group_controls)
             x1 = max(0, left - UI_GROUP_PADDING)
-            y1 = max(0, top - UI_GROUP_PADDING)
+            y1 = max(0, top - UI_GROUP_TOP_PADDING)
             x2 = min(DECENT_SAMPLER_UI_WIDTH, right + UI_GROUP_PADDING)
             y2 = min(DECENT_SAMPLER_UI_HEIGHT, bottom + UI_GROUP_PADDING)
             rectangle = self.canvas.create_rectangle(x1, y1, x2, y2, fill="#eee6dc", outline="#8a6a82", stipple="gray25", tags=(panel_tag, "ui-panel"))

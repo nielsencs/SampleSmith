@@ -25,6 +25,7 @@ UI_KNOB_MAX_X = 725
 UI_KNOB_MAX_Y = 124
 UI_GROUP_TITLE_HEIGHT = 20
 UI_GROUP_PADDING = 3
+UI_GROUP_TOP_PADDING = 8
 UI_KNOB_GAP = 3
 UI_KNOB_VISIBLE_INSET_X = 18
 UI_KNOB_VISIBLE_INSET_Y = 18
@@ -488,7 +489,7 @@ def generate_dspreset(
             right = max(x + UI_KNOB_VISIBLE_OUTER_INSET_X + UI_KNOB_VISIBLE_OUTER_WIDTH for x, _y in positions)
             bottom = max(y + UI_KNOB_VISIBLE_OUTER_INSET_Y + UI_KNOB_VISIBLE_OUTER_WIDTH for _x, y in positions)
             group_x = max(0, left - UI_GROUP_PADDING)
-            group_y = max(0, top - UI_GROUP_PADDING)
+            group_y = max(0, top - UI_GROUP_TOP_PADDING)
             group_width = min(DECENT_SAMPLER_UI_WIDTH - group_x, right - group_x + UI_GROUP_PADDING)
             group_height = min(DECENT_SAMPLER_UI_HEIGHT - group_y, bottom - group_y + UI_GROUP_PADDING)
             ET.SubElement(
