@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
+import shutil
 import xml.etree.ElementTree as ET
 
 from .models import SampleInfo, clamp_float, decent_sampler_root_note, slugify, valid_loop_points
@@ -10,6 +12,9 @@ from .models import SampleInfo, clamp_float, decent_sampler_root_note, slugify, 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 OFFICIAL_BOILERPLATE_PATH = ASSETS_DIR / "official-boilerplate.dspreset"
 OFFICIAL_TONE_TRANSLATION_TABLE = "0,33;0.3,150;0.4,450;0.5,1100;0.7,4100;0.9,11000;1.0001,22000"
+DECENT_SAMPLER_UI_WIDTH = 812
+DECENT_SAMPLER_UI_HEIGHT = 375
+
 OFFICIAL_KNOB_STYLE = {
     "textColor": "AA000000",
     "textSize": "16",
@@ -237,7 +242,16 @@ def generate_dspreset(
     root = ET.Element("DecentSampler", {"minVersion": "1.0.0"})
     has_amp_env_knobs = amp_env_enabled and ds_knob_amp_env
     if effects_to_write or has_amp_env_knobs:
-        ui = ET.SubElement(root, "ui", {"width": "812", "height": "475", "layoutMode": "relative", "bgMode": "top_left"})
+        ui = ET.SubElement(
+            root,
+            "ui",
+            {
+                "width": str(DECENT_SAMPLER_UI_WIDTH),
+                "height": str(DECENT_SAMPLER_UI_HEIGHT),
+                "layoutMode": "relative",
+                "bgMode": "top_left",
+            },
+        )
         tab = ET.SubElement(ui, "tab", {"name": "main"})
         ET.SubElement(
             tab,
@@ -349,12 +363,12 @@ def generate_dspreset(
             ),
         ]
         visible_control_index = 0
-        knob_columns = 8
-        knob_step_x = 94
-        knob_step_y = 98
-        knob_width = 76
-        knob_start_x = 34
-        knob_start_y = 78
+        knob_columns = 9
+        knob_step_x = 84
+        knob_step_y = 88
+        knob_width = 70
+        knob_start_x = 30
+        knob_start_y = 66
         group_title_height = 20
 
         def knob_position(index: int) -> tuple[int, int]:
@@ -448,7 +462,7 @@ def generate_dspreset(
                     "x": str(group_x),
                     "y": str(group_y),
                     "width": str(group_width),
-                    "height": "104",
+                    "height": "94",
                     "fillColor": "#0D330033",
                     "borderColor": "#55330033",
                     "borderThickness": "1",
@@ -547,3 +561,48 @@ def generate_dspreset(
     preset_path = output_dir / f"{slugify(instrument_name)}.dspreset"
     tree.write(preset_path, encoding="utf-8", xml_declaration=True)
     return preset_path
+
+
+def export_dsbundle(
+    instrument_name: str,
+    instrument_dir: Path,
+    samples: list[SampleInfo],
+    **preset_options,
+) -> Path:
+    bundle_dir = instrument_dir.parent / f"{slugify(instrument_name)}.dsbundle"
+    bundle_samples_dir = bundle_dir / "Samples"
+    if bundle_dir.exists():
+        shutil.rmtree(bundle_dir)
+    bundle_samples_dir.mkdir(parents=True, exist_ok=True)
+
+    used_relative_paths: set[Path] = set()
+    bundled_samples: list[SampleInfo] = []
+    for sample in samples:
+        relative_path: Path
+        try:
+            relative_path = sample.path.relative_to(instrument_dir)
+        except ValueError:
+            relative_path = Path("Samples") / sample.path.name
+        if not relative_path.parts or relative_path.parts[0] != "Samples":
+            relative_path = Path("Samples") / relative_path.name
+
+        destination = bundle_dir / relative_path
+        if relative_path in used_relative_paths or destination.exists():
+            stem = destination.stem
+            suffix = destination.suffix
+            counter = 2
+            while True:
+                candidate_relative = destination.parent.relative_to(bundle_dir) / f"{stem}_{counter}{suffix}"
+                candidate = bundle_dir / candidate_relative
+                if candidate_relative not in used_relative_paths and not candidate.exists():
+                    relative_path = candidate_relative
+                    destination = candidate
+                    break
+                counter += 1
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(sample.path, destination)
+        used_relative_paths.add(relative_path)
+        bundled_samples.append(replace(sample, path=destination))
+
+    generate_dspreset(instrument_name, bundle_dir, bundled_samples, **preset_options)
+    return bundle_dir

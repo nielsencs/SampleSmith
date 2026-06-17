@@ -14,7 +14,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from .audio import AudioEngine, render_bridge_wav, write_silent_wav
-from .dspreset import generate_dspreset
+from .dspreset import export_dsbundle, generate_dspreset
 from .looping import read_wav_smpl_loop_points
 from .models import (
     DEFAULT_PAD_START_NOTE,
@@ -211,6 +211,7 @@ class SampleSmithApp(tk.Tk):
         bottom = ttk.Frame(outer)
         bottom.pack(fill="x")
         ttk.Button(bottom, text="Generate / update .dspreset", command=self._generate_preset).pack(side="left", padx=(0, 6))
+        ttk.Button(bottom, text="Export .dsbundle", command=self._export_dsbundle).pack(side="left", padx=(0, 6))
         self.status_var = tk.StringVar(value="Ready")
         ttk.Label(bottom, textvariable=self.status_var).pack(side="left", padx=12)
         self.log = tk.Text(outer, height=9, wrap="word")
@@ -2133,12 +2134,8 @@ class SampleSmithApp(tk.Tk):
             "No embedded WAV smpl loop markers found in the recorded samples. Enter loop start/end manually.",
         )
 
-    def _write_preset(self) -> Path:
-        samples = self._spread_recorded_pitched_samples()
-        preset = generate_dspreset(
-            self.name_var.get(),
-            self._instrument_dir(),
-            samples,
+    def _dspreset_options(self) -> dict[str, object]:
+        return dict(
             loop_enabled=self.loop_enabled_var.get(),
             loop_start=optional_non_negative_int(self.loop_start_var.get()),
             loop_end=optional_non_negative_int(self.loop_end_var.get()),
@@ -2242,6 +2239,15 @@ class SampleSmithApp(tk.Tk):
             ds_knob_bit_crusher_rate=self.ds_knob_bit_crusher_rate_var.get(),
             ds_knob_bit_crusher_mix=self.ds_knob_bit_crusher_mix_var.get(),
         )
+
+    def _write_preset(self) -> Path:
+        samples = self._spread_recorded_pitched_samples()
+        preset = generate_dspreset(
+            self.name_var.get(),
+            self._instrument_dir(),
+            samples,
+            **self._dspreset_options(),
+        )
         self._refresh_pitched_mappings()
         self._refresh_export_mapping()
         return preset
@@ -2263,6 +2269,21 @@ class SampleSmithApp(tk.Tk):
         self._log(f"Generated {preset}")
         messagebox.showinfo("SampleSmith", f"Generated:\n{preset}")
 
+    def _export_dsbundle(self) -> None:
+        if not self.samples:
+            messagebox.showwarning("SampleSmith", "No recorded samples yet.")
+            return
+        samples = self._spread_recorded_pitched_samples()
+        bundle = export_dsbundle(
+            self.name_var.get(),
+            self._instrument_dir(),
+            samples,
+            **self._dspreset_options(),
+        )
+        self._refresh_pitched_mappings()
+        self._refresh_export_mapping()
+        self._log(f"Exported DecentSampler bundle: {bundle}")
+        messagebox.showinfo("SampleSmith", f"Exported .dsbundle:\n{bundle}")
 
 
 class MappingEditorDialog(tk.Toplevel):

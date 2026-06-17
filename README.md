@@ -76,7 +76,17 @@ samplesmith-projects/<InstrumentName>/
     ...
 ```
 
-Open the `.dspreset` in DecentSampler, including from Reaper.
+Use **Export .dsbundle** to create a portable DecentSampler bundle beside the project folder:
+
+```text
+samplesmith-projects/<InstrumentName>.dsbundle/
+  <InstrumentName>.dspreset
+  Samples/
+    <InstrumentName>_C3.wav
+    ...
+```
+
+The `.dsbundle` export copies the mapped audio into its own `Samples/` folder and writes relative sample paths, so the bundle can be moved as one folder. Open the `.dspreset` or `.dsbundle` in DecentSampler, including from Reaper.
 
 ## Build a DecentSampler effects test pack
 
@@ -123,7 +133,7 @@ Current DecentSampler output parameters:
 - **Amp ADSR envelope** — optional DecentSampler amp envelope export using documented `<groups>` attributes: `ampEnvEnabled`, `attack`, `decay`, `sustain`, and `release`. When enabled, SampleSmith can also write visible DecentSampler knobs bound to the official-template-style instrument amp parameters `ENV_ATTACK`, `ENV_DECAY`, `ENV_SUSTAIN`, and `ENV_RELEASE`.
 - **DecentSampler note convention** — SampleSmith follows DecentSampler's screen-key numbering because it exists to make `.dspreset` patches. In this convention C4 is key/root number 72, while the generated/reference tone for C4 is still actual middle C (~261.63 Hz). The old user-facing root-offset knob remains removed.
 - **DecentSampler effects** — SampleSmith includes all effect types documented in the current DecentSampler effects guide: filters (`lowpass`, `lowpass_1pl`, legacy `lowpass_4pl`, `bandpass`, `highpass`), `notch`, `peak`, `gain`, `reverb`, `delay`, `chorus`, `phaser`, `convolution`, `pitch_shift`, `wave_folder`, `wave_shaper`, `stereo_simulator`, and `bit_crusher`. Wave shaper now exposes its documented `highQuality` flag, stereo simulator exposes its documented algorithm/width/delay/modulation export settings, and bit crusher defaults to audible example-style settings (`bitDepth=8`, `sampleRateReduction=4`) rather than the documented clean no-op defaults.
-- **Visible DS controls** — when effects are enabled, SampleSmith also writes a simple DecentSampler `<ui>` tab with visible knobs bound to the correct effect positions where the binding parameter is known. `K` checkboxes decide which main controls appear as DS knobs. If one knob is selected for an effect, it uses the effect title, e.g. Reverb or Delay; if two or more are selected, SampleSmith creates a boxed section with the effect title and parameter labels such as Amount, Room, Damp, Time, and Feedback. Knobs use visual defaults from DecentSampler’s official boilerplate template, include DecentSampler `defaultValue` settings, and each SampleSmith effect row has a small defaults button for restoring sensible documented/example defaults. The main Tone knob now uses the official boilerplate frequency translation table. Bit crusher has verified knobs for bit depth, sample-rate reduction, and mix; stereo simulator currently only exposes a DS knob for the documented/verified `FX_WIDTH` binding while exporting the other settings statically.
+- **Visible DS controls** — when effects are enabled, SampleSmith also writes a simple documented-size `812x375` DecentSampler `<ui>` tab with visible knobs bound to the correct effect positions where the binding parameter is known. `K` checkboxes decide which main controls appear as DS knobs. If one knob is selected for an effect, it uses the effect title, e.g. Reverb or Delay; if two or more are selected, SampleSmith creates a boxed section with the effect title and parameter labels such as Amount, Room, Damp, Time, and Feedback. Knobs use visual defaults from DecentSampler’s official boilerplate template, include DecentSampler `defaultValue` settings, and each SampleSmith effect row has a small defaults button for restoring sensible documented/example defaults. The main Tone knob now uses the official boilerplate frequency translation table. Bit crusher has verified knobs for bit depth, sample-rate reduction, and mix; stereo simulator currently only exposes a DS knob for the documented/verified `FX_WIDTH` binding while exporting the other settings statically.
 - **Convolution reverb / IR** — adds a DecentSampler `<effect type="convolution">` when you provide an IR file path and mix above zero. IR means impulse response; the file path must be valid from the `.dspreset`, e.g. `Samples/long hall.wav`. SampleSmith does not yet copy/manage IR files for you.
 - **Version caveat** — newer DecentSampler effects require a recent DecentSampler build (for example, `stereo_simulator` was introduced in DS 1.17.0). If an exported effect is ignored by DecentSampler, first check the installed plug-in/app version.
 
