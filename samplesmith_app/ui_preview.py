@@ -193,6 +193,7 @@ class DecentSamplerUiPreview:
                 font=("TkDefaultFont", 18, "bold"),
             )
         controls = self.visible_controls()
+        self._draw_group_panels(controls)
         for control in controls:
             self._draw_knob(str(control["id"]), str(control["label"]), str(control["group"]), int(control["x"]), int(control["y"]))
         if controls:
@@ -200,10 +201,33 @@ class DecentSamplerUiPreview:
         else:
             self.status_var.set("No visible knobs yet. Enable effects and K boxes to add controls.")
 
+    def _draw_group_panels(self, controls: list[dict[str, object]]) -> None:
+        groups: dict[str, list[dict[str, object]]] = {}
+        for control in controls:
+            groups.setdefault(str(control["group"]), []).append(control)
+        for title, group_controls in groups.items():
+            left = min(int(control["x"]) for control in group_controls)
+            top = min(int(control["y"]) for control in group_controls)
+            right = max(int(control["x"]) + UI_KNOB_WIDTH for control in group_controls)
+            bottom = max(int(control["y"]) + UI_KNOB_WIDTH for control in group_controls)
+            x1 = max(0, left - 10)
+            y1 = max(0, top - 28)
+            x2 = min(DECENT_SAMPLER_UI_WIDTH, right + 10)
+            y2 = min(DECENT_SAMPLER_UI_HEIGHT, bottom + 8)
+            self.canvas.create_rectangle(x1, y1, x2, y2, fill="#eee6dc", outline="#8a6a82", stipple="gray25", tags=("ui-panel",))
+            self.canvas.create_text(
+                x1 + (x2 - x1) // 2,
+                y1 + 12,
+                text=title,
+                fill="#330033",
+                font=("TkDefaultFont", 10),
+                tags=("ui-panel",),
+            )
+
     def _draw_knob(self, control_id: str, label: str, group: str, x: int, y: int) -> None:
         tag = f"ui:{control_id}"
         items = [
-            self.canvas.create_rectangle(x, y, x + UI_KNOB_WIDTH, y + UI_KNOB_WIDTH, outline="#8a6a82", dash=(2, 2), tags=(tag, "ui-knob")),
+            self.canvas.create_rectangle(x, y, x + UI_KNOB_WIDTH, y + UI_KNOB_WIDTH, outline="#c8b9c5", dash=(2, 2), tags=(tag, "ui-knob")),
             self.canvas.create_text(x + UI_KNOB_WIDTH // 2, y + 8, text=group, fill="#664466", font=("TkDefaultFont", 9), tags=(tag, "ui-knob")),
             self.canvas.create_oval(x, y + 14, x + UI_KNOB_WIDTH, y + UI_KNOB_WIDTH - 10, fill="#d9d2c8", outline="#330033", width=2, tags=(tag, "ui-knob")),
             self.canvas.create_line(x + UI_KNOB_WIDTH // 2, y + 24, x + UI_KNOB_WIDTH // 2, y + 40, fill="#330033", width=2, tags=(tag, "ui-knob")),

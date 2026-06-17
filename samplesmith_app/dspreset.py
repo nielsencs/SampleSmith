@@ -466,18 +466,22 @@ def generate_dspreset(
                 },
             )
 
-        def add_control_panel(title: str, control_count: int) -> None:
+        def add_control_panel(title: str, control_ids: list[str]) -> None:
             nonlocal visible_control_index
+            control_count = len(control_ids)
             if control_count <= 0:
                 return
             if (visible_control_index % UI_KNOB_COLUMNS) + control_count > UI_KNOB_COLUMNS:
                 visible_control_index += UI_KNOB_COLUMNS - (visible_control_index % UI_KNOB_COLUMNS)
-            if ui_layout:
-                return
-            first_x, first_y = default_ui_knob_position(visible_control_index)
-            group_x = first_x - 10
-            group_y = first_y - UI_GROUP_TITLE_HEIGHT - 8
-            group_width = UI_KNOB_STEP_X * control_count - 8
+            positions = [ui_layout_position(control_id, visible_control_index + offset, ui_layout) for offset, control_id in enumerate(control_ids)]
+            left = min(x for x, _y in positions)
+            top = min(y for _x, y in positions)
+            right = max(x + UI_KNOB_WIDTH for x, _y in positions)
+            bottom = max(y + UI_KNOB_WIDTH for _x, y in positions)
+            group_x = max(0, left - 10)
+            group_y = max(0, top - UI_GROUP_TITLE_HEIGHT - 8)
+            group_width = min(DECENT_SAMPLER_UI_WIDTH - group_x, right - group_x + 10)
+            group_height = min(DECENT_SAMPLER_UI_HEIGHT - group_y, bottom - group_y + 8)
             ET.SubElement(
                 tab,
                 "rectangle",
@@ -485,7 +489,7 @@ def generate_dspreset(
                     "x": str(group_x),
                     "y": str(group_y),
                     "width": str(group_width),
-                    "height": "94",
+                    "height": str(group_height),
                     "fillColor": "#0D330033",
                     "borderColor": "#55330033",
                     "borderThickness": "1",
@@ -515,7 +519,7 @@ def generate_dspreset(
                 ("amp_sustain", "Sustain", "ENV_SUSTAIN", "0", "1", f"{amp_sustain:.3f}", "1.000"),
                 ("amp_release", "Release", "ENV_RELEASE", "0", "25", f"{amp_release:.3f}", "0.800"),
             ]
-            add_control_panel("Envelope", len(specs))
+            add_control_panel("Envelope", [control_id for control_id, *_rest in specs])
             for control_id, label, parameter, min_value, max_value, value, default_value in specs:
                 add_amp_knob(control_id, label, parameter, min_value, max_value, value, default_value)
 
@@ -523,7 +527,7 @@ def generate_dspreset(
             included_specs = [spec for spec in specs if spec[0]]
             if not included_specs:
                 return
-            add_control_panel(title, len(included_specs))
+            add_control_panel(title, [control_id for _include, control_id, *_rest in included_specs])
             for _include, control_id, effect_type, label, parameter, min_value, max_value, value, default_value in included_specs:
                 add_effect_knob(control_id, effect_type, label, parameter, min_value, max_value, value, default_value)
 
