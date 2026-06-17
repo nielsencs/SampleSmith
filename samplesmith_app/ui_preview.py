@@ -106,6 +106,9 @@ class DecentSamplerUiPreview:
     def __init__(self, parent: ttk.Frame, owner: UiPreviewOwner) -> None:
         self.owner = owner
         self.canvas_items: dict[str, list[int]] = {}
+        self.panel_items: dict[str, list[int]] = {}
+        self.panel_controls: dict[str, list[str]] = {}
+        self.panel_tags: dict[str, str] = {}
         self.drag: dict[str, int | str] | None = None
         self.background_image: tk.PhotoImage | None = None
         if BARE_LAYOUT_IMAGE.exists():
@@ -183,6 +186,9 @@ class DecentSamplerUiPreview:
     def redraw(self) -> None:
         self.canvas.delete("all")
         self.canvas_items = {}
+        self.panel_items = {}
+        self.panel_controls = {}
+        self.panel_tags = {}
         if self.background_image is not None:
             self.canvas.create_image(0, 0, anchor="nw", image=self.background_image)
         else:
@@ -199,7 +205,7 @@ class DecentSamplerUiPreview:
         for control in controls:
             self._draw_knob(str(control["id"]), str(control["label"]), str(control["group"]), int(control["x"]), int(control["y"]))
         if controls:
-            self.status_var.set(f"{len(controls)} visible DecentSampler knob(s). Drag knobs to adjust exported positions.")
+            self.status_var.set(f"{len(controls)} visible DecentSampler knob(s). Drag knobs or group rectangles to adjust exported positions.")
         else:
             self.status_var.set("No visible knobs yet. Enable effects and K boxes to add controls.")
 
@@ -207,7 +213,10 @@ class DecentSamplerUiPreview:
         groups: dict[str, list[dict[str, object]]] = {}
         for control in controls:
             groups.setdefault(str(control["group"]), []).append(control)
-        for title, group_controls in groups.items():
+        for panel_index, (title, group_controls) in enumerate(groups.items()):
+            panel_tag = f"ui-panel:{panel_index}"
+            self.panel_tags[panel_tag] = title
+            self.panel_controls[title] = [str(control["id"]) for control in group_controls]
             left = min(int(control["x"]) + PREVIEW_ORIGIN_X for control in group_controls)
             top = min(int(control["y"]) + PREVIEW_ORIGIN_Y for control in group_controls)
             right = max(int(control["x"]) + PREVIEW_ORIGIN_X + UI_KNOB_WIDTH for control in group_controls)
@@ -216,15 +225,19 @@ class DecentSamplerUiPreview:
             y1 = max(0, top - 28)
             x2 = min(DECENT_SAMPLER_UI_WIDTH, right + 10)
             y2 = min(DECENT_SAMPLER_UI_HEIGHT, bottom + 8)
-            self.canvas.create_rectangle(x1, y1, x2, y2, fill="#eee6dc", outline="#8a6a82", stipple="gray25", tags=("ui-panel",))
-            self.canvas.create_text(
+            rectangle = self.canvas.create_rectangle(x1, y1, x2, y2, fill="#eee6dc", outline="#8a6a82", stipple="gray25", tags=(panel_tag, "ui-panel"))
+            label = self.canvas.create_text(
                 x1 + (x2 - x1) // 2,
                 y1 + 12,
                 text=title,
                 fill="#330033",
                 font=("TkDefaultFont", 10),
-                tags=("ui-panel",),
+                tags=(panel_tag, "ui-panel"),
             )
+            self.panel_items[title] = [rectangle, label]
+            self.canvas.tag_bind(panel_tag, "<ButtonPress-1>", self._start_panel_drag)
+            self.canvas.tag_bind(panel_tag, "<B1-Motion>", self._drag_panel)
+            self.canvas.tag_bind(panel_tag, "<ButtonRelease-1>", self._end_drag)
 
     def _draw_knob(self, control_id: str, label: str, group: str, x: int, y: int) -> None:
         tag = f"ui:{control_id}"
@@ -255,6 +268,26 @@ class DecentSamplerUiPreview:
                 return tag[3:]
         return None
 
+    def _panel_title_from_event(self) -> str | None:
+        current = self.canvas.find_withtag("current")
+        if not current:
+            return None
+        for tag in self.canvas.gettags(current[0]):
+            if tag in self.panel_tags:
+                return self.panel_tags[tag]
+        return None
+
+    def _current_control_positions(self) -> dict[str, dict[str, int]]:
+        controls = {str(control["id"]): control for control in self.visible_controls()}
+        positions: dict[str, dict[str, int]] = {}
+        for control_id, control in controls.items():
+            current = self.owner.ui_layout.get(control_id)
+            if current is None:
+                positions[control_id] = {"x": int(control["x"]), "y": int(control["y"])}
+            else:
+                positions[control_id] = {"x": int(current["x"]), "y": int(current["y"])}
+        return positions
+
     def _start_drag(self, event) -> None:
         control_id = self._control_id_from_event()
         if not control_id:
@@ -264,6 +297,16 @@ class DecentSamplerUiPreview:
         if not bbox:
             return
         self.drag = {"id": control_id, "x": int(event.x), "y": int(event.y)}
+
+    def _start_panel_drag(self, event) -> None:
+        title = self._panel_title_from_event()
+        if not title:
+            return
+        items = self.panel_items.get(title, [])
+        bbox = self.canvas.bbox(*items) if items else None
+        if not bbox:
+            return
+        self.drag = {"kind": "panel", "group": title, "x": int(event.x), "y": int(event.y)}
 
     def _drag_knob(self, event) -> None:
         if not self.drag:
@@ -285,6 +328,37 @@ class DecentSamplerUiPreview:
         for item in self.canvas_items.get(control_id, []):
             self.canvas.move(item, dx, dy)
         self.owner.ui_layout[control_id] = {"x": new_x, "y": new_y}
+        self.drag["x"] = int(event.x)
+        self.drag["y"] = int(event.y)
+
+    def _drag_panel(self, event) -> None:
+        if not self.drag or self.drag.get("kind") != "panel":
+            return
+        title = str(self.drag["group"])
+        control_ids = self.panel_controls.get(title, [])
+        positions = self._current_control_positions()
+        current_positions = [positions[control_id] for control_id in control_ids if control_id in positions]
+        if not current_positions:
+            return
+        requested_dx = int(event.x) - int(self.drag["x"])
+        requested_dy = int(event.y) - int(self.drag["y"])
+        min_x = min(pos["x"] for pos in current_positions)
+        max_x = max(pos["x"] for pos in current_positions)
+        min_y = min(pos["y"] for pos in current_positions)
+        max_y = max(pos["y"] for pos in current_positions)
+        dx = max(-min_x, min(UI_KNOB_MAX_X - max_x, requested_dx))
+        dy = max(UI_KNOB_MIN_Y - min_y, min(UI_KNOB_MAX_Y - max_y, requested_dy))
+        if dx == 0 and dy == 0:
+            return
+        for item in self.panel_items.get(title, []):
+            self.canvas.move(item, dx, dy)
+        for control_id in control_ids:
+            current = positions.get(control_id)
+            if current is None:
+                continue
+            for item in self.canvas_items.get(control_id, []):
+                self.canvas.move(item, dx, dy)
+            self.owner.ui_layout[control_id] = {"x": current["x"] + dx, "y": current["y"] + dy}
         self.drag["x"] = int(event.x)
         self.drag["y"] = int(event.y)
 
