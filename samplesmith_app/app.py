@@ -2672,6 +2672,8 @@ class LoopEditorDialog(tk.Toplevel):
                     x1 = self._x_for_zoom_frame(visible_start, left, right)
                     x2 = self._x_for_zoom_frame(visible_end, left, right)
                     canvas.create_rectangle(x1, 0, x2, self.zoom_height, fill=fill, stipple=stipple, outline="")
+        upper_points: list[int] = []
+        lower_points: list[int] = []
         for x in range(self.zoom_width):
             start = left + int((x / self.zoom_width) * span)
             end = left + int(((x + 1) / self.zoom_width) * span)
@@ -2682,7 +2684,11 @@ class LoopEditorDialog(tk.Toplevel):
                 continue
             lo = min(segment)
             hi = max(segment)
-            canvas.create_line(x, mid - int(hi * scale), x, mid - int(lo * scale), fill="#72b7ff")
+            upper_points.extend((x, mid - int(hi * scale)))
+            lower_points.extend((x, mid - int(lo * scale)))
+        if len(upper_points) >= 4:
+            canvas.create_line(*upper_points, fill="#72b7ff", smooth=True, splinesteps=8)
+            canvas.create_line(*lower_points, fill="#72b7ff", smooth=True, splinesteps=8)
         center_x = int(round((center_frame - left) / span * (self.zoom_width - 1)))
         canvas.create_line(center_x, 0, center_x, self.zoom_height, fill=color, width=3)
         canvas.create_text(6, 12, text=f"{label} {center_frame}", anchor="w", fill=color)
