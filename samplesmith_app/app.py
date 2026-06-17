@@ -535,7 +535,7 @@ class SampleSmithApp(tk.Tk):
         self.export_tree.column("mode", width=80, stretch=False)
         self.export_tree.column("loop", width=150, stretch=False)
         self.export_tree.pack(fill="both", expand=True, padx=6, pady=6)
-        self.export_tree.bind("<Double-1>", lambda _event: self._edit_selected_sample_loop())
+        self.export_tree.bind("<Double-1>", self._edit_export_row_from_double_click)
         mapping_buttons = ttk.Frame(mapping)
         mapping_buttons.pack(fill="x", padx=6, pady=(0, 6))
         ttk.Button(mapping_buttons, text="Edit plays-on keys…", command=self._edit_selected_sample_mapping).pack(side="left", padx=(0, 6))
@@ -547,7 +547,7 @@ class SampleSmithApp(tk.Tk):
             notes,
             text=(
                 "DecentSampler settings are split into sub-tabs. Loop controls here are fallback/default values; "
-                "select a row to edit its root and plays-on key range. "
+                "double-click Plays on keys/Root note to edit key mapping; double-click Loop to edit loop points. "
                 "per-audio-file loop edits are shown in the mapping table and take priority during export. "
                 "Generated bridge samples are marked provisional/derived in the mapping table and saved under Samples/generated."
             ),
@@ -2064,10 +2064,22 @@ class SampleSmithApp(tk.Tk):
                 return sample
         return None
 
+    def _edit_export_row_from_double_click(self, event) -> str:
+        row_id = self.export_tree.identify_row(event.y)
+        if not row_id:
+            return "break"
+        self.export_tree.selection_set(row_id)
+        column = self.export_tree.identify_column(event.x)
+        if column == "#5":
+            self._edit_selected_sample_loop()
+        else:
+            self._edit_selected_sample_mapping()
+        return "break"
+
     def _edit_selected_sample_loop(self) -> None:
         selected = self.export_tree.selection()
         if not selected:
-            messagebox.showwarning("SampleSmith", "Select a WAV in the exported mapping first.")
+            messagebox.showwarning("SampleSmith", "Select an audio file in the exported mapping first.")
             return
         exported = self.export_samples_by_iid.get(selected[0])
         if exported is None:
@@ -2081,7 +2093,7 @@ class SampleSmithApp(tk.Tk):
             )
             return
         if not sample.path.exists():
-            messagebox.showwarning("SampleSmith", f"WAV file not found:\n{sample.path}")
+            messagebox.showwarning("SampleSmith", f"Audio file not found:\n{sample.path}")
             return
         try:
             LoopEditorDialog(self, sample, self._apply_sample_loop_edit)
