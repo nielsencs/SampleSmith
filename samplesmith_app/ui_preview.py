@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
@@ -32,6 +33,9 @@ from .dspreset import (
 BARE_LAYOUT_IMAGE = Path(__file__).resolve().parent / "assets" / "decent_sampler_bare_layout.png"
 PREVIEW_ORIGIN_X = 0
 PREVIEW_ORIGIN_Y = 51
+PREVIEW_KNOB_ARC_START = 130
+PREVIEW_KNOB_ARC_EXTENT = 260
+PREVIEW_KNOB_ARC_WIDTH = 5
 
 
 class UiPreviewOwner(Protocol):
@@ -221,8 +225,8 @@ class DecentSamplerUiPreview:
             PREVIEW_ORIGIN_X + DECENT_SAMPLER_UI_WIDTH // 2,
             PREVIEW_ORIGIN_Y + 26,
             text=name,
-            fill="#330033",
-            font=("TkDefaultFont", 18, "bold"),
+            fill="#3b143b",
+            font=("TkDefaultFont", 16, "bold"),
             tags=("ui-title",),
         )
 
@@ -266,11 +270,17 @@ class DecentSamplerUiPreview:
         knob_top = canvas_y + UI_KNOB_VISIBLE_INSET_Y
         knob_right = knob_left + UI_KNOB_VISIBLE_WIDTH
         knob_bottom = knob_top + UI_KNOB_VISIBLE_WIDTH
+        indicator_angle = math.radians(PREVIEW_KNOB_ARC_START + PREVIEW_KNOB_ARC_EXTENT)
+        knob_radius = UI_KNOB_VISIBLE_WIDTH / 2
+        knob_center_x = knob_left + knob_radius
+        knob_center_y = knob_top + knob_radius
+        indicator_x = knob_center_x + math.cos(indicator_angle) * knob_radius
+        indicator_y = knob_center_y - math.sin(indicator_angle) * knob_radius
         items = [
-            self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + UI_KNOB_WIDTH, canvas_y + UI_KNOB_WIDTH, outline="#c8b9c5", dash=(2, 2), tags=(tag, "ui-knob")),
+            self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + UI_KNOB_WIDTH, canvas_y + UI_KNOB_WIDTH, outline="#d8ccd6", dash=(2, 2), tags=(tag, "ui-knob")),
             self.canvas.create_text(canvas_x + UI_KNOB_WIDTH // 2, canvas_y + 10, text=label, fill="#330033", font=("TkDefaultFont", 10), tags=(tag, "ui-knob")),
-            self.canvas.create_oval(knob_left, knob_top, knob_right, knob_bottom, fill="#d9d2c8", outline="#330033", width=2, tags=(tag, "ui-knob")),
-            self.canvas.create_line(canvas_x + UI_KNOB_WIDTH // 2, knob_top + 8, canvas_x + UI_KNOB_WIDTH // 2, knob_top + 25, fill="#330033", width=2, tags=(tag, "ui-knob")),
+            self.canvas.create_arc(knob_left, knob_top, knob_right, knob_bottom, start=PREVIEW_KNOB_ARC_START, extent=PREVIEW_KNOB_ARC_EXTENT, style="arc", outline="#330033", width=PREVIEW_KNOB_ARC_WIDTH, tags=(tag, "ui-knob")),
+            self.canvas.create_oval(indicator_x - 3, indicator_y - 3, indicator_x + 3, indicator_y + 3, fill="#330033", outline="#330033", tags=(tag, "ui-knob")),
         ]
         self.canvas_items[control_id] = items
         self.canvas.tag_bind(tag, "<ButtonPress-1>", self._start_drag)
