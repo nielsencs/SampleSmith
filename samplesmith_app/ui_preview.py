@@ -33,7 +33,7 @@ from .dspreset import (
 BARE_LAYOUT_IMAGE = Path(__file__).resolve().parent / "assets" / "decent_sampler_bare_layout.png"
 PREVIEW_ORIGIN_X = 0
 PREVIEW_ORIGIN_Y = 51
-PREVIEW_KNOB_ARC_START = 130
+PREVIEW_KNOB_ARC_START = -50
 PREVIEW_KNOB_ARC_EXTENT = 260
 PREVIEW_KNOB_ARC_WIDTH = 5
 
