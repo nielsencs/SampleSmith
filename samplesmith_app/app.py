@@ -1986,8 +1986,8 @@ class SampleSmithApp(tk.Tk):
             SampleInfo(
                 path=sample.path,
                 root_note=sample.root_note,
-                lo_note=ranges[sample.root_note][0],
-                hi_note=ranges[sample.root_note][1],
+                lo_note=sample.lo_note if sample.custom_mapping else ranges[sample.root_note][0],
+                hi_note=sample.hi_note if sample.custom_mapping else ranges[sample.root_note][1],
                 label=sample.label,
                 mode=sample.mode,
                 loop_enabled=sample.loop_enabled,
@@ -1997,6 +1997,7 @@ class SampleSmithApp(tk.Tk):
                 loop_crossfade_mode=sample.loop_crossfade_mode,
                 generated=sample.generated,
                 provisional=sample.provisional,
+                custom_mapping=sample.custom_mapping,
                 source_roots=sample.source_roots,
                 source_paths=sample.source_paths,
             )
@@ -2368,6 +2369,7 @@ class MappingEditorDialog(tk.Toplevel):
         self.sample.root_note = root
         self.sample.lo_note = lo
         self.sample.hi_note = hi
+        self.sample.custom_mapping = True
         self.on_apply(self.sample)
         self.destroy()
 
