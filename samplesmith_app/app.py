@@ -63,6 +63,7 @@ class SampleSmithApp(tk.Tk):
         self.name_var = tk.StringVar(value="NewInstrument")
         self.output_var = tk.StringVar(value=str(Path.cwd() / "samplesmith-projects"))
         self.sample_rate_var = tk.IntVar(value=DEFAULT_SAMPLE_RATE)
+        self.sample_format_var = tk.StringVar(value="flac")
         self.record_seconds_var = tk.DoubleVar(value=4.0)
         self.threshold_var = tk.DoubleVar(value=-45.0)
         self.normalise_var = tk.BooleanVar(value=True)
@@ -181,12 +182,14 @@ class SampleSmithApp(tk.Tk):
         ttk.Label(project, text="Trim dB").grid(row=1, column=2, sticky="w")
         ttk.Spinbox(project, textvariable=self.threshold_var, from_=-80, to=-10, increment=1, width=8).grid(row=1, column=3, sticky="w", padx=4)
         ttk.Checkbutton(project, text="Normalise", variable=self.normalise_var).grid(row=1, column=4, sticky="w")
-        ttk.Button(project, text="New project", command=self._new_project).grid(row=2, column=0, sticky="w", pady=(6, 0))
-        ttk.Button(project, text="Open project", command=self._open_project_dialog).grid(row=2, column=1, sticky="w", pady=(6, 0), padx=4)
-        ttk.Button(project, text="Save project", command=self._save_project_dialog).grid(row=2, column=2, sticky="w", pady=(6, 0), padx=4)
-        ttk.Button(project, text="Review stray audio", command=self._review_stray_wavs).grid(row=2, column=3, sticky="w", pady=(6, 0), padx=4)
+        ttk.Label(project, text="Sample format").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        ttk.OptionMenu(project, self.sample_format_var, self.sample_format_var.get(), "flac", "wav").grid(row=2, column=1, sticky="w", pady=(6, 0), padx=4)
+        ttk.Button(project, text="New project", command=self._new_project).grid(row=2, column=2, sticky="w", pady=(6, 0), padx=4)
+        ttk.Button(project, text="Open project", command=self._open_project_dialog).grid(row=2, column=3, sticky="w", pady=(6, 0), padx=4)
+        ttk.Button(project, text="Save project", command=self._save_project_dialog).grid(row=2, column=4, sticky="w", pady=(6, 0), padx=4)
+        ttk.Button(project, text="Review stray audio", command=self._review_stray_wavs).grid(row=3, column=3, sticky="w", pady=(6, 0), padx=4)
         ttk.Checkbutton(project, text="Confirm before recording", variable=self.confirm_before_record_var).grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
-        ttk.Checkbutton(project, text="Play reference before pitched recording", variable=self.play_reference_before_record_var).grid(row=3, column=2, columnspan=3, sticky="w", pady=(6, 0), padx=4)
+        ttk.Checkbutton(project, text="Play reference before pitched recording", variable=self.play_reference_before_record_var).grid(row=3, column=2, sticky="w", pady=(6, 0), padx=4)
         project.columnconfigure(3, weight=1)
 
         main_area = ttk.Frame(outer)
@@ -520,7 +523,7 @@ class SampleSmithApp(tk.Tk):
         mapping = ttk.LabelFrame(mapping_tab, text="Effective exported sample mapping")
         mapping.pack(fill="both", expand=True)
         self.export_tree = ttk.Treeview(mapping, columns=("source", "keys", "root", "mode", "loop"), show="headings", height=10)
-        self.export_tree.heading("source", text="Source WAV")
+        self.export_tree.heading("source", text="Source audio")
         self.export_tree.heading("keys", text="Plays on keys")
         self.export_tree.heading("root", text="Root note")
         self.export_tree.heading("mode", text="Mode")
@@ -534,7 +537,8 @@ class SampleSmithApp(tk.Tk):
         self.export_tree.bind("<Double-1>", lambda _event: self._edit_selected_sample_loop())
         mapping_buttons = ttk.Frame(mapping)
         mapping_buttons.pack(fill="x", padx=6, pady=(0, 6))
-        ttk.Button(mapping_buttons, text="Edit selected WAV loop…", command=self._edit_selected_sample_loop).pack(side="left")
+        ttk.Button(mapping_buttons, text="Edit plays-on keys…", command=self._edit_selected_sample_mapping).pack(side="left", padx=(0, 6))
+        ttk.Button(mapping_buttons, text="Edit selected audio loop…", command=self._edit_selected_sample_loop).pack(side="left")
 
         notes = ttk.LabelFrame(mapping_tab, text="Notes")
         notes.pack(fill="x", pady=(10, 0))
@@ -542,8 +546,9 @@ class SampleSmithApp(tk.Tk):
             notes,
             text=(
                 "DecentSampler settings are split into sub-tabs. Loop controls here are fallback/default values; "
-                "per-WAV loop edits are shown in the mapping table and take priority during export. "
-                "Generated bridge WAVs are marked provisional/derived in the mapping table and saved under Samples/generated."
+                "select a row to edit its root and plays-on key range. "
+                "per-audio-file loop edits are shown in the mapping table and take priority during export. "
+                "Generated bridge samples are marked provisional/derived in the mapping table and saved under Samples/generated."
             ),
             wraplength=820,
             justify="left",
@@ -735,7 +740,8 @@ class SampleSmithApp(tk.Tk):
         return Path(self.output_var.get()).expanduser() / slugify(self.name_var.get())
 
     def _sample_path(self, label: str) -> Path:
-        return self._instrument_dir() / "Samples" / f"{slugify(self.name_var.get())}_{label}.wav"
+        suffix = ".flac" if self.sample_format_var.get().lower() == "flac" else ".wav"
+        return self._instrument_dir() / "Samples" / f"{slugify(self.name_var.get())}_{label}{suffix}"
 
     def _backup_path_for_sample(self, path: Path) -> Path:
         return path.parent / ".samplesmith-backups" / f"{path.name}.original.wav"
@@ -761,13 +767,14 @@ class SampleSmithApp(tk.Tk):
 
     def _write_reviewed_wav(self, path: Path, audio, sample_rate: int | None = None) -> None:
         self._ensure_sample_backup(path)
-        self._audio().write_wav(path, audio, sample_rate=sample_rate)
+        self._audio().write_audio(path, audio, sample_rate=sample_rate)
 
     def _bridge_sample_path(self, target_note: int, low_root: int, high_root: int) -> Path:
         target = midi_to_name(target_note).replace("#", "sharp")
         low = midi_to_name(low_root).replace("#", "sharp")
         high = midi_to_name(high_root).replace("#", "sharp")
-        return self._instrument_dir() / "Samples" / "generated" / f"bridge_note_{target_note:03d}_{target}_from_{low}_{high}.wav"
+        suffix = ".flac" if self.sample_format_var.get().lower() == "flac" else ".wav"
+        return self._instrument_dir() / "Samples" / "generated" / f"bridge_note_{target_note:03d}_{target}_from_{low}_{high}{suffix}"
 
     def _browse_output(self) -> None:
         chosen = filedialog.askdirectory(initialdir=self.output_var.get() or str(Path.cwd()))
@@ -789,6 +796,7 @@ class SampleSmithApp(tk.Tk):
             "name": self.name_var.get(),
             "output": self.output_var.get(),
             "sample_rate": self.sample_rate_var.get(),
+            "sample_format": self.sample_format_var.get(),
             "record_seconds": self.record_seconds_var.get(),
             "trim_threshold_db": self.threshold_var.get(),
             "normalise": self.normalise_var.get(),
@@ -1135,6 +1143,8 @@ class SampleSmithApp(tk.Tk):
         self.name_var.set(str(data.get("name", "NewInstrument")))
         self.output_var.set(str(data.get("output", str(Path.cwd() / "samplesmith-projects"))))
         self.sample_rate_var.set(int(data.get("sample_rate", DEFAULT_SAMPLE_RATE)))
+        sample_format = str(data.get("sample_format", "flac") or "flac").lower()
+        self.sample_format_var.set(sample_format if sample_format in {"flac", "wav"} else "flac")
         self.record_seconds_var.set(float(data.get("record_seconds", 4.0)))
         self.threshold_var.set(float(data.get("trim_threshold_db", -45.0)))
         self.normalise_var.set(bool(data.get("normalise", True)))
@@ -1798,9 +1808,15 @@ class SampleSmithApp(tk.Tk):
             peak = max((self._frame_peak(audio[i]) for i in range(left, right)), default=0.0)
             peaks.append(peak)
         scale = max(peaks) or 1.0
+        upper_points: list[int] = []
+        lower_points: list[int] = []
         for x, peak in enumerate(peaks):
             y = int((peak / scale) * (height / 2 - 4))
-            canvas.create_line(x, mid - y, x, mid + y, fill="#d8d8d8")
+            upper_points.extend((x, mid - y))
+            lower_points.extend((x, mid + y))
+        if len(upper_points) >= 4:
+            canvas.create_line(*upper_points, fill="#d8d8d8", smooth=True, splinesteps=8)
+            canvas.create_line(*lower_points, fill="#d8d8d8", smooth=True, splinesteps=8)
         canvas.create_line(0, mid, width, mid, fill="#444444")
         canvas.create_line(x_start, 0, x_start, height, fill="#63d471", width=2)
         canvas.create_line(x_end, 0, x_end, height, fill="#ff6b6b", width=2)
@@ -2070,6 +2086,30 @@ class SampleSmithApp(tk.Tk):
         except RuntimeError as exc:
             messagebox.showerror("SampleSmith", str(exc))
 
+    def _edit_selected_sample_mapping(self) -> None:
+        selected = self.export_tree.selection()
+        if not selected:
+            messagebox.showwarning("SampleSmith", "Select a row in the exported mapping first.")
+            return
+        exported = self.export_samples_by_iid.get(selected[0])
+        if exported is None:
+            messagebox.showwarning("SampleSmith", "Could not find that exported sample. Try refreshing the mapping.")
+            return
+        sample = self._editable_sample_for_exported(exported)
+        if sample is None:
+            messagebox.showinfo(
+                "SampleSmith",
+                "That row is generated/provisional. Record or import a real replacement first, then edit its key mapping.",
+            )
+            return
+        MappingEditorDialog(self, sample, self._apply_sample_mapping_edit)
+
+    def _apply_sample_mapping_edit(self, sample: SampleInfo) -> None:
+        self._refresh_pitched_mappings()
+        preset = self._write_preset()
+        self._auto_save_project()
+        self._log(f"Updated key mapping for {sample.path.name}; regenerated {preset.name}")
+
     def _apply_sample_loop_edit(self, sample: SampleInfo) -> None:
         self._refresh_pitched_mappings()
         preset = self._write_preset()
@@ -2225,6 +2265,92 @@ class SampleSmithApp(tk.Tk):
 
 
 
+class MappingEditorDialog(tk.Toplevel):
+    def __init__(self, parent: SampleSmithApp, sample: SampleInfo, on_apply) -> None:
+        super().__init__(parent)
+        self.parent = parent
+        self.sample = sample
+        self.on_apply = on_apply
+        self.title(f"Key mapping — {sample.path.name}")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+
+        outer = ttk.Frame(self, padding=12)
+        outer.pack(fill="both", expand=True)
+        ttk.Label(outer, text=sample.path.name, font=("TkDefaultFont", 10, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        ttk.Label(
+            outer,
+            text="DecentSampler: pitch centre = rootNote; plays-on keys = loNote–hiNote.",
+            foreground="#555555",
+            wraplength=360,
+            justify="left",
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 10))
+
+        self.root_var = tk.StringVar(value=midi_to_name(sample.root_note))
+        self.lo_var = tk.StringVar(value=midi_to_name(sample.lo_note))
+        self.hi_var = tk.StringVar(value=midi_to_name(sample.hi_note))
+        self.preview_var = tk.StringVar(value="")
+
+        for row, (label, variable) in enumerate(
+            (("Root / pitch centre", self.root_var), ("Plays from", self.lo_var), ("Plays to", self.hi_var)),
+            start=2,
+        ):
+            ttk.Label(outer, text=label).grid(row=row, column=0, sticky="w", pady=3)
+            entry = ttk.Entry(outer, textvariable=variable, width=12)
+            entry.grid(row=row, column=1, sticky="w", pady=3)
+            variable.trace_add("write", lambda *_: self._refresh_preview())
+
+        ttk.Label(outer, textvariable=self.preview_var, foreground="#555555").grid(row=5, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        buttons = ttk.Frame(outer)
+        buttons.grid(row=6, column=0, columnspan=2, sticky="e", pady=(12, 0))
+        ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="right")
+        ttk.Button(buttons, text="Apply", command=self._apply).pack(side="right", padx=(0, 6))
+
+        self._refresh_preview()
+        self.wait_window(self)
+
+    def _parse_note(self, value: str) -> int:
+        value = value.strip()
+        if not value:
+            raise ValueError("Enter a DecentSampler key such as C4 or 72.")
+        try:
+            note = int(value)
+        except ValueError:
+            note = name_to_midi(value)
+        if not 0 <= note <= 127:
+            raise ValueError("DecentSampler key must be between 0 and 127.")
+        return note
+
+    def _current_values(self) -> tuple[int, int, int]:
+        root = self._parse_note(self.root_var.get())
+        lo = self._parse_note(self.lo_var.get())
+        hi = self._parse_note(self.hi_var.get())
+        if hi < lo:
+            raise ValueError("'Plays to' must be the same as or higher than 'Plays from'.")
+        return root, lo, hi
+
+    def _refresh_preview(self) -> None:
+        try:
+            root, lo, hi = self._current_values()
+        except ValueError:
+            self.preview_var.set("Enter notes like C4 or DS key numbers like 72.")
+            return
+        self.preview_var.set(f"Will export root {midi_to_name(root)}; plays on {mapping_text(lo, hi)}")
+
+    def _apply(self) -> None:
+        try:
+            root, lo, hi = self._current_values()
+        except ValueError as exc:
+            messagebox.showerror("SampleSmith", str(exc), parent=self)
+            return
+        self.sample.root_note = root
+        self.sample.lo_note = lo
+        self.sample.hi_note = hi
+        self.on_apply(self.sample)
+        self.destroy()
+
+
 class LoopEditorDialog(tk.Toplevel):
     def __init__(self, parent: SampleSmithApp, sample: SampleInfo, on_apply) -> None:
         super().__init__(parent)
@@ -2268,23 +2394,25 @@ class LoopEditorDialog(tk.Toplevel):
 
         self.canvas = tk.Canvas(outer, width=self.canvas_width, height=self.canvas_height, bg="#101010", highlightthickness=1, highlightbackground="#666666")
         self.canvas.pack(fill="x")
-        ttk.Label(outer, textvariable=self.visual_status_var, foreground="#555555").pack(anchor="w", pady=(3, 0))
-        self.canvas.bind("<Button-1>", self._start_drag)
-        self.canvas.bind("<B1-Motion>", self._drag)
-        self.canvas.bind("<ButtonRelease-1>", self._end_drag)
+        ttk.Label(outer, text="Left-click waveform to set loop start; right-click to set loop end. Drag the start/end lines to fine-tune.", foreground="#555555").pack(anchor="w", pady=(3, 0))
+        ttk.Label(outer, textvariable=self.visual_status_var, foreground="#555555").pack(anchor="w", pady=(1, 0))
+        self.canvas.bind("<Button-1>", self._set_loop_start_from_canvas)
+        self.canvas.bind("<Button-3>", self._set_loop_end_from_canvas)
+        self.canvas.bind("<B1-Motion>", self._drag_start)
+        self.canvas.bind("<B3-Motion>", self._drag_end)
 
         zooms = ttk.Frame(outer)
         zooms.pack(fill="x", pady=(8, 0))
-        start_zoom = ttk.LabelFrame(zooms, text="Loop start close-up — click waveform to set")
+        start_zoom = ttk.LabelFrame(zooms, text="Loop start close-up — left-click to set start")
         start_zoom.pack(side="left", fill="x", expand=True, padx=(0, 6))
-        end_zoom = ttk.LabelFrame(zooms, text="Loop end close-up — click waveform to set")
+        end_zoom = ttk.LabelFrame(zooms, text="Loop end close-up — right-click to set end")
         end_zoom.pack(side="left", fill="x", expand=True, padx=(6, 0))
         self.start_zoom_canvas = tk.Canvas(start_zoom, width=self.zoom_width, height=self.zoom_height, bg="#101010", cursor="crosshair", highlightthickness=1, highlightbackground="#666666")
         self.start_zoom_canvas.pack(fill="x", padx=6, pady=6)
         self.end_zoom_canvas = tk.Canvas(end_zoom, width=self.zoom_width, height=self.zoom_height, bg="#101010", cursor="crosshair", highlightthickness=1, highlightbackground="#666666")
         self.end_zoom_canvas.pack(fill="x", padx=6, pady=6)
         self.start_zoom_canvas.bind("<Button-1>", lambda event: self._set_zoom_frame("start", event.x))
-        self.end_zoom_canvas.bind("<Button-1>", lambda event: self._set_zoom_frame("end", event.x))
+        self.end_zoom_canvas.bind("<Button-3>", lambda event: self._set_zoom_frame("end", event.x))
         for zoom_canvas in (self.start_zoom_canvas, self.end_zoom_canvas):
             zoom_canvas.bind("<MouseWheel>", self._on_closeup_mousewheel)
             zoom_canvas.bind("<Button-4>", self._on_closeup_mousewheel)
@@ -2446,9 +2574,15 @@ class LoopEditorDialog(tk.Toplevel):
         self.canvas.delete("all")
         mid = self.canvas_height // 2
         scale = (self.canvas_height // 2) - 14
+        upper_points: list[int] = []
+        lower_points: list[int] = []
         for x, peak in enumerate(self.peaks):
             y = int(peak * scale)
-            self.canvas.create_line(x, mid - y, x, mid + y, fill="#72b7ff")
+            upper_points.extend((x, mid - y))
+            lower_points.extend((x, mid + y))
+        if len(upper_points) >= 4:
+            self.canvas.create_line(*upper_points, fill="#72b7ff", smooth=True, splinesteps=8)
+            self.canvas.create_line(*lower_points, fill="#72b7ff", smooth=True, splinesteps=8)
         start, end = self._loop_points()
         start_x = self._x_for_frame(start)
         end_x = self._x_for_frame(end)
@@ -2543,16 +2677,23 @@ class LoopEditorDialog(tk.Toplevel):
         else:
             self.loop_end_var.set(str(min(self.frames - 1, max(frame, start + 1))))
 
-    def _start_drag(self, event) -> None:
-        start, end = self._loop_points()
-        start_x = self._x_for_frame(start)
-        end_x = self._x_for_frame(end)
-        self.dragging = "start" if abs(event.x - start_x) <= abs(event.x - end_x) else "end"
-        self._drag(event)
+    def _set_loop_start_from_canvas(self, event) -> None:
+        self.dragging = "start"
+        self._drag_loop_point(event)
 
-    def _drag(self, event) -> None:
-        if self.dragging is None:
-            return
+    def _set_loop_end_from_canvas(self, event) -> None:
+        self.dragging = "end"
+        self._drag_loop_point(event)
+
+    def _drag_start(self, event) -> None:
+        self.dragging = "start"
+        self._drag_loop_point(event)
+
+    def _drag_end(self, event) -> None:
+        self.dragging = "end"
+        self._drag_loop_point(event)
+
+    def _drag_loop_point(self, event) -> None:
         self.loop_enabled_var.set(True)
         start, end = self._loop_points()
         frame = self._frame_for_x(event.x)

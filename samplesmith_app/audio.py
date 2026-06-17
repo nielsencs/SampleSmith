@@ -78,10 +78,15 @@ class AudioEngine:
                 trimmed = (trimmed / peak * 0.9).astype(np.float32)
         return trimmed
 
-    def write_wav(self, path: Path, audio, sample_rate: int | None = None) -> None:
+    def write_audio(self, path: Path, audio, sample_rate: int | None = None) -> None:
         _, _, sf = self._deps()
         path.parent.mkdir(parents=True, exist_ok=True)
-        sf.write(path, audio, sample_rate or self.sample_rate, subtype="PCM_24")
+        suffix = path.suffix.lower()
+        subtype = "PCM_24" if suffix in {".wav", ".flac"} else None
+        sf.write(path, audio, sample_rate or self.sample_rate, subtype=subtype)
+
+    def write_wav(self, path: Path, audio, sample_rate: int | None = None) -> None:
+        self.write_audio(path, audio, sample_rate=sample_rate)
 
     def read_audio(self, path: Path):
         _, _, sf = self._deps()
