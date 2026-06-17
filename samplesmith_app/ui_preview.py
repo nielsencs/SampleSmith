@@ -121,6 +121,7 @@ class DecentSamplerUiPreview:
             text="Drag knobs in the 812×375 DecentSampler panel. Positions save with the project and export to the .dspreset.",
         ).pack(side="left")
         ttk.Button(tools, text="Reset layout", command=self.reset_layout).pack(side="right", padx=(6, 0))
+        ttk.Button(tools, text="Tidy groups", command=self.tidy_groups).pack(side="right", padx=(6, 0))
         ttk.Button(tools, text="Refresh", command=self.redraw).pack(side="right")
         self.canvas = tk.Canvas(
             parent,
@@ -205,7 +206,7 @@ class DecentSamplerUiPreview:
         for control in controls:
             self._draw_knob(str(control["id"]), str(control["label"]), str(control["group"]), int(control["x"]), int(control["y"]))
         if controls:
-            self.status_var.set(f"{len(controls)} visible DecentSampler knob(s). Drag knobs or group rectangles to adjust exported positions.")
+            self.status_var.set(f"{len(controls)} visible DecentSampler knob(s). Drag knobs/groups, or double-click a group rectangle to tidy it.")
         else:
             self.status_var.set("No visible knobs yet. Enable effects and K boxes to add controls.")
 
@@ -238,6 +239,7 @@ class DecentSamplerUiPreview:
             self.canvas.tag_bind(panel_tag, "<ButtonPress-1>", self._start_panel_drag)
             self.canvas.tag_bind(panel_tag, "<B1-Motion>", self._drag_panel)
             self.canvas.tag_bind(panel_tag, "<ButtonRelease-1>", self._end_drag)
+            self.canvas.tag_bind(panel_tag, "<Double-Button-1>", self._tidy_panel_from_event)
 
     def _draw_knob(self, control_id: str, label: str, group: str, x: int, y: int) -> None:
         tag = f"ui:{control_id}"
@@ -286,6 +288,14 @@ class DecentSamplerUiPreview:
             else:
                 positions[control_id] = {"x": int(current["x"]), "y": int(current["y"])}
         return positions
+
+    def _controls_by_group(self) -> dict[str, list[dict[str, object]]]:
+        groups: dict[str, list[dict[str, object]]] = {}
+        for control in self.visible_controls():
+            groups.setdefault(str(control["group"]), []).append(control)
+        for group_controls in groups.values():
+            group_controls.sort(key=lambda control: int(control["index"]))
+        return groups
 
     def _start_drag(self, event) -> None:
         control_id = self._control_id_from_event()
@@ -361,9 +371,44 @@ class DecentSamplerUiPreview:
         self.drag["x"] = int(event.x)
         self.drag["y"] = int(event.y)
 
+    def _tidy_panel_from_event(self, _event) -> None:
+        title = self._panel_title_from_event()
+        if title:
+            self.tidy_groups(title)
+
     def _end_drag(self, _event) -> None:
         if self.drag:
             self.drag = None
+            self.owner._auto_save_project()
+            self.owner._on_output_parameter_changed()
+
+    def tidy_groups(self, only_group: str | None = None) -> None:
+        changed = False
+        positions = self._current_control_positions()
+        for title, controls in self._controls_by_group().items():
+            if only_group is not None and title != only_group:
+                continue
+            control_ids = [str(control["id"]) for control in controls]
+            current_positions = [positions[control_id] for control_id in control_ids if control_id in positions]
+            if not current_positions:
+                continue
+            start_x = min(pos["x"] for pos in current_positions)
+            y = max(UI_KNOB_MIN_Y, min(UI_KNOB_MAX_Y, min(pos["y"] for pos in current_positions)))
+            if len(control_ids) == 1:
+                new_positions = [(start_x, y)]
+            else:
+                step = min(70, UI_KNOB_MAX_X // (len(control_ids) - 1))
+                width = step * (len(control_ids) - 1)
+                start_x = max(0, min(UI_KNOB_MAX_X - width, start_x))
+                new_positions = [(start_x + index * step, y) for index in range(len(control_ids))]
+            for control_id, (x, new_y) in zip(control_ids, new_positions):
+                current = positions.get(control_id)
+                if current is None or current == {"x": x, "y": new_y}:
+                    continue
+                self.owner.ui_layout[control_id] = {"x": x, "y": new_y}
+                changed = True
+        if changed:
+            self.redraw()
             self.owner._auto_save_project()
             self.owner._on_output_parameter_changed()
 
