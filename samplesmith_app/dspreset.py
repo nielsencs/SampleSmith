@@ -24,6 +24,8 @@ UI_KNOB_MIN_Y = 0
 UI_KNOB_MAX_X = 725
 UI_KNOB_MAX_Y = 124
 UI_GROUP_TITLE_HEIGHT = 20
+UI_GROUP_PADDING = 3
+UI_KNOB_GAP = 3
 
 OFFICIAL_KNOB_STYLE = {
     "textColor": "AA000000",
@@ -478,10 +480,10 @@ def generate_dspreset(
             top = min(y for _x, y in positions)
             right = max(x + UI_KNOB_WIDTH for x, _y in positions)
             bottom = max(y + UI_KNOB_WIDTH for _x, y in positions)
-            group_x = max(0, left - 10)
-            group_y = max(0, top - UI_GROUP_TITLE_HEIGHT - 8)
-            group_width = min(DECENT_SAMPLER_UI_WIDTH - group_x, right - group_x + 10)
-            group_height = min(DECENT_SAMPLER_UI_HEIGHT - group_y, bottom - group_y + 8)
+            group_x = max(0, left - UI_GROUP_PADDING)
+            group_y = max(0, top - UI_GROUP_PADDING)
+            group_width = min(DECENT_SAMPLER_UI_WIDTH - group_x, right - group_x + UI_GROUP_PADDING)
+            group_height = min(DECENT_SAMPLER_UI_HEIGHT - group_y, bottom - group_y + UI_GROUP_PADDING)
             ET.SubElement(
                 tab,
                 "rectangle",
@@ -499,9 +501,9 @@ def generate_dspreset(
                 tab,
                 "label",
                 {
-                    "x": str(group_x + 10),
-                    "y": str(group_y + 4),
-                    "width": str(max(40, group_width - 20)),
+                    "x": str(group_x),
+                    "y": str(max(0, group_y - UI_GROUP_TITLE_HEIGHT)),
+                    "width": str(max(40, group_width)),
                     "height": "18",
                     "text": title,
                     "textColor": "DD330033",

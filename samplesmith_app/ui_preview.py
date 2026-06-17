@@ -15,6 +15,9 @@ from .dspreset import (
     UI_KNOB_MAX_X,
     UI_KNOB_MAX_Y,
     UI_KNOB_WIDTH,
+    UI_GROUP_PADDING,
+    UI_GROUP_TITLE_HEIGHT,
+    UI_KNOB_GAP,
     ui_layout_position,
 )
 
@@ -222,14 +225,14 @@ class DecentSamplerUiPreview:
             top = min(int(control["y"]) + PREVIEW_ORIGIN_Y for control in group_controls)
             right = max(int(control["x"]) + PREVIEW_ORIGIN_X + UI_KNOB_WIDTH for control in group_controls)
             bottom = max(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_KNOB_WIDTH for control in group_controls)
-            x1 = max(0, left - 10)
-            y1 = max(0, top - 28)
-            x2 = min(DECENT_SAMPLER_UI_WIDTH, right + 10)
-            y2 = min(DECENT_SAMPLER_UI_HEIGHT, bottom + 8)
+            x1 = max(0, left - UI_GROUP_PADDING)
+            y1 = max(0, top - UI_GROUP_PADDING)
+            x2 = min(DECENT_SAMPLER_UI_WIDTH, right + UI_GROUP_PADDING)
+            y2 = min(DECENT_SAMPLER_UI_HEIGHT, bottom + UI_GROUP_PADDING)
             rectangle = self.canvas.create_rectangle(x1, y1, x2, y2, fill="#eee6dc", outline="#8a6a82", stipple="gray25", tags=(panel_tag, "ui-panel"))
             label = self.canvas.create_text(
                 x1 + (x2 - x1) // 2,
-                y1 + 12,
+                max(10, y1 - UI_GROUP_TITLE_HEIGHT // 2),
                 text=title,
                 fill="#330033",
                 font=("TkDefaultFont", 10),
@@ -397,7 +400,7 @@ class DecentSamplerUiPreview:
             if len(control_ids) == 1:
                 new_positions = [(start_x, y)]
             else:
-                step = min(70, UI_KNOB_MAX_X // (len(control_ids) - 1))
+                step = UI_KNOB_WIDTH + UI_KNOB_GAP
                 width = step * (len(control_ids) - 1)
                 start_x = max(0, min(UI_KNOB_MAX_X - width, start_x))
                 new_positions = [(start_x + index * step, y) for index in range(len(control_ids))]
