@@ -226,12 +226,16 @@ class DecentSamplerUiPreview:
 
     def _draw_knob(self, control_id: str, label: str, group: str, x: int, y: int) -> None:
         tag = f"ui:{control_id}"
+        knob_left = x + 18
+        knob_top = y + 18
+        knob_right = x + UI_KNOB_WIDTH - 18
+        knob_bottom = y + UI_KNOB_WIDTH - 22
         items = [
             self.canvas.create_rectangle(x, y, x + UI_KNOB_WIDTH, y + UI_KNOB_WIDTH, outline="#c8b9c5", dash=(2, 2), tags=(tag, "ui-knob")),
-            self.canvas.create_text(x + UI_KNOB_WIDTH // 2, y + 8, text=group, fill="#664466", font=("TkDefaultFont", 9), tags=(tag, "ui-knob")),
-            self.canvas.create_oval(x, y + 14, x + UI_KNOB_WIDTH, y + UI_KNOB_WIDTH - 10, fill="#d9d2c8", outline="#330033", width=2, tags=(tag, "ui-knob")),
-            self.canvas.create_line(x + UI_KNOB_WIDTH // 2, y + 24, x + UI_KNOB_WIDTH // 2, y + 40, fill="#330033", width=2, tags=(tag, "ui-knob")),
-            self.canvas.create_text(x + UI_KNOB_WIDTH // 2, y + UI_KNOB_WIDTH - 2, text=label, fill="#330033", font=("TkDefaultFont", 10), tags=(tag, "ui-knob")),
+            self.canvas.create_text(x + UI_KNOB_WIDTH // 2, y + 10, text=group, fill="#664466", font=("TkDefaultFont", 9), tags=(tag, "ui-knob")),
+            self.canvas.create_oval(knob_left, knob_top, knob_right, knob_bottom, fill="#d9d2c8", outline="#330033", width=2, tags=(tag, "ui-knob")),
+            self.canvas.create_line(x + UI_KNOB_WIDTH // 2, knob_top + 8, x + UI_KNOB_WIDTH // 2, knob_top + 25, fill="#330033", width=2, tags=(tag, "ui-knob")),
+            self.canvas.create_text(x + UI_KNOB_WIDTH // 2, y + UI_KNOB_WIDTH - 4, text=label, fill="#330033", font=("TkDefaultFont", 10), tags=(tag, "ui-knob")),
         ]
         self.canvas_items[control_id] = items
         self.canvas.tag_bind(tag, "<ButtonPress-1>", self._start_drag)
