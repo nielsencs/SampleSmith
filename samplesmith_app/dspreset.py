@@ -20,12 +20,13 @@ UI_KNOB_STEP_Y = 76
 UI_KNOB_WIDTH = 90
 UI_KNOB_START_X = 30
 UI_KNOB_START_Y = 75
-UI_KNOB_MIN_Y = 0
+UI_KNOB_MIN_Y = 30
 UI_KNOB_MAX_X = 725
-UI_KNOB_MAX_Y = 124
+UI_KNOB_MAX_Y = 154
 UI_GROUP_TITLE_HEIGHT = 20
 UI_GROUP_PADDING = 3
-UI_GROUP_TOP_PADDING = 8
+UI_GROUP_TOP_PADDING = 18
+UI_GROUP_TITLE_GAP = 8
 UI_KNOB_GAP = 6
 UI_KNOB_VISIBLE_INSET_X = 18
 UI_KNOB_VISIBLE_INSET_Y = 18
@@ -510,7 +511,7 @@ def generate_dspreset(
                 "label",
                 {
                     "x": str(group_x),
-                    "y": str(max(0, group_y - UI_GROUP_TITLE_HEIGHT)),
+                    "y": str(max(0, group_y - UI_GROUP_TITLE_HEIGHT - UI_GROUP_TITLE_GAP)),
                     "width": str(max(40, group_width)),
                     "height": "18",
                     "text": title,

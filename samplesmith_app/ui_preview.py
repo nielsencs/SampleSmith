@@ -18,6 +18,7 @@ from .dspreset import (
     UI_GROUP_PADDING,
     UI_GROUP_TOP_PADDING,
     UI_GROUP_TITLE_HEIGHT,
+    UI_GROUP_TITLE_GAP,
     UI_KNOB_GAP,
     UI_KNOB_VISIBLE_INSET_X,
     UI_KNOB_VISIBLE_INSET_Y,
@@ -242,9 +243,10 @@ class DecentSamplerUiPreview:
             x2 = min(DECENT_SAMPLER_UI_WIDTH, right + UI_GROUP_PADDING)
             y2 = min(DECENT_SAMPLER_UI_HEIGHT, bottom + UI_GROUP_PADDING)
             rectangle = self.canvas.create_rectangle(x1, y1, x2, y2, fill="#eee6dc", outline="#8a6a82", stipple="gray25", tags=(panel_tag, "ui-panel"))
+            title_y = max(0, int(round(y1 - PREVIEW_ORIGIN_Y)) - UI_GROUP_TITLE_HEIGHT - UI_GROUP_TITLE_GAP)
             label = self.canvas.create_text(
                 x1 + (x2 - x1) // 2,
-                max(10, y1 - UI_GROUP_TITLE_HEIGHT // 2),
+                PREVIEW_ORIGIN_Y + title_y + UI_GROUP_TITLE_HEIGHT // 2,
                 text=title,
                 fill="#330033",
                 font=("TkDefaultFont", 10),
