@@ -26,6 +26,13 @@ UI_KNOB_MAX_Y = 124
 UI_GROUP_TITLE_HEIGHT = 20
 UI_GROUP_PADDING = 3
 UI_KNOB_GAP = 3
+UI_KNOB_VISIBLE_INSET_X = 18
+UI_KNOB_VISIBLE_INSET_Y = 18
+UI_KNOB_VISIBLE_WIDTH = UI_KNOB_WIDTH - UI_KNOB_VISIBLE_INSET_X * 2
+UI_KNOB_VISIBLE_OUTLINE_WIDTH = 2
+UI_KNOB_VISIBLE_OUTER_INSET_X = UI_KNOB_VISIBLE_INSET_X - UI_KNOB_VISIBLE_OUTLINE_WIDTH // 2
+UI_KNOB_VISIBLE_OUTER_INSET_Y = UI_KNOB_VISIBLE_INSET_Y - UI_KNOB_VISIBLE_OUTLINE_WIDTH // 2
+UI_KNOB_VISIBLE_OUTER_WIDTH = UI_KNOB_VISIBLE_WIDTH + UI_KNOB_VISIBLE_OUTLINE_WIDTH
 
 OFFICIAL_KNOB_STYLE = {
     "textColor": "AA000000",
@@ -476,10 +483,10 @@ def generate_dspreset(
             if (visible_control_index % UI_KNOB_COLUMNS) + control_count > UI_KNOB_COLUMNS:
                 visible_control_index += UI_KNOB_COLUMNS - (visible_control_index % UI_KNOB_COLUMNS)
             positions = [ui_layout_position(control_id, visible_control_index + offset, ui_layout) for offset, control_id in enumerate(control_ids)]
-            left = min(x for x, _y in positions)
-            top = min(y for _x, y in positions)
-            right = max(x + UI_KNOB_WIDTH for x, _y in positions)
-            bottom = max(y + UI_KNOB_WIDTH for _x, y in positions)
+            left = min(x + UI_KNOB_VISIBLE_OUTER_INSET_X for x, _y in positions)
+            top = min(y + UI_KNOB_VISIBLE_OUTER_INSET_Y for _x, y in positions)
+            right = max(x + UI_KNOB_VISIBLE_OUTER_INSET_X + UI_KNOB_VISIBLE_OUTER_WIDTH for x, _y in positions)
+            bottom = max(y + UI_KNOB_VISIBLE_OUTER_INSET_Y + UI_KNOB_VISIBLE_OUTER_WIDTH for _x, y in positions)
             group_x = max(0, left - UI_GROUP_PADDING)
             group_y = max(0, top - UI_GROUP_PADDING)
             group_width = min(DECENT_SAMPLER_UI_WIDTH - group_x, right - group_x + UI_GROUP_PADDING)

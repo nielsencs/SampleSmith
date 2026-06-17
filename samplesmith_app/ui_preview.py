@@ -18,6 +18,12 @@ from .dspreset import (
     UI_GROUP_PADDING,
     UI_GROUP_TITLE_HEIGHT,
     UI_KNOB_GAP,
+    UI_KNOB_VISIBLE_INSET_X,
+    UI_KNOB_VISIBLE_INSET_Y,
+    UI_KNOB_VISIBLE_WIDTH,
+    UI_KNOB_VISIBLE_OUTER_INSET_X,
+    UI_KNOB_VISIBLE_OUTER_INSET_Y,
+    UI_KNOB_VISIBLE_OUTER_WIDTH,
     ui_layout_position,
 )
 
@@ -221,10 +227,10 @@ class DecentSamplerUiPreview:
             panel_tag = f"ui-panel:{panel_index}"
             self.panel_tags[panel_tag] = title
             self.panel_controls[title] = [str(control["id"]) for control in group_controls]
-            left = min(int(control["x"]) + PREVIEW_ORIGIN_X for control in group_controls)
-            top = min(int(control["y"]) + PREVIEW_ORIGIN_Y for control in group_controls)
-            right = max(int(control["x"]) + PREVIEW_ORIGIN_X + UI_KNOB_WIDTH for control in group_controls)
-            bottom = max(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_KNOB_WIDTH for control in group_controls)
+            left = min(int(control["x"]) + PREVIEW_ORIGIN_X + UI_KNOB_VISIBLE_OUTER_INSET_X for control in group_controls)
+            top = min(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_KNOB_VISIBLE_OUTER_INSET_Y for control in group_controls)
+            right = max(int(control["x"]) + PREVIEW_ORIGIN_X + UI_KNOB_VISIBLE_OUTER_INSET_X + UI_KNOB_VISIBLE_OUTER_WIDTH for control in group_controls)
+            bottom = max(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_KNOB_VISIBLE_OUTER_INSET_Y + UI_KNOB_VISIBLE_OUTER_WIDTH for control in group_controls)
             x1 = max(0, left - UI_GROUP_PADDING)
             y1 = max(0, top - UI_GROUP_PADDING)
             x2 = min(DECENT_SAMPLER_UI_WIDTH, right + UI_GROUP_PADDING)
@@ -248,10 +254,10 @@ class DecentSamplerUiPreview:
         tag = f"ui:{control_id}"
         canvas_x = x + PREVIEW_ORIGIN_X
         canvas_y = y + PREVIEW_ORIGIN_Y
-        knob_left = canvas_x + 18
-        knob_top = canvas_y + 18
-        knob_right = canvas_x + UI_KNOB_WIDTH - 18
-        knob_bottom = canvas_y + UI_KNOB_WIDTH - 22
+        knob_left = canvas_x + UI_KNOB_VISIBLE_INSET_X
+        knob_top = canvas_y + UI_KNOB_VISIBLE_INSET_Y
+        knob_right = knob_left + UI_KNOB_VISIBLE_WIDTH
+        knob_bottom = knob_top + UI_KNOB_VISIBLE_WIDTH
         items = [
             self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + UI_KNOB_WIDTH, canvas_y + UI_KNOB_WIDTH, outline="#c8b9c5", dash=(2, 2), tags=(tag, "ui-knob")),
             self.canvas.create_text(canvas_x + UI_KNOB_WIDTH // 2, canvas_y + 10, text=label, fill="#330033", font=("TkDefaultFont", 10), tags=(tag, "ui-knob")),
@@ -400,7 +406,7 @@ class DecentSamplerUiPreview:
             if len(control_ids) == 1:
                 new_positions = [(start_x, y)]
             else:
-                step = UI_KNOB_WIDTH + UI_KNOB_GAP
+                step = UI_KNOB_VISIBLE_OUTER_WIDTH + UI_KNOB_GAP
                 width = step * (len(control_ids) - 1)
                 start_x = max(0, min(UI_KNOB_MAX_X - width, start_x))
                 new_positions = [(start_x + index * step, y) for index in range(len(control_ids))]
