@@ -14,6 +14,13 @@ OFFICIAL_BOILERPLATE_PATH = ASSETS_DIR / "official-boilerplate.dspreset"
 OFFICIAL_TONE_TRANSLATION_TABLE = "0,33;0.3,150;0.4,450;0.5,1100;0.7,4100;0.9,11000;1.0001,22000"
 DECENT_SAMPLER_UI_WIDTH = 812
 DECENT_SAMPLER_UI_HEIGHT = 375
+UI_KNOB_COLUMNS = 9
+UI_KNOB_STEP_X = 84
+UI_KNOB_STEP_Y = 88
+UI_KNOB_WIDTH = 70
+UI_KNOB_START_X = 30
+UI_KNOB_START_Y = 66
+UI_GROUP_TITLE_HEIGHT = 20
 
 OFFICIAL_KNOB_STYLE = {
     "textColor": "AA000000",
@@ -40,6 +47,25 @@ def tone_control_value_for_frequency(frequency: float) -> float:
             ratio = (frequency - left_freq) / (right_freq - left_freq)
             return left_x + ratio * (right_x - left_x)
     return 1.0
+
+
+def default_ui_knob_position(index: int) -> tuple[int, int]:
+    return UI_KNOB_START_X + (index % UI_KNOB_COLUMNS) * UI_KNOB_STEP_X, UI_KNOB_START_Y + (index // UI_KNOB_COLUMNS) * UI_KNOB_STEP_Y
+
+
+def ui_layout_position(control_id: str, index: int, ui_layout: dict[str, object] | None) -> tuple[int, int]:
+    default_x, default_y = default_ui_knob_position(index)
+    if not ui_layout:
+        return default_x, default_y
+    raw = ui_layout.get(control_id)
+    if not isinstance(raw, dict):
+        return default_x, default_y
+    try:
+        x = int(float(raw.get("x", default_x)))
+        y = int(float(raw.get("y", default_y)))
+    except (TypeError, ValueError):
+        return default_x, default_y
+    return max(0, min(DECENT_SAMPLER_UI_WIDTH - UI_KNOB_WIDTH, x)), max(0, min(DECENT_SAMPLER_UI_HEIGHT - UI_KNOB_WIDTH, y))
 
 def generate_dspreset(
     instrument_name: str,
@@ -148,6 +174,7 @@ def generate_dspreset(
     ds_knob_bit_depth: bool = False,
     ds_knob_bit_crusher_rate: bool = False,
     ds_knob_bit_crusher_mix: bool = False,
+    ui_layout: dict[str, object] | None = None,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     effects_to_write: list[tuple[str, dict[str, str]]] = []
@@ -274,110 +301,99 @@ def generate_dspreset(
             (
                 "Tone",
                 [
-                    (ds_knob_tone and filter_effect_type in effect_positions, filter_effect_type, "Tone", "FX_FILTER_FREQUENCY", "0", "1", f"{tone_control_value_for_frequency(lowpass_frequency):.3f}", "1.000"),
-                    (ds_knob_filter_resonance and filter_effect_type in effect_positions and filter_effect_type != "lowpass_1pl", filter_effect_type, "Res", "FX_FILTER_RESONANCE", "0", "5", f"{filter_resonance:.3f}", "0.700"),
+                    (ds_knob_tone and filter_effect_type in effect_positions, "filter_tone", filter_effect_type, "Tone", "FX_FILTER_FREQUENCY", "0", "1", f"{tone_control_value_for_frequency(lowpass_frequency):.3f}", "1.000"),
+                    (ds_knob_filter_resonance and filter_effect_type in effect_positions and filter_effect_type != "lowpass_1pl", "filter_resonance", filter_effect_type, "Res", "FX_FILTER_RESONANCE", "0", "5", f"{filter_resonance:.3f}", "0.700"),
                 ],
             ),
             (
                 "Notch",
                 [
-                    (ds_knob_notch_frequency and "notch" in effect_positions, "notch", "Frequency", "FX_FILTER_FREQUENCY", "60", "22000", f"{notch_frequency:.1f}", "10000.0"),
-                    (ds_knob_notch_q and "notch" in effect_positions, "notch", "Q", "FX_FILTER_Q", "0.01", "18", f"{notch_q:.3f}", "0.700"),
+                    (ds_knob_notch_frequency and "notch" in effect_positions, "notch_frequency", "notch", "Frequency", "FX_FILTER_FREQUENCY", "60", "22000", f"{notch_frequency:.1f}", "10000.0"),
+                    (ds_knob_notch_q and "notch" in effect_positions, "notch_q", "notch", "Q", "FX_FILTER_Q", "0.01", "18", f"{notch_q:.3f}", "0.700"),
                 ],
             ),
             (
                 "Peak",
                 [
-                    (ds_knob_peak_frequency and "peak" in effect_positions, "peak", "Frequency", "FX_FILTER_FREQUENCY", "60", "22000", f"{peak_frequency:.1f}", "10000.0"),
-                    (ds_knob_peak_q and "peak" in effect_positions, "peak", "Q", "FX_FILTER_Q", "0.01", "18", f"{peak_q:.3f}", "0.700"),
-                    (ds_knob_peak_gain and "peak" in effect_positions, "peak", "Gain", "FX_FILTER_GAIN", "0", "10", f"{peak_gain:.3f}", "1.000"),
+                    (ds_knob_peak_frequency and "peak" in effect_positions, "peak_frequency", "peak", "Frequency", "FX_FILTER_FREQUENCY", "60", "22000", f"{peak_frequency:.1f}", "10000.0"),
+                    (ds_knob_peak_q and "peak" in effect_positions, "peak_q", "peak", "Q", "FX_FILTER_Q", "0.01", "18", f"{peak_q:.3f}", "0.700"),
+                    (ds_knob_peak_gain and "peak" in effect_positions, "peak_gain", "peak", "Gain", "FX_FILTER_GAIN", "0", "10", f"{peak_gain:.3f}", "1.000"),
                 ],
             ),
-            ("Gain", [(ds_knob_gain_level and "gain" in effect_positions, "gain", "Level", "LEVEL", "-99", "24", f"{gain_level:.1f}", "0.0")]),
+            ("Gain", [(ds_knob_gain_level and "gain" in effect_positions, "gain_level", "gain", "Level", "LEVEL", "-99", "24", f"{gain_level:.1f}", "0.0")]),
             (
                 "Reverb",
                 [
-                    (ds_knob_reverb_wet and "reverb" in effect_positions, "reverb", "Amount", "FX_REVERB_WET_LEVEL", "0", "1", f"{reverb_wet_level:.3f}", "0.500"),
-                    (ds_knob_reverb_room and "reverb" in effect_positions, "reverb", "Room", "FX_REVERB_ROOM_SIZE", "0", "1", f"{reverb_room_size:.3f}", "0.700"),
-                    (ds_knob_reverb_damping and "reverb" in effect_positions, "reverb", "Damp", "FX_REVERB_DAMPING", "0", "1", f"{reverb_damping:.3f}", "0.300"),
+                    (ds_knob_reverb_wet and "reverb" in effect_positions, "reverb_wet", "reverb", "Amount", "FX_REVERB_WET_LEVEL", "0", "1", f"{reverb_wet_level:.3f}", "0.500"),
+                    (ds_knob_reverb_room and "reverb" in effect_positions, "reverb_room", "reverb", "Room", "FX_REVERB_ROOM_SIZE", "0", "1", f"{reverb_room_size:.3f}", "0.700"),
+                    (ds_knob_reverb_damping and "reverb" in effect_positions, "reverb_damping", "reverb", "Damp", "FX_REVERB_DAMPING", "0", "1", f"{reverb_damping:.3f}", "0.300"),
                 ],
             ),
             (
                 "Delay",
                 [
-                    (ds_knob_delay_wet and "delay" in effect_positions, "delay", "Amount", "FX_WET_LEVEL", "0", "1", f"{delay_wet_level:.3f}", "0.500"),
-                    (ds_knob_delay_time and "delay" in effect_positions, "delay", "Time", "FX_DELAY_TIME", "0", "20", f"{delay_time:.3f}", "0.700"),
-                    (ds_knob_delay_stereo_offset and "delay" in effect_positions, "delay", "Offset", "FX_STEREO_OFFSET", "0", "1", f"{delay_stereo_offset:.3f}", "0.000"),
-                    (ds_knob_delay_feedback and "delay" in effect_positions, "delay", "Feedback", "FX_FEEDBACK", "0", "1", f"{delay_feedback:.3f}", "0.200"),
+                    (ds_knob_delay_wet and "delay" in effect_positions, "delay_wet", "delay", "Amount", "FX_WET_LEVEL", "0", "1", f"{delay_wet_level:.3f}", "0.500"),
+                    (ds_knob_delay_time and "delay" in effect_positions, "delay_time", "delay", "Time", "FX_DELAY_TIME", "0", "20", f"{delay_time:.3f}", "0.700"),
+                    (ds_knob_delay_stereo_offset and "delay" in effect_positions, "delay_offset", "delay", "Offset", "FX_STEREO_OFFSET", "0", "1", f"{delay_stereo_offset:.3f}", "0.000"),
+                    (ds_knob_delay_feedback and "delay" in effect_positions, "delay_feedback", "delay", "Feedback", "FX_FEEDBACK", "0", "1", f"{delay_feedback:.3f}", "0.200"),
                 ],
             ),
             (
                 "Chorus",
                 [
-                    (ds_knob_chorus_mix and "chorus" in effect_positions, "chorus", "Amount", "FX_MIX", "0", "1", f"{chorus_mix:.3f}", "0.500"),
-                    (ds_knob_chorus_depth and "chorus" in effect_positions, "chorus", "Depth", "FX_MOD_DEPTH", "0", "1", f"{chorus_mod_depth:.3f}", "0.200"),
-                    (ds_knob_chorus_rate and "chorus" in effect_positions, "chorus", "Rate", "FX_MOD_RATE", "0", "10", f"{chorus_mod_rate:.3f}", "0.200"),
+                    (ds_knob_chorus_mix and "chorus" in effect_positions, "chorus_mix", "chorus", "Amount", "FX_MIX", "0", "1", f"{chorus_mix:.3f}", "0.500"),
+                    (ds_knob_chorus_depth and "chorus" in effect_positions, "chorus_depth", "chorus", "Depth", "FX_MOD_DEPTH", "0", "1", f"{chorus_mod_depth:.3f}", "0.200"),
+                    (ds_knob_chorus_rate and "chorus" in effect_positions, "chorus_rate", "chorus", "Rate", "FX_MOD_RATE", "0", "10", f"{chorus_mod_rate:.3f}", "0.200"),
                 ],
             ),
             (
                 "Phaser",
                 [
-                    (ds_knob_phaser_mix and "phaser" in effect_positions, "phaser", "Amount", "FX_MIX", "0", "1", f"{phaser_mix:.3f}", "0.500"),
-                    (ds_knob_phaser_depth and "phaser" in effect_positions, "phaser", "Depth", "FX_MOD_DEPTH", "0", "1", f"{phaser_mod_depth:.3f}", "0.200"),
-                    (ds_knob_phaser_rate and "phaser" in effect_positions, "phaser", "Rate", "FX_MOD_RATE", "0", "10", f"{phaser_mod_rate:.3f}", "0.200"),
-                    (ds_knob_phaser_frequency and "phaser" in effect_positions, "phaser", "Freq", "FX_CENTER_FREQUENCY", "0", "22000", f"{phaser_center_frequency:.1f}", "400.0"),
-                    (ds_knob_phaser_feedback and "phaser" in effect_positions, "phaser", "Feedback", "FX_FEEDBACK", "0", "1", f"{phaser_feedback:.3f}", "0.700"),
+                    (ds_knob_phaser_mix and "phaser" in effect_positions, "phaser_mix", "phaser", "Amount", "FX_MIX", "0", "1", f"{phaser_mix:.3f}", "0.500"),
+                    (ds_knob_phaser_depth and "phaser" in effect_positions, "phaser_depth", "phaser", "Depth", "FX_MOD_DEPTH", "0", "1", f"{phaser_mod_depth:.3f}", "0.200"),
+                    (ds_knob_phaser_rate and "phaser" in effect_positions, "phaser_rate", "phaser", "Rate", "FX_MOD_RATE", "0", "10", f"{phaser_mod_rate:.3f}", "0.200"),
+                    (ds_knob_phaser_frequency and "phaser" in effect_positions, "phaser_frequency", "phaser", "Freq", "FX_CENTER_FREQUENCY", "0", "22000", f"{phaser_center_frequency:.1f}", "400.0"),
+                    (ds_knob_phaser_feedback and "phaser" in effect_positions, "phaser_feedback", "phaser", "Feedback", "FX_FEEDBACK", "0", "1", f"{phaser_feedback:.3f}", "0.700"),
                 ],
             ),
-            ("IR Verb", [(ds_knob_convolution_mix and "convolution" in effect_positions, "convolution", "Amount", "FX_MIX", "0", "1", f"{reverb_mix:.3f}", "0.500")]),
+            ("IR Verb", [(ds_knob_convolution_mix and "convolution" in effect_positions, "convolution_mix", "convolution", "Amount", "FX_MIX", "0", "1", f"{reverb_mix:.3f}", "0.500")]),
             (
                 "Pitch",
                 [
-                    (ds_knob_pitch_shift and "pitch_shift" in effect_positions, "pitch_shift", "Semitones", "FX_PITCH_SHIFT", "-24", "24", f"{pitch_shift:.3f}", "0.000"),
-                    (ds_knob_pitch_shift_mix and "pitch_shift" in effect_positions, "pitch_shift", "Mix", "FX_MIX", "0", "1", f"{pitch_shift_mix:.3f}", "0.500"),
+                    (ds_knob_pitch_shift and "pitch_shift" in effect_positions, "pitch_shift", "pitch_shift", "Semitones", "FX_PITCH_SHIFT", "-24", "24", f"{pitch_shift:.3f}", "0.000"),
+                    (ds_knob_pitch_shift_mix and "pitch_shift" in effect_positions, "pitch_shift_mix", "pitch_shift", "Mix", "FX_MIX", "0", "1", f"{pitch_shift_mix:.3f}", "0.500"),
                 ],
             ),
             (
                 "Folder",
                 [
-                    (ds_knob_wave_folder_drive and "wave_folder" in effect_positions, "wave_folder", "Drive", "FX_DRIVE", "1", "100", f"{wave_folder_drive:.3f}", "1.000"),
-                    (ds_knob_wave_folder_threshold and "wave_folder" in effect_positions, "wave_folder", "Threshold", "FX_THRESHOLD", "0", "10", f"{wave_folder_threshold:.3f}", "0.250"),
+                    (ds_knob_wave_folder_drive and "wave_folder" in effect_positions, "wave_folder_drive", "wave_folder", "Drive", "FX_DRIVE", "1", "100", f"{wave_folder_drive:.3f}", "1.000"),
+                    (ds_knob_wave_folder_threshold and "wave_folder" in effect_positions, "wave_folder_threshold", "wave_folder", "Threshold", "FX_THRESHOLD", "0", "10", f"{wave_folder_threshold:.3f}", "0.250"),
                 ],
             ),
             (
                 "Shaper",
                 [
-                    (ds_knob_wave_shaper_drive and "wave_shaper" in effect_positions, "wave_shaper", "Drive", "FX_DRIVE", "1", "1000", f"{wave_shaper_drive:.3f}", "1.000"),
-                    (ds_knob_wave_shaper_boost and "wave_shaper" in effect_positions, "wave_shaper", "Boost", "FX_DRIVE_BOOST", "0", "1", f"{wave_shaper_drive_boost:.3f}", "1.000"),
-                    (ds_knob_wave_shaper_output and "wave_shaper" in effect_positions, "wave_shaper", "Out", "FX_OUTPUT_LEVEL", "0", "8", f"{wave_shaper_output_level:.3f}", "0.100"),
+                    (ds_knob_wave_shaper_drive and "wave_shaper" in effect_positions, "wave_shaper_drive", "wave_shaper", "Drive", "FX_DRIVE", "1", "1000", f"{wave_shaper_drive:.3f}", "1.000"),
+                    (ds_knob_wave_shaper_boost and "wave_shaper" in effect_positions, "wave_shaper_boost", "wave_shaper", "Boost", "FX_DRIVE_BOOST", "0", "1", f"{wave_shaper_drive_boost:.3f}", "1.000"),
+                    (ds_knob_wave_shaper_output and "wave_shaper" in effect_positions, "wave_shaper_output", "wave_shaper", "Out", "FX_OUTPUT_LEVEL", "0", "8", f"{wave_shaper_output_level:.3f}", "0.100"),
                 ],
             ),
-            ("Stereo", [(ds_knob_stereo_width and "stereo_simulator" in effect_positions, "stereo_simulator", "Width", "FX_WIDTH", "0", "1", f"{stereo_simulator_width:.3f}", "0.500")]),
+            ("Stereo", [(ds_knob_stereo_width and "stereo_simulator" in effect_positions, "stereo_width", "stereo_simulator", "Width", "FX_WIDTH", "0", "1", f"{stereo_simulator_width:.3f}", "0.500")]),
             (
                 "Bits",
                 [
-                    (ds_knob_bit_depth and "bit_crusher" in effect_positions, "bit_crusher", "Depth", "FX_BIT_DEPTH", "1", "24", str(bit_crusher_bit_depth), "8"),
-                    (ds_knob_bit_crusher_rate and "bit_crusher" in effect_positions, "bit_crusher", "Rate", "FX_SAMPLE_RATE_REDUCTION", "1", "32", str(bit_crusher_sample_rate_reduction), "4"),
-                    (ds_knob_bit_crusher_mix and "bit_crusher" in effect_positions, "bit_crusher", "Mix", "FX_MIX", "0", "1", f"{bit_crusher_mix:.3f}", "1.000"),
+                    (ds_knob_bit_depth and "bit_crusher" in effect_positions, "bit_depth", "bit_crusher", "Depth", "FX_BIT_DEPTH", "1", "24", str(bit_crusher_bit_depth), "8"),
+                    (ds_knob_bit_crusher_rate and "bit_crusher" in effect_positions, "bit_rate", "bit_crusher", "Rate", "FX_SAMPLE_RATE_REDUCTION", "1", "32", str(bit_crusher_sample_rate_reduction), "4"),
+                    (ds_knob_bit_crusher_mix and "bit_crusher" in effect_positions, "bit_mix", "bit_crusher", "Mix", "FX_MIX", "0", "1", f"{bit_crusher_mix:.3f}", "1.000"),
                 ],
             ),
         ]
         visible_control_index = 0
-        knob_columns = 9
-        knob_step_x = 84
-        knob_step_y = 88
-        knob_width = 70
-        knob_start_x = 30
-        knob_start_y = 66
-        group_title_height = 20
-
-        def knob_position(index: int) -> tuple[int, int]:
-            return knob_start_x + (index % knob_columns) * knob_step_x, knob_start_y + (index // knob_columns) * knob_step_y
-
-        def add_effect_knob(effect_type: str, label: str, parameter: str, min_value: str, max_value: str, value: str, default_value: str) -> None:
+        def add_effect_knob(control_id: str, effect_type: str, label: str, parameter: str, min_value: str, max_value: str, value: str, default_value: str) -> None:
             nonlocal visible_control_index
             position = effect_positions[effect_type]
-            x_pos, y_pos = knob_position(visible_control_index)
+            x_pos, y_pos = ui_layout_position(control_id, visible_control_index, ui_layout)
             visible_control_index += 1
             knob = ET.SubElement(
                 tab,
@@ -385,7 +401,7 @@ def generate_dspreset(
                 {
                     "x": str(x_pos),
                     "y": str(y_pos),
-                    "width": str(knob_width),
+                    "width": str(UI_KNOB_WIDTH),
                     "label": label,
                     "parameterName": label,
                     "type": "float",
@@ -412,9 +428,9 @@ def generate_dspreset(
                 )
             ET.SubElement(knob, "binding", binding_attrs)
 
-        def add_amp_knob(label: str, parameter: str, min_value: str, max_value: str, value: str, default_value: str) -> None:
+        def add_amp_knob(control_id: str, label: str, parameter: str, min_value: str, max_value: str, value: str, default_value: str) -> None:
             nonlocal visible_control_index
-            x_pos, y_pos = knob_position(visible_control_index)
+            x_pos, y_pos = ui_layout_position(control_id, visible_control_index, ui_layout)
             visible_control_index += 1
             knob = ET.SubElement(
                 tab,
@@ -422,7 +438,7 @@ def generate_dspreset(
                 {
                     "x": str(x_pos),
                     "y": str(y_pos),
-                    "width": str(knob_width),
+                    "width": str(UI_KNOB_WIDTH),
                     "label": label,
                     "parameterName": label,
                     "type": "float",
@@ -449,12 +465,14 @@ def generate_dspreset(
             nonlocal visible_control_index
             if control_count <= 0:
                 return
-            if (visible_control_index % knob_columns) + control_count > knob_columns:
-                visible_control_index += knob_columns - (visible_control_index % knob_columns)
-            first_x, first_y = knob_position(visible_control_index)
+            if (visible_control_index % UI_KNOB_COLUMNS) + control_count > UI_KNOB_COLUMNS:
+                visible_control_index += UI_KNOB_COLUMNS - (visible_control_index % UI_KNOB_COLUMNS)
+            if ui_layout:
+                return
+            first_x, first_y = default_ui_knob_position(visible_control_index)
             group_x = first_x - 10
-            group_y = first_y - group_title_height - 8
-            group_width = knob_step_x * control_count - 8
+            group_y = first_y - UI_GROUP_TITLE_HEIGHT - 8
+            group_width = UI_KNOB_STEP_X * control_count - 8
             ET.SubElement(
                 tab,
                 "rectangle",
@@ -487,22 +505,22 @@ def generate_dspreset(
             if not has_amp_env_knobs:
                 return
             specs = [
-                ("Attack", "ENV_ATTACK", "0", "10", f"{amp_attack:.3f}", "0.010"),
-                ("Decay", "ENV_DECAY", "0", "25", f"{amp_decay:.3f}", "0.000"),
-                ("Sustain", "ENV_SUSTAIN", "0", "1", f"{amp_sustain:.3f}", "1.000"),
-                ("Release", "ENV_RELEASE", "0", "25", f"{amp_release:.3f}", "0.800"),
+                ("amp_attack", "Attack", "ENV_ATTACK", "0", "10", f"{amp_attack:.3f}", "0.010"),
+                ("amp_decay", "Decay", "ENV_DECAY", "0", "25", f"{amp_decay:.3f}", "0.000"),
+                ("amp_sustain", "Sustain", "ENV_SUSTAIN", "0", "1", f"{amp_sustain:.3f}", "1.000"),
+                ("amp_release", "Release", "ENV_RELEASE", "0", "25", f"{amp_release:.3f}", "0.800"),
             ]
             add_control_panel("Envelope", len(specs))
-            for label, parameter, min_value, max_value, value, default_value in specs:
-                add_amp_knob(label, parameter, min_value, max_value, value, default_value)
+            for control_id, label, parameter, min_value, max_value, value, default_value in specs:
+                add_amp_knob(control_id, label, parameter, min_value, max_value, value, default_value)
 
-        def add_knob_group(title: str, specs: list[tuple[bool, str, str, str, str, str, str, str]]) -> None:
+        def add_knob_group(title: str, specs: list[tuple[bool, str, str, str, str, str, str, str, str]]) -> None:
             included_specs = [spec for spec in specs if spec[0]]
             if not included_specs:
                 return
             add_control_panel(title, len(included_specs))
-            for _include, effect_type, label, parameter, min_value, max_value, value, default_value in included_specs:
-                add_effect_knob(effect_type, label, parameter, min_value, max_value, value, default_value)
+            for _include, control_id, effect_type, label, parameter, min_value, max_value, value, default_value in included_specs:
+                add_effect_knob(control_id, effect_type, label, parameter, min_value, max_value, value, default_value)
 
         add_amp_env_knobs()
         for title, specs in knob_groups:
