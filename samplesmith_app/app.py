@@ -15,16 +15,9 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from .audio import AudioEngine, render_bridge_wav, write_silent_wav
-from .dspreset import (
-    DECENT_SAMPLER_UI_HEIGHT,
-    DECENT_SAMPLER_UI_WIDTH,
-    UI_KNOB_COLUMNS,
-    UI_KNOB_WIDTH,
-    export_dsbundle,
-    generate_dspreset,
-    ui_layout_position,
-)
+from .dspreset import export_dsbundle, generate_dspreset
 from .looping import read_wav_smpl_loop_points
+from .ui_preview import DecentSamplerUiPreview, normalise_ui_layout
 from .models import (
     DEFAULT_PAD_START_NOTE,
     DEFAULT_SAMPLE_RATE,
@@ -61,8 +54,7 @@ class SampleSmithApp(tk.Tk):
         self._review_load_token = 0
         self._queue_after_id: str | None = None
         self.ui_layout: dict[str, dict[str, int]] = {}
-        self.ui_canvas_items: dict[str, list[int]] = {}
-        self.ui_drag: dict[str, int] | None = None
+        self.ui_preview: DecentSamplerUiPreview | None = None
         self._build_ui()
         self.blank_project_data = self._project_data()
         self.after_idle(self._open_last_project_if_available)
@@ -546,23 +538,7 @@ class SampleSmithApp(tk.Tk):
         spin_param(frame, "mix", self.bit_crusher_mix_var, 0, 1, 0.05, k_var=self.ds_knob_bit_crusher_mix_var)
         defaults_button(shape, row, "bit_crusher")
 
-        ui_tools = ttk.Frame(ui_tab)
-        ui_tools.pack(fill="x", pady=(0, 6))
-        ttk.Label(ui_tools, text="Drag knobs in the 812×375 DecentSampler panel. Positions save with the project and export to the .dspreset.").pack(side="left")
-        ttk.Button(ui_tools, text="Reset layout", command=self._reset_ui_layout).pack(side="right", padx=(6, 0))
-        ttk.Button(ui_tools, text="Refresh", command=self._redraw_ui_preview).pack(side="right")
-        self.ui_canvas = tk.Canvas(
-            ui_tab,
-            width=DECENT_SAMPLER_UI_WIDTH,
-            height=DECENT_SAMPLER_UI_HEIGHT,
-            background="#f6f0e6",
-            highlightthickness=1,
-            highlightbackground="#999999",
-        )
-        self.ui_canvas.pack(anchor="nw")
-        self.ui_status_var = tk.StringVar(value="No visible knobs yet. Enable effects and K boxes to add controls.")
-        ttk.Label(ui_tab, textvariable=self.ui_status_var).pack(anchor="w", pady=(6, 0))
-        self._redraw_ui_preview()
+        self.ui_preview = DecentSamplerUiPreview(ui_tab, self)
 
         mapping = ttk.LabelFrame(mapping_tab, text="Effective exported sample mapping")
         mapping.pack(fill="both", expand=True)
@@ -599,158 +575,16 @@ class SampleSmithApp(tk.Tk):
         ).pack(anchor="w", padx=6, pady=6)
 
     def _normalise_ui_layout(self, raw_layout: object) -> dict[str, dict[str, int]]:
-        if not isinstance(raw_layout, dict):
-            return {}
-        layout: dict[str, dict[str, int]] = {}
-        for control_id, raw_pos in raw_layout.items():
-            if not isinstance(control_id, str) or not isinstance(raw_pos, dict):
-                continue
-            try:
-                x = int(float(raw_pos.get("x", 0)))
-                y = int(float(raw_pos.get("y", 0)))
-            except (TypeError, ValueError):
-                continue
-            layout[control_id] = {
-                "x": max(0, min(DECENT_SAMPLER_UI_WIDTH - UI_KNOB_WIDTH, x)),
-                "y": max(0, min(DECENT_SAMPLER_UI_HEIGHT - UI_KNOB_WIDTH, y)),
-            }
-        return layout
-
-    def _visible_ui_controls(self) -> list[dict[str, object]]:
-        controls: list[dict[str, object]] = []
-        index = 0
-
-        def add_group(title: str, specs: list[tuple[bool, str, str]]) -> None:
-            nonlocal index
-            included = [(control_id, label) for include, control_id, label in specs if include]
-            if not included:
-                return
-            if (index % UI_KNOB_COLUMNS) + len(included) > UI_KNOB_COLUMNS:
-                index += UI_KNOB_COLUMNS - (index % UI_KNOB_COLUMNS)
-            for control_id, label in included:
-                x, y = ui_layout_position(control_id, index, self.ui_layout)
-                controls.append({"id": control_id, "label": label, "group": title, "index": index, "x": x, "y": y})
-                index += 1
-
-        add_group(
-            "Envelope",
-            [
-                (self.amp_env_enabled_var.get() and self.ds_knob_amp_env_var.get(), "amp_attack", "Attack"),
-                (self.amp_env_enabled_var.get() and self.ds_knob_amp_env_var.get(), "amp_decay", "Decay"),
-                (self.amp_env_enabled_var.get() and self.ds_knob_amp_env_var.get(), "amp_sustain", "Sustain"),
-                (self.amp_env_enabled_var.get() and self.ds_knob_amp_env_var.get(), "amp_release", "Release"),
-            ],
-        )
-        add_group(
-            "Tone",
-            [
-                (self.lowpass_enabled_var.get() and self.ds_knob_tone_var.get(), "filter_tone", "Tone"),
-                (self.lowpass_enabled_var.get() and self.filter_type_var.get() != "lowpass_1pl" and self.ds_knob_filter_resonance_var.get(), "filter_resonance", "Res"),
-            ],
-        )
-        add_group("Notch", [(self.notch_enabled_var.get() and self.ds_knob_notch_frequency_var.get(), "notch_frequency", "Frequency"), (self.notch_enabled_var.get() and self.ds_knob_notch_q_var.get(), "notch_q", "Q")])
-        add_group("Peak", [(self.peak_enabled_var.get() and self.ds_knob_peak_frequency_var.get(), "peak_frequency", "Frequency"), (self.peak_enabled_var.get() and self.ds_knob_peak_q_var.get(), "peak_q", "Q"), (self.peak_enabled_var.get() and self.ds_knob_peak_gain_var.get(), "peak_gain", "Gain")])
-        add_group("Gain", [(self.gain_enabled_var.get() and self.ds_knob_gain_level_var.get(), "gain_level", "Level")])
-        add_group("Reverb", [(self.reverb_enabled_var.get() and self.ds_knob_reverb_wet_var.get(), "reverb_wet", "Amount"), (self.reverb_enabled_var.get() and self.ds_knob_reverb_room_var.get(), "reverb_room", "Room"), (self.reverb_enabled_var.get() and self.ds_knob_reverb_damping_var.get(), "reverb_damping", "Damp")])
-        add_group("Delay", [(self.delay_enabled_var.get() and self.ds_knob_delay_wet_var.get(), "delay_wet", "Amount"), (self.delay_enabled_var.get() and self.ds_knob_delay_time_var.get(), "delay_time", "Time"), (self.delay_enabled_var.get() and self.ds_knob_delay_stereo_offset_var.get(), "delay_offset", "Offset"), (self.delay_enabled_var.get() and self.ds_knob_delay_feedback_var.get(), "delay_feedback", "Feedback")])
-        add_group("Chorus", [(self.chorus_enabled_var.get() and self.ds_knob_chorus_mix_var.get(), "chorus_mix", "Amount"), (self.chorus_enabled_var.get() and self.ds_knob_chorus_depth_var.get(), "chorus_depth", "Depth"), (self.chorus_enabled_var.get() and self.ds_knob_chorus_rate_var.get(), "chorus_rate", "Rate")])
-        add_group("Phaser", [(self.phaser_enabled_var.get() and self.ds_knob_phaser_mix_var.get(), "phaser_mix", "Amount"), (self.phaser_enabled_var.get() and self.ds_knob_phaser_depth_var.get(), "phaser_depth", "Depth"), (self.phaser_enabled_var.get() and self.ds_knob_phaser_rate_var.get(), "phaser_rate", "Rate"), (self.phaser_enabled_var.get() and self.ds_knob_phaser_frequency_var.get(), "phaser_frequency", "Freq"), (self.phaser_enabled_var.get() and self.ds_knob_phaser_feedback_var.get(), "phaser_feedback", "Feedback")])
-        add_group("IR Verb", [(self.convolution_enabled_var.get() and self.ds_knob_convolution_mix_var.get(), "convolution_mix", "Amount")])
-        add_group("Pitch", [(self.pitch_shift_enabled_var.get() and self.ds_knob_pitch_shift_var.get(), "pitch_shift", "Semitones"), (self.pitch_shift_enabled_var.get() and self.ds_knob_pitch_shift_mix_var.get(), "pitch_shift_mix", "Mix")])
-        add_group("Folder", [(self.wave_folder_enabled_var.get() and self.ds_knob_wave_folder_drive_var.get(), "wave_folder_drive", "Drive"), (self.wave_folder_enabled_var.get() and self.ds_knob_wave_folder_threshold_var.get(), "wave_folder_threshold", "Threshold")])
-        add_group("Shaper", [(self.wave_shaper_enabled_var.get() and self.ds_knob_wave_shaper_drive_var.get(), "wave_shaper_drive", "Drive"), (self.wave_shaper_enabled_var.get() and self.ds_knob_wave_shaper_boost_var.get(), "wave_shaper_boost", "Boost"), (self.wave_shaper_enabled_var.get() and self.ds_knob_wave_shaper_output_var.get(), "wave_shaper_output", "Out")])
-        add_group("Stereo", [(self.stereo_simulator_enabled_var.get() and self.ds_knob_stereo_width_var.get(), "stereo_width", "Width")])
-        add_group("Bits", [(self.bit_crusher_enabled_var.get() and self.ds_knob_bit_depth_var.get(), "bit_depth", "Depth"), (self.bit_crusher_enabled_var.get() and self.ds_knob_bit_crusher_rate_var.get(), "bit_rate", "Rate"), (self.bit_crusher_enabled_var.get() and self.ds_knob_bit_crusher_mix_var.get(), "bit_mix", "Mix")])
-        return controls
+        return normalise_ui_layout(raw_layout)
 
     def _redraw_ui_preview(self) -> None:
-        if not hasattr(self, "ui_canvas"):
-            return
-        self.ui_canvas.delete("all")
-        self.ui_canvas_items = {}
-        self.ui_canvas.create_rectangle(0, 0, DECENT_SAMPLER_UI_WIDTH, DECENT_SAMPLER_UI_HEIGHT, fill="#f6f0e6", outline="#999999")
-        self.ui_canvas.create_text(
-            DECENT_SAMPLER_UI_WIDTH // 2,
-            26,
-            text=self.name_var.get(),
-            fill="#330033",
-            font=("TkDefaultFont", 18, "bold"),
-        )
-        controls = self._visible_ui_controls()
-        for control in controls:
-            self._draw_ui_knob(str(control["id"]), str(control["label"]), str(control["group"]), int(control["x"]), int(control["y"]))
-        if hasattr(self, "ui_status_var"):
-            if controls:
-                self.ui_status_var.set(f"{len(controls)} visible DecentSampler knob(s). Drag knobs to adjust exported positions.")
-            else:
-                self.ui_status_var.set("No visible knobs yet. Enable effects and K boxes to add controls.")
+        if self.ui_preview is not None:
+            self.ui_preview.redraw()
 
-    def _draw_ui_knob(self, control_id: str, label: str, group: str, x: int, y: int) -> None:
-        tag = f"ui:{control_id}"
-        items = [
-            self.ui_canvas.create_text(x + UI_KNOB_WIDTH // 2, y - 8, text=group, fill="#664466", font=("TkDefaultFont", 9), tags=(tag, "ui-knob")),
-            self.ui_canvas.create_oval(x + 10, y + 4, x + UI_KNOB_WIDTH - 10, y + UI_KNOB_WIDTH - 16, fill="#d9d2c8", outline="#330033", width=2, tags=(tag, "ui-knob")),
-            self.ui_canvas.create_line(x + UI_KNOB_WIDTH // 2, y + 14, x + UI_KNOB_WIDTH // 2, y + 28, fill="#330033", width=2, tags=(tag, "ui-knob")),
-            self.ui_canvas.create_text(x + UI_KNOB_WIDTH // 2, y + UI_KNOB_WIDTH - 4, text=label, fill="#330033", font=("TkDefaultFont", 10), tags=(tag, "ui-knob")),
-        ]
-        self.ui_canvas_items[control_id] = items
-        self.ui_canvas.tag_bind(tag, "<ButtonPress-1>", self._start_ui_drag)
-        self.ui_canvas.tag_bind(tag, "<B1-Motion>", self._drag_ui_knob)
-        self.ui_canvas.tag_bind(tag, "<ButtonRelease-1>", self._end_ui_drag)
-
-    def _control_id_from_canvas_event(self) -> str | None:
-        current = self.ui_canvas.find_withtag("current")
-        if not current:
-            return None
-        for tag in self.ui_canvas.gettags(current[0]):
-            if tag.startswith("ui:"):
-                return tag[3:]
-        return None
-
-    def _start_ui_drag(self, event) -> None:
-        control_id = self._control_id_from_canvas_event()
-        if not control_id:
-            return
-        items = self.ui_canvas_items.get(control_id, [])
-        bbox = self.ui_canvas.bbox(*items) if items else None
-        if not bbox:
-            return
-        self.ui_drag = {"id": control_id, "x": int(event.x), "y": int(event.y), "left": int(bbox[0]), "top": int(bbox[1])}
-
-    def _drag_ui_knob(self, event) -> None:
-        if not self.ui_drag:
-            return
-        control_id = str(self.ui_drag["id"])
-        current = self.ui_layout.get(control_id)
-        if current is None:
-            controls = {str(control["id"]): control for control in self._visible_ui_controls()}
-            control = controls.get(control_id)
-            if control is None:
-                return
-            current = {"x": int(control["x"]), "y": int(control["y"])}
-        new_x = max(0, min(DECENT_SAMPLER_UI_WIDTH - UI_KNOB_WIDTH, current["x"] + int(event.x) - int(self.ui_drag["x"])))
-        new_y = max(16, min(DECENT_SAMPLER_UI_HEIGHT - UI_KNOB_WIDTH, current["y"] + int(event.y) - int(self.ui_drag["y"])))
-        dx = new_x - current["x"]
-        dy = new_y - current["y"]
-        if dx == 0 and dy == 0:
-            return
-        for item in self.ui_canvas_items.get(control_id, []):
-            self.ui_canvas.move(item, dx, dy)
-        self.ui_layout[control_id] = {"x": new_x, "y": new_y}
-        self.ui_drag["x"] = int(event.x)
-        self.ui_drag["y"] = int(event.y)
-
-    def _end_ui_drag(self, _event) -> None:
-        if self.ui_drag:
-            self.ui_drag = None
-            self._auto_save_project()
-            self._on_output_parameter_changed()
-
-    def _reset_ui_layout(self) -> None:
-        self.ui_layout = {}
-        self._redraw_ui_preview()
-        self._auto_save_project()
-        self._on_output_parameter_changed()
+    def _visible_ui_controls(self) -> list[dict[str, object]]:
+        if self.ui_preview is None:
+            return []
+        return self.ui_preview.visible_controls()
 
     def _bind_output_parameter_traces(self) -> None:
         output_vars = [

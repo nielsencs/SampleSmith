@@ -14,12 +14,14 @@ OFFICIAL_BOILERPLATE_PATH = ASSETS_DIR / "official-boilerplate.dspreset"
 OFFICIAL_TONE_TRANSLATION_TABLE = "0,33;0.3,150;0.4,450;0.5,1100;0.7,4100;0.9,11000;1.0001,22000"
 DECENT_SAMPLER_UI_WIDTH = 812
 DECENT_SAMPLER_UI_HEIGHT = 375
-UI_KNOB_COLUMNS = 9
-UI_KNOB_STEP_X = 84
-UI_KNOB_STEP_Y = 88
+UI_KNOB_COLUMNS = 8
+UI_KNOB_STEP_X = 78
+UI_KNOB_STEP_Y = 76
 UI_KNOB_WIDTH = 70
 UI_KNOB_START_X = 30
-UI_KNOB_START_Y = 66
+UI_KNOB_START_Y = 58
+UI_KNOB_MAX_X = 680
+UI_KNOB_MAX_Y = 230
 UI_GROUP_TITLE_HEIGHT = 20
 
 OFFICIAL_KNOB_STYLE = {
@@ -50,7 +52,9 @@ def tone_control_value_for_frequency(frequency: float) -> float:
 
 
 def default_ui_knob_position(index: int) -> tuple[int, int]:
-    return UI_KNOB_START_X + (index % UI_KNOB_COLUMNS) * UI_KNOB_STEP_X, UI_KNOB_START_Y + (index // UI_KNOB_COLUMNS) * UI_KNOB_STEP_Y
+    x = UI_KNOB_START_X + (index % UI_KNOB_COLUMNS) * UI_KNOB_STEP_X
+    y = UI_KNOB_START_Y + (index // UI_KNOB_COLUMNS) * UI_KNOB_STEP_Y
+    return min(UI_KNOB_MAX_X, x), min(UI_KNOB_MAX_Y, y)
 
 
 def ui_layout_position(control_id: str, index: int, ui_layout: dict[str, object] | None) -> tuple[int, int]:
@@ -65,7 +69,7 @@ def ui_layout_position(control_id: str, index: int, ui_layout: dict[str, object]
         y = int(float(raw.get("y", default_y)))
     except (TypeError, ValueError):
         return default_x, default_y
-    return max(0, min(DECENT_SAMPLER_UI_WIDTH - UI_KNOB_WIDTH, x)), max(0, min(DECENT_SAMPLER_UI_HEIGHT - UI_KNOB_WIDTH, y))
+    return max(0, min(UI_KNOB_MAX_X, x)), max(0, min(UI_KNOB_MAX_Y, y))
 
 def generate_dspreset(
     instrument_name: str,
