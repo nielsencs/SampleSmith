@@ -559,7 +559,7 @@ class SampleSmithApp(tk.Tk):
             notes,
             text=(
                 "DecentSampler settings are split into sub-tabs. Loop controls here are fallback/default values; "
-                "double-click Plays on keys/Root note to edit key mapping; double-click Loop to edit loop points. "
+                "double-click Source audio/Plays on keys to edit key mapping; double-click the other columns to edit loop points. "
                 "per-audio-file loop edits are shown in the mapping table and take priority during export. "
                 "Generated bridge samples are marked provisional/derived in the mapping table and saved under Samples/generated."
             ),
@@ -2135,10 +2135,10 @@ class SampleSmithApp(tk.Tk):
             return "break"
         self.export_tree.selection_set(row_id)
         column = self.export_tree.identify_column(event.x)
-        if column == "#5":
-            self._edit_selected_sample_loop()
-        else:
+        if column in {"#1", "#2"}:
             self._edit_selected_sample_mapping()
+        else:
+            self._edit_selected_sample_loop()
         return "break"
 
     def _edit_selected_sample_loop(self) -> None:
@@ -2659,10 +2659,33 @@ class LoopEditorDialog(tk.Toplevel):
             return 0
 
     def _effective_crossfade_frames(self, start: int, end: int) -> int:
+        before, after = self._crossfade_halves(start, end)
+        return before + after
+
+    def _crossfade_halves(self, start: int, end: int) -> tuple[int, int]:
         requested = self._requested_crossfade_frames()
+        return self._crossfade_halves_for_requested(requested, start, end)
+
+    def _crossfade_halves_for_requested(self, requested: int, start: int, end: int) -> tuple[int, int]:
         if requested <= 0 or end <= start:
-            return 0
-        return max(0, min(requested, (end - start) // 2))
+            return 0, 0
+        wanted_before = requested // 2
+        wanted_after = requested - wanted_before
+        max_before = min(start, (end - start) // 2)
+        max_after = min(max(0, self.frames - 1 - end), (end - start) // 2)
+        scale = 1.0
+        if wanted_before > 0:
+            scale = min(scale, max_before / wanted_before)
+        if wanted_after > 0:
+            scale = min(scale, max_after / wanted_after)
+        before = int(wanted_before * scale)
+        after = int(wanted_after * scale)
+        return max(0, before), max(0, after)
+
+    def _crossfade_regions(self, start: int, end: int) -> tuple[int, int, tuple[int, int], tuple[int, int]]:
+        before, after = self._crossfade_halves(start, end)
+        effective = before + after
+        return effective, before, (start - before, start + after), (end - before, end + after)
 
     def _x_for_zoom_frame(self, frame: int, left: int, right: int) -> int:
         span = max(1, right - left)
@@ -2688,33 +2711,35 @@ class LoopEditorDialog(tk.Toplevel):
         end_x = self._x_for_frame(end)
         if self.loop_enabled_var.get():
             self.canvas.create_rectangle(start_x, 0, end_x, self.canvas_height, fill="#24402c", stipple="gray25", outline="")
-            crossfade = self._effective_crossfade_frames(start, end)
+            crossfade, before, start_region, end_region = self._crossfade_regions(start, end)
             requested_crossfade = self._requested_crossfade_frames()
             if crossfade > 0:
-                fade_out_x = self._x_for_frame(end - crossfade)
-                fade_in_x = self._x_for_frame(start + crossfade)
-                self.canvas.create_rectangle(fade_out_x, 0, end_x, self.canvas_height, fill="#ffcc00", stipple="gray50", outline="#ffcc00")
-                self.canvas.create_rectangle(start_x, 0, fade_in_x, self.canvas_height, fill="#00c7be", stipple="gray50", outline="#00c7be")
+                start_fade_x1 = self._x_for_frame(start_region[0])
+                start_fade_x2 = self._x_for_frame(start_region[1])
+                end_fade_x1 = self._x_for_frame(end_region[0])
+                end_fade_x2 = self._x_for_frame(end_region[1])
+                self.canvas.create_rectangle(end_fade_x1, 0, end_fade_x2, self.canvas_height, fill="#ffcc00", stipple="gray50", outline="#ffcc00")
+                self.canvas.create_rectangle(start_fade_x1, 0, start_fade_x2, self.canvas_height, fill="#00c7be", stipple="gray50", outline="#00c7be")
                 self.canvas.create_text(
-                    max(6, min(self.canvas_width - 6, (fade_out_x + end_x) // 2)),
+                    max(6, min(self.canvas_width - 6, (end_fade_x1 + end_fade_x2) // 2)),
                     32,
                     text="xfade out",
                     fill="#ffcc00",
                 )
                 self.canvas.create_text(
-                    max(6, min(self.canvas_width - 6, (start_x + fade_in_x) // 2)),
+                    max(6, min(self.canvas_width - 6, (start_fade_x1 + start_fade_x2) // 2)),
                     self.canvas_height - 32,
                     text="xfade in",
                     fill="#00c7be",
                 )
-                status = f"Crossfade visualised: {crossfade:,} frames fade out before end + fade in after start ({self.loop_crossfade_mode_var.get()})."
+                status = f"Crossfade visualised: {crossfade:,} frames centred on start/end ({before:,} before + {crossfade - before:,} after, {self.loop_crossfade_mode_var.get()})."
                 if requested_crossfade != crossfade:
                     status += f" Requested {requested_crossfade:,} frames was clamped to half the loop length."
                 self.visual_status_var.set(status)
             elif requested_crossfade > 0:
                 self.visual_status_var.set("Crossfade is set, but the loop is too short to display an effective crossfade.")
             else:
-                self.visual_status_var.set("Crossfade display shows the fade-out tail before loop end and fade-in head after loop start.")
+                self.visual_status_var.set("Crossfade display is centred around the selected loop start/end points.")
         else:
             self.visual_status_var.set("Loop is disabled for this WAV; enable it to visualise the loop region and crossfade.")
         self.canvas.create_line(start_x, 0, start_x, self.canvas_height, fill="#30d158", width=3, tags=("start",))
@@ -2733,15 +2758,15 @@ class LoopEditorDialog(tk.Toplevel):
         left, right = self._zoom_window(center_frame)
         span = max(1, right - left)
         if self.loop_enabled_var.get():
-            crossfade = self._effective_crossfade_frames(loop_start, loop_end)
+            crossfade, _before, start_region, end_region = self._crossfade_regions(loop_start, loop_end)
             regions = [
                 (loop_start, loop_end, "#24402c", "gray25"),
             ]
             if crossfade > 0:
                 regions.extend(
                     [
-                        (loop_end - crossfade, loop_end, "#ffcc00", "gray50"),
-                        (loop_start, loop_start + crossfade, "#00c7be", "gray50"),
+                        (end_region[0], end_region[1], "#ffcc00", "gray50"),
+                        (start_region[0], start_region[1], "#00c7be", "gray50"),
                     ]
                 )
             for region_start, region_end, fill, stipple in regions:
@@ -2942,8 +2967,8 @@ class LoopEditorDialog(tk.Toplevel):
             intro_start = max(0, start - pre_roll)
             chunk_frames = max(1, int(self.sample_rate * 0.08))
             if mode == "xfade":
-                cycle, effective_crossfade = self._crossfaded_loop_cycle(start, end, crossfade, crossfade_mode)
-                intro = self.audio[intro_start:max(start, end - effective_crossfade)]
+                cycle, _effective_crossfade, before, _after = self._crossfaded_loop_cycle(start, end, crossfade, crossfade_mode)
+                intro = self.audio[intro_start:max(start, end - before)]
             else:
                 cycle = self.audio[start:end]
                 intro = self.audio[intro_start:end]
@@ -2971,12 +2996,12 @@ class LoopEditorDialog(tk.Toplevel):
         except ImportError as exc:
             raise RuntimeError("Crossfade audition needs numpy. Run: python -m pip install -r requirements.txt") from exc
 
-        loop_len = end - start
-        effective = max(1, min(int(crossfade), loop_len // 2))
+        before, after = self._crossfade_halves_for_requested(max(0, int(crossfade)), start, end)
+        effective = before + after
         if effective < 1:
-            return self.audio[start:end], 0
-        tail = self.audio[end - effective:end]
-        head = self.audio[start:start + effective]
+            return self.audio[start:end], 0, 0, 0
+        tail = self.audio[end - before:end + after]
+        head = self.audio[start - before:start + after]
         if mode == "linear":
             fade_out = np.linspace(1.0, 0.0, effective, endpoint=False, dtype="float32")
             fade_in = np.linspace(0.0, 1.0, effective, endpoint=False, dtype="float32")
@@ -2988,10 +3013,10 @@ class LoopEditorDialog(tk.Toplevel):
             fade_out = fade_out[:, None]
             fade_in = fade_in[:, None]
         transition = (tail * fade_out + head * fade_in).astype("float32")
-        body = self.audio[start + effective:end - effective]
+        body = self.audio[start + after:end - before]
         if body.size:
-            return np.concatenate([transition, body], axis=0).astype("float32"), effective
-        return transition, effective
+            return np.concatenate([transition, body], axis=0).astype("float32"), effective, before, after
+        return transition, effective, before, after
 
     def _has_typed_loop_points(self) -> bool:
         start_text = self.loop_start_var.get().strip()
