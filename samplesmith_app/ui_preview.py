@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
@@ -37,7 +36,12 @@ PREVIEW_ORIGIN_X = 0
 PREVIEW_ORIGIN_Y = 51
 PREVIEW_KNOB_ARC_START = -50
 PREVIEW_KNOB_ARC_EXTENT = 260
-PREVIEW_KNOB_ARC_WIDTH = 5
+PREVIEW_KNOB_ARC_WIDTH = 7
+PREVIEW_KNOB_ARC_INSET_X = 10
+PREVIEW_KNOB_ARC_INSET_Y = 29
+PREVIEW_KNOB_ARC_SIZE = 70
+PREVIEW_KNOB_TRACK_COLOR = "#bfb9b9"
+PREVIEW_KNOB_VALUE_COLOR = "#252025"
 
 
 class UiPreviewOwner(Protocol):
@@ -306,25 +310,73 @@ class DecentSamplerUiPreview:
         self.canvas.tag_bind(tag, "<B1-Motion>", self._drag_knob)
         self.canvas.tag_bind(tag, "<ButtonRelease-1>", self._end_drag)
 
+    def _control_fraction(self, control_id: str) -> float:
+        specs = {
+            "filter_tone": ("lowpass_frequency_var", 60.0, 22000.0),
+            "filter_resonance": ("filter_resonance_var", 0.0, 10.0),
+            "notch_frequency": ("notch_frequency_var", 0.0, 22000.0),
+            "notch_q": ("notch_q_var", 0.01, 18.0),
+            "peak_frequency": ("peak_frequency_var", 0.0, 22000.0),
+            "peak_q": ("peak_q_var", 0.01, 18.0),
+            "peak_gain": ("peak_gain_var", 0.0, 10.0),
+            "gain_level": ("gain_level_var", -99.0, 24.0),
+            "reverb_wet": ("reverb_wet_level_var", 0.0, 1.0),
+            "reverb_room": ("reverb_room_size_var", 0.0, 1.0),
+            "reverb_damping": ("reverb_damping_var", 0.0, 1.0),
+            "delay_wet": ("delay_wet_level_var", 0.0, 1.0),
+            "delay_time": ("delay_time_var", 0.0, 20.0),
+            "delay_offset": ("delay_stereo_offset_var", 0.0, 1.0),
+            "delay_feedback": ("delay_feedback_var", 0.0, 1.0),
+            "chorus_mix": ("chorus_mix_var", 0.0, 1.0),
+            "chorus_depth": ("chorus_mod_depth_var", 0.0, 1.0),
+            "chorus_rate": ("chorus_mod_rate_var", 0.0, 10.0),
+            "phaser_mix": ("phaser_mix_var", 0.0, 1.0),
+            "phaser_depth": ("phaser_mod_depth_var", 0.0, 1.0),
+            "phaser_rate": ("phaser_mod_rate_var", 0.0, 10.0),
+            "phaser_frequency": ("phaser_center_frequency_var", 0.0, 22000.0),
+            "phaser_feedback": ("phaser_feedback_var", 0.0, 1.0),
+            "convolution_mix": ("reverb_mix_var", 0.0, 1.0),
+            "pitch_shift": ("pitch_shift_var", -24.0, 24.0),
+            "pitch_shift_mix": ("pitch_shift_mix_var", 0.0, 1.0),
+            "wave_folder_drive": ("wave_folder_drive_var", 1.0, 100.0),
+            "wave_folder_threshold": ("wave_folder_threshold_var", 0.0, 10.0),
+            "wave_shaper_drive": ("wave_shaper_drive_var", 1.0, 1000.0),
+            "wave_shaper_boost": ("wave_shaper_drive_boost_var", 0.0, 1.0),
+            "wave_shaper_output": ("wave_shaper_output_level_var", 0.0, 8.0),
+            "stereo_width": ("stereo_simulator_width_var", 0.0, 1.0),
+            "bit_depth": ("bit_crusher_bit_depth_var", 1.0, 24.0),
+            "bit_rate": ("bit_crusher_sample_rate_reduction_var", 1.0, 32.0),
+            "bit_mix": ("bit_crusher_mix_var", 0.0, 1.0),
+        }
+        spec = specs.get(control_id)
+        if spec is None:
+            return 0.65
+        variable_name, min_value, max_value = spec
+        variable = getattr(self.owner, variable_name, None)
+        if variable is None:
+            return 0.65
+        try:
+            value = float(variable.get())
+        except (TypeError, ValueError, tk.TclError):
+            return 0.65
+        if max_value <= min_value:
+            return 0.65
+        return max(0.0, min(1.0, (value - min_value) / (max_value - min_value)))
+
     def _draw_knob(self, control_id: str, label: str, group: str, x: int, y: int) -> None:
         tag = f"ui:{control_id}"
         canvas_x = x + PREVIEW_ORIGIN_X
         canvas_y = y + PREVIEW_ORIGIN_Y
-        knob_left = canvas_x + UI_KNOB_VISIBLE_INSET_X
-        knob_top = canvas_y + UI_KNOB_VISIBLE_INSET_Y
-        knob_right = knob_left + UI_KNOB_VISIBLE_WIDTH
-        knob_bottom = knob_top + UI_KNOB_VISIBLE_WIDTH
-        indicator_angle = math.radians(PREVIEW_KNOB_ARC_START + PREVIEW_KNOB_ARC_EXTENT)
-        knob_radius = UI_KNOB_VISIBLE_WIDTH / 2
-        knob_center_x = knob_left + knob_radius
-        knob_center_y = knob_top + knob_radius
-        indicator_x = knob_center_x + math.cos(indicator_angle) * knob_radius
-        indicator_y = knob_center_y - math.sin(indicator_angle) * knob_radius
+        knob_left = canvas_x + PREVIEW_KNOB_ARC_INSET_X
+        knob_top = canvas_y + PREVIEW_KNOB_ARC_INSET_Y
+        knob_right = knob_left + PREVIEW_KNOB_ARC_SIZE
+        knob_bottom = knob_top + PREVIEW_KNOB_ARC_SIZE
+        value_extent = max(6, int(round(PREVIEW_KNOB_ARC_EXTENT * self._control_fraction(control_id))))
         items = [
             self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + UI_KNOB_WIDTH, canvas_y + UI_KNOB_WIDTH, outline="#d8ccd6", dash=(2, 2), tags=(tag, "ui-knob")),
             self.canvas.create_text(canvas_x + UI_KNOB_WIDTH // 2, canvas_y + 10, text=label, fill="#330033", font=("TkDefaultFont", 10), tags=(tag, "ui-knob")),
-            self.canvas.create_arc(knob_left, knob_top, knob_right, knob_bottom, start=PREVIEW_KNOB_ARC_START, extent=PREVIEW_KNOB_ARC_EXTENT, style="arc", outline="#330033", width=PREVIEW_KNOB_ARC_WIDTH, tags=(tag, "ui-knob")),
-            self.canvas.create_oval(indicator_x - 3, indicator_y - 3, indicator_x + 3, indicator_y + 3, fill="#330033", outline="#330033", tags=(tag, "ui-knob")),
+            self.canvas.create_arc(knob_left, knob_top, knob_right, knob_bottom, start=PREVIEW_KNOB_ARC_START, extent=PREVIEW_KNOB_ARC_EXTENT, style="arc", outline=PREVIEW_KNOB_TRACK_COLOR, width=PREVIEW_KNOB_ARC_WIDTH, tags=(tag, "ui-knob")),
+            self.canvas.create_arc(knob_left, knob_top, knob_right, knob_bottom, start=PREVIEW_KNOB_ARC_START, extent=value_extent, style="arc", outline=PREVIEW_KNOB_VALUE_COLOR, width=PREVIEW_KNOB_ARC_WIDTH, tags=(tag, "ui-knob")),
         ]
         self.canvas_items[control_id] = items
         self.canvas.tag_bind(tag, "<ButtonPress-1>", self._start_drag)
