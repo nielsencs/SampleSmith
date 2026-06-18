@@ -17,8 +17,9 @@ DECENT_SAMPLER_UI_HEIGHT = 375
 UI_KNOB_COLUMNS = 8
 UI_KNOB_STEP_X = 70
 UI_KNOB_STEP_Y = 65
-UI_KNOB_WIDTH = 90
+UI_KNOB_WIDTH = 72
 UI_BAR_WIDTH = 42
+UI_BAR_HEIGHT = 72
 UI_BAR_STEP_X = 34
 UI_BAR_GROUP_GRID_SLOTS = 3
 UI_KNOB_START_X = 30
@@ -31,8 +32,8 @@ UI_GROUP_PADDING = 3
 UI_GROUP_TOP_PADDING = 18
 UI_GROUP_TITLE_GAP = 8
 UI_KNOB_GAP = 6
-UI_KNOB_VISIBLE_INSET_X = 18
-UI_KNOB_VISIBLE_INSET_Y = 18
+UI_KNOB_VISIBLE_INSET_X = 9
+UI_KNOB_VISIBLE_INSET_Y = 24
 UI_KNOB_VISIBLE_WIDTH = UI_KNOB_WIDTH - UI_KNOB_VISIBLE_INSET_X * 2
 UI_KNOB_VISIBLE_OUTLINE_WIDTH = 2
 UI_KNOB_VISIBLE_OUTER_INSET_X = UI_KNOB_VISIBLE_INSET_X - UI_KNOB_VISIBLE_OUTLINE_WIDTH // 2
@@ -469,7 +470,7 @@ def generate_dspreset(
                     "x": str(x_pos),
                     "y": str(y_pos),
                     "width": str(UI_BAR_WIDTH),
-                    "height": str(UI_KNOB_WIDTH),
+                    "height": str(UI_BAR_HEIGHT),
                     "label": label,
                     "parameterName": label,
                     "type": "float",

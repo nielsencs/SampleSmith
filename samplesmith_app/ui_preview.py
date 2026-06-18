@@ -16,6 +16,7 @@ from .dspreset import (
     UI_KNOB_MAX_Y,
     UI_KNOB_WIDTH,
     UI_BAR_WIDTH,
+    UI_BAR_HEIGHT,
     UI_BAR_GROUP_GRID_SLOTS,
     UI_GROUP_PADDING,
     UI_GROUP_TOP_PADDING,
@@ -37,10 +38,10 @@ PREVIEW_ORIGIN_X = 0
 PREVIEW_ORIGIN_Y = 51
 PREVIEW_KNOB_ARC_START = -50
 PREVIEW_KNOB_ARC_EXTENT = 260
-PREVIEW_KNOB_ARC_WIDTH = 7
-PREVIEW_KNOB_ARC_INSET_X = 10
-PREVIEW_KNOB_ARC_INSET_Y = 29
-PREVIEW_KNOB_ARC_SIZE = 70
+PREVIEW_KNOB_ARC_WIDTH = 6
+PREVIEW_KNOB_ARC_INSET_X = 9
+PREVIEW_KNOB_ARC_INSET_Y = 24
+PREVIEW_KNOB_ARC_SIZE = 54
 PREVIEW_KNOB_TRACK_COLOR = "#bfb9b9"
 PREVIEW_KNOB_VALUE_COLOR = "#252025"
 
@@ -295,13 +296,13 @@ class DecentSamplerUiPreview:
         canvas_y = y + PREVIEW_ORIGIN_Y
         control_width = UI_BAR_WIDTH
         bar_width = 18
-        bar_height = 46
+        bar_height = 38
         bar_left = canvas_x + (control_width - bar_width) // 2
-        bar_top = canvas_y + 26
+        bar_top = canvas_y + 22
         bar_bottom = bar_top + bar_height
         fill_top = bar_top + 10
         items = [
-            self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + control_width, canvas_y + UI_KNOB_WIDTH, outline="#d8ccd6", dash=(2, 2), tags=(tag, "ui-knob")),
+            self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + control_width, canvas_y + UI_BAR_HEIGHT, outline="#d8ccd6", dash=(2, 2), tags=(tag, "ui-knob")),
             self.canvas.create_text(canvas_x + control_width // 2, canvas_y + 10, text=label, fill="#330033", font=("TkDefaultFont", 10), tags=(tag, "ui-knob")),
             self.canvas.create_rectangle(bar_left, bar_top, bar_left + bar_width, bar_bottom, outline="#330033", width=2, tags=(tag, "ui-knob")),
             self.canvas.create_rectangle(bar_left + 4, fill_top, bar_left + bar_width - 4, bar_bottom - 4, fill="#330033", outline="#330033", tags=(tag, "ui-knob")),
