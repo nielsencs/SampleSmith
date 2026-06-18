@@ -211,19 +211,27 @@ class SampleSmithApp(tk.Tk):
     def _build_project_panel(self, project: ttk.LabelFrame) -> None:
         project.columnconfigure(0, weight=3)
         project.columnconfigure(1, weight=2)
-        project.columnconfigure(2, weight=1)
 
         identity = ttk.Frame(project)
         identity.grid(row=0, column=0, sticky="ew", padx=(6, 12), pady=6)
         identity.columnconfigure(1, weight=1)
         ttk.Label(identity, text="Instrument").grid(row=0, column=0, sticky="w", padx=(0, 4))
         ttk.Entry(identity, textvariable=self.name_var, width=26).grid(row=0, column=1, sticky="ew")
+        project_buttons = ttk.Frame(identity)
+        project_buttons.grid(row=0, column=2, sticky="e", padx=(6, 0))
+        ttk.Button(project_buttons, text="New", command=self._new_project).pack(side="left", padx=(0, 4))
+        ttk.Button(project_buttons, text="Open", command=self._open_project_dialog).pack(side="left", padx=(0, 4))
+        ttk.Button(project_buttons, text="Save", command=self._save_project_command).pack(side="left")
+
         ttk.Label(identity, text="Output").grid(row=1, column=0, sticky="w", padx=(0, 4), pady=(6, 0))
         ttk.Entry(identity, textvariable=self.output_var, width=42).grid(row=1, column=1, sticky="ew", pady=(6, 0))
-        ttk.Button(identity, text="Browse", command=self._browse_output).grid(row=1, column=2, sticky="w", padx=(4, 0), pady=(6, 0))
+        output_buttons = ttk.Frame(identity)
+        output_buttons.grid(row=1, column=2, sticky="e", padx=(6, 0), pady=(6, 0))
+        ttk.Button(output_buttons, text="Browse", command=self._browse_output).pack(side="left", padx=(0, 4))
+        ttk.Button(output_buttons, text="Review stray audio", command=self._review_stray_audio).pack(side="left")
 
         recording = ttk.LabelFrame(project, text="Recording defaults")
-        recording.grid(row=0, column=1, sticky="nsew", padx=(0, 12), pady=6)
+        recording.grid(row=0, column=1, sticky="nsew", padx=(0, 6), pady=6)
         ttk.Label(recording, text="Seconds").grid(row=0, column=0, sticky="w", padx=6, pady=(6, 2))
         ttk.Spinbox(recording, textvariable=self.record_seconds_var, from_=0.5, to=30, increment=0.5, width=7).grid(row=0, column=1, sticky="w", padx=(0, 8), pady=(6, 2))
         ttk.Label(recording, text="Trim dB").grid(row=0, column=2, sticky="w", padx=(0, 4), pady=(6, 2))
@@ -233,15 +241,6 @@ class SampleSmithApp(tk.Tk):
         ttk.Checkbutton(recording, text="Normalise", variable=self.normalise_var).grid(row=1, column=2, columnspan=2, sticky="w", padx=(0, 6), pady=(2, 6))
         ttk.Checkbutton(recording, text="Confirm before recording", variable=self.confirm_before_record_var).grid(row=2, column=0, columnspan=4, sticky="w", padx=6, pady=(0, 4))
         ttk.Checkbutton(recording, text="Play reference first", variable=self.play_reference_before_record_var).grid(row=3, column=0, columnspan=4, sticky="w", padx=6, pady=(0, 6))
-
-        actions = ttk.LabelFrame(project, text="Project actions")
-        actions.grid(row=0, column=2, sticky="nsew", padx=(0, 6), pady=6)
-        ttk.Button(actions, text="New", command=self._new_project).grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 2))
-        ttk.Button(actions, text="Open", command=self._open_project_dialog).grid(row=0, column=1, sticky="ew", padx=(0, 6), pady=(6, 2))
-        ttk.Button(actions, text="Save", command=self._save_project_command).grid(row=1, column=0, sticky="ew", padx=6, pady=2)
-        ttk.Button(actions, text="Review stray audio", command=self._review_stray_audio).grid(row=1, column=1, sticky="ew", padx=(0, 6), pady=2)
-        actions.columnconfigure(0, weight=1)
-        actions.columnconfigure(1, weight=1)
 
     def _build_pitched_tab(self) -> None:
         controls = ttk.Frame(self.pitched_tab)
