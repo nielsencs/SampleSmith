@@ -27,6 +27,7 @@ from .dspreset import (
     UI_KNOB_VISIBLE_OUTER_INSET_X,
     UI_KNOB_VISIBLE_OUTER_INSET_Y,
     UI_KNOB_VISIBLE_OUTER_WIDTH,
+    tone_control_value_for_frequency,
     ui_layout_position,
     ui_bar_layout_position,
 )
@@ -312,11 +313,11 @@ class DecentSamplerUiPreview:
 
     def _control_fraction(self, control_id: str) -> float:
         specs = {
-            "filter_tone": ("lowpass_frequency_var", 60.0, 22000.0),
-            "filter_resonance": ("filter_resonance_var", 0.0, 10.0),
-            "notch_frequency": ("notch_frequency_var", 0.0, 22000.0),
+            "filter_tone": ("lowpass_frequency_var", 0.0, 1.0, tone_control_value_for_frequency),
+            "filter_resonance": ("filter_resonance_var", 0.0, 5.0),
+            "notch_frequency": ("notch_frequency_var", 60.0, 22000.0),
             "notch_q": ("notch_q_var", 0.01, 18.0),
-            "peak_frequency": ("peak_frequency_var", 0.0, 22000.0),
+            "peak_frequency": ("peak_frequency_var", 60.0, 22000.0),
             "peak_q": ("peak_q_var", 0.01, 18.0),
             "peak_gain": ("peak_gain_var", 0.0, 10.0),
             "gain_level": ("gain_level_var", -99.0, 24.0),
@@ -351,7 +352,7 @@ class DecentSamplerUiPreview:
         spec = specs.get(control_id)
         if spec is None:
             return 0.65
-        variable_name, min_value, max_value = spec
+        variable_name, min_value, max_value, *transforms = spec
         variable = getattr(self.owner, variable_name, None)
         if variable is None:
             return 0.65
@@ -359,6 +360,8 @@ class DecentSamplerUiPreview:
             value = float(variable.get())
         except (TypeError, ValueError, tk.TclError):
             return 0.65
+        if transforms:
+            value = float(transforms[0](value))
         if max_value <= min_value:
             return 0.65
         return max(0.0, min(1.0, (value - min_value) / (max_value - min_value)))
