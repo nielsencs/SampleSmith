@@ -222,14 +222,12 @@ class SampleSmithApp(tk.Tk):
         ttk.Button(project_buttons, text="New", command=self._new_project).pack(side="left", padx=(0, 4))
         ttk.Button(project_buttons, text="Open", command=self._open_project_dialog).pack(side="left", padx=(0, 4))
         ttk.Button(project_buttons, text="Save", command=self._save_project_command).pack(side="left", padx=(0, 4))
-        ttk.Button(project_buttons, text="Rename", command=self._rename_project_dialog).pack(side="left")
+        ttk.Button(project_buttons, text="Rename", command=self._rename_project_dialog).pack(side="left", padx=(0, 4))
+        ttk.Button(project_buttons, text="Review stray audio", command=self._review_stray_audio).pack(side="left")
 
         ttk.Label(identity, text="Output").grid(row=1, column=0, sticky="w", padx=(0, 4), pady=(6, 0))
         ttk.Entry(identity, textvariable=self.output_var, width=42).grid(row=1, column=1, sticky="ew", pady=(6, 0))
-        output_buttons = ttk.Frame(identity)
-        output_buttons.grid(row=1, column=2, sticky="e", padx=(6, 0), pady=(6, 0))
-        ttk.Button(output_buttons, text="Browse", command=self._browse_output).pack(side="left", padx=(0, 4))
-        ttk.Button(output_buttons, text="Review stray audio", command=self._review_stray_audio).pack(side="left")
+        ttk.Button(identity, text="Browse", command=self._browse_output).grid(row=1, column=2, sticky="e", padx=(6, 0), pady=(6, 0))
 
         recording = ttk.LabelFrame(project, text="Recording defaults")
         recording.grid(row=0, column=1, sticky="nsew", padx=(0, 6), pady=6)
