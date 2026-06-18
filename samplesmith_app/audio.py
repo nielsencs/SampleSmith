@@ -236,3 +236,32 @@ def render_bridge_wav(
 
     target_path.parent.mkdir(parents=True, exist_ok=True)
     sf.write(target_path, blended, low_rate, subtype="PCM_24")
+
+
+def render_retuned_bridge_wav(
+    source_path: Path,
+    target_path: Path,
+    source_root_note: int,
+    target_note: int,
+) -> None:
+    """Write a provisional bridge WAV from one neighbouring source recording.
+
+    This covers one-sided or "imaginary" gaps where there is no recorded sample
+    on both sides of the target note. The result is still deliberately marked as
+    a provisional bridge so it is easy to replace with a real recording later.
+    """
+    try:
+        import numpy as np
+        import soundfile as sf
+    except ImportError as exc:
+        raise RuntimeError("Bridge WAV generation needs soundfile and numpy installed.") from exc
+
+    audio, sample_rate = _load_audio_for_bridge(source_path)
+    retuned = _pitch_shift_audio(audio, target_note - source_root_note)
+    peak = float(np.max(np.abs(retuned))) if retuned.size else 0.0
+    if peak > 0.98:
+        retuned *= 0.98 / peak
+    retuned = _fade_edges(retuned, sample_rate)
+
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    sf.write(target_path, retuned, sample_rate, subtype="PCM_24")

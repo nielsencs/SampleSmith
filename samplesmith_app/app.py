@@ -14,7 +14,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from .audio import AudioEngine, render_bridge_wav, write_silent_wav
+from .audio import AudioEngine, render_bridge_wav, render_retuned_bridge_wav, write_silent_wav
 from .dspreset import export_dsbundle, generate_dspreset
 from .looping import read_wav_smpl_loop_points
 from .ui_preview import DecentSamplerUiPreview, normalise_ui_layout
@@ -252,20 +252,22 @@ class SampleSmithApp(tk.Tk):
         ttk.Spinbox(controls, textvariable=self.step_var, from_=1, to=12, width=4).pack(side="left")
         ttk.Button(controls, text="Build note list", command=self._build_note_list).pack(side="left", padx=8)
 
-        self.note_tree = ttk.Treeview(self.pitched_tab, columns=("note", "maps", "file"), show="headings", height=14)
+        self.note_tree = ttk.Treeview(self.pitched_tab, columns=("note", "maps", "file", "action"), show="headings", height=14)
         self.note_tree.heading("note", text="Target note")
         self.note_tree.heading("maps", text="Maps to keys")
         self.note_tree.heading("file", text="Sample file")
+        self.note_tree.heading("action", text="Action")
         self.note_tree.column("note", width=120, stretch=False)
         self.note_tree.column("maps", width=230, stretch=False)
-        self.note_tree.column("file", width=420)
+        self.note_tree.column("file", width=340)
+        self.note_tree.column("action", width=110, stretch=False, anchor="center")
         self.note_tree.tag_configure("generated", foreground="#666666")
         self.note_tree.pack(fill="both", expand=True, pady=8)
         self.note_tree.bind("<<TreeviewSelect>>", self._on_pitched_selection_changed)
+        self.note_tree.bind("<Button-1>", self._on_note_tree_click, add="+")
         buttons = ttk.Frame(self.pitched_tab)
         buttons.pack(fill="x")
         ttk.Button(buttons, text="Record all missing", command=self._record_all_missing).pack(side="left")
-        ttk.Button(buttons, text="Generate bridge WAVs", command=self._generate_bridge_wavs_now).pack(side="left", padx=6)
 
     def _build_pads_tab(self) -> None:
         controls = ttk.Frame(self.pads_tab)
@@ -1381,7 +1383,8 @@ class SampleSmithApp(tk.Tk):
                 lo, hi = ranges[note]
                 recorded = next((sample for sample in self.samples if sample.mode == "pitched" and sample.root_note == note), None)
                 self.note_rows[note] = str(recorded.path) if recorded else ""
-                self.note_tree.insert("", "end", iid=str(note), values=(midi_to_name(note), mapping_text(lo, hi), recorded.path.name if recorded else ""))
+                action = self._bridge_action_text(note)
+                self.note_tree.insert("", "end", iid=str(note), values=(midi_to_name(note), mapping_text(lo, hi), recorded.path.name if recorded else "", action))
             self._refresh_pitched_mappings()
         for sample in self.samples:
             if sample.mode == "pad":
@@ -1489,7 +1492,7 @@ class SampleSmithApp(tk.Tk):
             iid = str(note)
             lo, hi = ranges[note]
             self.note_rows[note] = ""
-            self.note_tree.insert("", "end", iid=iid, values=(midi_to_name(note), mapping_text(lo, hi), ""))
+            self.note_tree.insert("", "end", iid=iid, values=(midi_to_name(note), mapping_text(lo, hi), "", self._bridge_action_text(note)))
         self._log("Built note list with full-keyboard sample mapping")
 
     def _selected_note(self) -> int | None:
@@ -1588,31 +1591,103 @@ class SampleSmithApp(tk.Tk):
             return
         self._record_note_sequence(notes)
 
-    def _generate_bridge_wavs_now(self) -> None:
+    def _on_note_tree_click(self, event) -> None:
+        if self.note_tree.identify_region(event.x, event.y) != "cell":
+            return
+        row_id = self.note_tree.identify_row(event.y)
+        column = self.note_tree.identify_column(event.x)
+        if not row_id or column != "#4":
+            return
+        try:
+            note = int(row_id)
+        except ValueError:
+            return
+        if not self._bridge_action_text(note):
+            return
+        self.after_idle(lambda: self._show_bridge_gap_menu(note, event.x_root, event.y_root))
+
+    def _show_bridge_gap_menu(self, note: int, x_root: int, y_root: int) -> None:
+        menu = tk.Menu(self, tearoff=False)
+        note_name = midi_to_name(note)
+        menu.add_command(label=f"Bridge {note_name}", command=lambda: self._bridge_gap_for_notes([note]))
+        targets = self._bridge_gap_targets(note)
+        if len(targets) > 1:
+            label = f"Bridge gap {midi_to_name(targets[0])}–{midi_to_name(targets[-1])}"
+            menu.add_command(label=label, command=lambda: self._bridge_gap_for_notes(targets))
+        menu.tk_popup(x_root, y_root)
+
+    def _recorded_pitched_sample_for_note(self, note: int) -> SampleInfo | None:
+        return next((sample for sample in self.samples if sample.mode == "pitched" and sample.root_note == note and not sample.generated), None)
+
+    def _bridge_action_text(self, note: int) -> str:
+        if self._recorded_pitched_sample_for_note(note):
+            return ""
+        if not self._recorded_pitched_samples():
+            return ""
+        return "Bridge gap"
+
+    def _bridge_gap_targets(self, note: int) -> list[int]:
+        if self._recorded_pitched_sample_for_note(note):
+            return []
+        notes = sorted(int(item) for item in self.note_tree.get_children())
+        if note not in notes:
+            return [note]
+        index = notes.index(note)
+        start = index
+        while start > 0 and not self._recorded_pitched_sample_for_note(notes[start - 1]):
+            start -= 1
+        end = index
+        while end + 1 < len(notes) and not self._recorded_pitched_sample_for_note(notes[end + 1]):
+            end += 1
+        return [target for target in notes[start : end + 1] if self._bridge_plan_for_note(target) is not None]
+
+    def _bridge_plan_for_note(self, target_note: int) -> tuple[str, SampleInfo, SampleInfo | None, Path] | None:
+        if self._recorded_pitched_sample_for_note(target_note):
+            return None
         recorded = sorted(self._recorded_pitched_samples(), key=lambda sample: sample.root_note)
-        if len(recorded) < 2:
-            messagebox.showwarning("SampleSmith", "Record or import at least two pitched samples first.")
+        if not recorded:
+            return None
+        lower = next((sample for sample in reversed(recorded) if sample.root_note < target_note), None)
+        higher = next((sample for sample in recorded if sample.root_note > target_note), None)
+        if lower and higher:
+            return ("blend", lower, higher, self._bridge_sample_path(target_note, lower.root_note, higher.root_note))
+        nearest = min(recorded, key=lambda sample: abs(sample.root_note - target_note))
+        return ("retune", nearest, None, self._bridge_sample_path(target_note, nearest.root_note, nearest.root_note))
+
+    def _bridge_gap_for_notes(self, notes: list[int]) -> None:
+        plans = [(note, self._bridge_plan_for_note(note)) for note in notes]
+        plans = [(note, plan) for note, plan in plans if plan is not None]
+        if not plans:
+            messagebox.showinfo("SampleSmith", "No bridgeable missing notes here yet.")
             return
-        bridge_paths = [
-            self._bridge_sample_path(note, low_sample.root_note, high_sample.root_note)
-            for low_sample, high_sample in zip(recorded, recorded[1:])
-            for note in range(low_sample.root_note + 1, high_sample.root_note)
-        ]
-        if not bridge_paths:
-            messagebox.showinfo("SampleSmith", "No missing notes between recorded pitched samples.")
+        before = {plan[3] for _, plan in plans if plan[3].exists()}
+        written: list[Path] = []
+        for target_note, plan in plans:
+            kind, first, second, target_path = plan
+            missing_sources = [source.path for source in (first, second) if source is not None and not source.path.exists()]
+            if missing_sources:
+                for path in missing_sources:
+                    self._log(f"Cannot bridge {midi_to_name(target_note)}; source WAV is missing: {path}")
+                continue
+            try:
+                if kind == "blend" and second is not None:
+                    render_bridge_wav(first.path, second.path, target_path, first.root_note, target_note, second.root_note)
+                    source_text = f"{first.path.name} + {second.path.name}"
+                else:
+                    render_retuned_bridge_wav(first.path, target_path, first.root_note, target_note)
+                    source_text = f"retuned from {first.path.name}"
+            except RuntimeError as exc:
+                self._log(f"Cannot bridge {midi_to_name(target_note)}: {exc}")
+                continue
+            written.append(target_path)
+            self._log(f"Bridged {midi_to_name(target_note)}: {target_path.relative_to(self._instrument_dir())} ({source_text})")
+        if not written:
             return
-        before = {path for path in bridge_paths if path.exists()}
-        self._generated_bridge_samples(render_missing=True)
+        self._refresh_pitched_mappings()
         preset = self._write_preset()
-        after = {path for path in bridge_paths if path.exists()}
-        created = len(after - before)
         self._auto_save_project()
-        self._log(f"Generated/updated bridge WAVs for {len(after)} provisional note(s); {created} newly written. Updated {preset.name}")
-        messagebox.showinfo(
-            "SampleSmith",
-            f"Generated/updated bridge WAVs for {len(after)} provisional note(s).\n\n"
-            "They are shown as [GENERATED provisional] in the pitched list and saved under Samples/generated/.",
-        )
+        created = len({path for path in written if path not in before})
+        self._log(f"Bridge gap wrote {len(written)} provisional sample(s); {created} newly created. Updated {preset.name}")
 
     def _record_note_sequence(self, notes: list[int]) -> None:
         if not notes:
@@ -2011,56 +2086,51 @@ class SampleSmithApp(tk.Tk):
         return [sample for sample in self.samples if sample.mode == "pitched" and not sample.generated]
 
     def _generated_bridge_samples(self, render_missing: bool = False) -> list[SampleInfo]:
-        recorded = sorted(self._recorded_pitched_samples(), key=lambda sample: sample.root_note)
-        if len(recorded) < 2:
-            return []
         generated: list[SampleInfo] = []
-        for low_sample, high_sample in zip(recorded, recorded[1:]):
-            if high_sample.root_note - low_sample.root_note <= 1:
+        if self.note_tree.get_children():
+            target_notes = [int(item) for item in self.note_tree.get_children()]
+        elif self.low_note is not None and self.high_note is not None:
+            target_notes = note_range(self.low_note, self.high_note, self.step_var.get())
+        else:
+            target_notes = []
+        for target_note in target_notes:
+            plan = self._bridge_plan_for_note(target_note)
+            if plan is None:
                 continue
-            for target_note in range(low_sample.root_note + 1, high_sample.root_note):
-                target_path = self._bridge_sample_path(target_note, low_sample.root_note, high_sample.root_note)
-                missing_sources = [source.path for source in (low_sample, high_sample) if not source.path.exists()]
-                if render_missing and missing_sources:
-                    for path in missing_sources:
-                        self._log(f"Cannot generate bridge {midi_to_name(target_note)}; source WAV is missing: {path}")
-                    continue
-                if render_missing and not missing_sources:
-                    source_mtime = max(low_sample.path.stat().st_mtime, high_sample.path.stat().st_mtime)
-                    if not target_path.exists() or target_path.stat().st_mtime < source_mtime:
-                        try:
-                            render_bridge_wav(
-                                low_sample.path,
-                                high_sample.path,
-                                target_path,
-                                low_sample.root_note,
-                                target_note,
-                                high_sample.root_note,
-                            )
-                        except RuntimeError as exc:
-                            self._log(f"Cannot generate bridge {midi_to_name(target_note)}: {exc}")
-                            continue
-                        self._log(
-                            "Generated provisional bridge WAV: "
-                            f"{target_path.relative_to(self._instrument_dir())} from blended sources "
-                            f"{low_sample.path.name} + {high_sample.path.name}"
-                        )
-                if not target_path.exists():
-                    continue
-                generated.append(
-                    SampleInfo(
-                        path=target_path,
-                        root_note=target_note,
-                        lo_note=target_note,
-                        hi_note=target_note,
-                        label=f"BRIDGE {midi_to_name(target_note)} (derived/provisional)",
-                        mode="pitched",
-                        generated=True,
-                        provisional=True,
-                        source_roots=[low_sample.root_note, high_sample.root_note],
-                        source_paths=[low_sample.path, high_sample.path],
-                    )
+            kind, first, second, target_path = plan
+            sources = [source for source in (first, second) if source is not None]
+            missing_sources = [source.path for source in sources if not source.path.exists()]
+            if render_missing and missing_sources:
+                for path in missing_sources:
+                    self._log(f"Cannot bridge {midi_to_name(target_note)}; source WAV is missing: {path}")
+                continue
+            if render_missing and not missing_sources:
+                source_mtime = max(source.path.stat().st_mtime for source in sources)
+                if not target_path.exists() or target_path.stat().st_mtime < source_mtime:
+                    try:
+                        if kind == "blend" and second is not None:
+                            render_bridge_wav(first.path, second.path, target_path, first.root_note, target_note, second.root_note)
+                        else:
+                            render_retuned_bridge_wav(first.path, target_path, first.root_note, target_note)
+                    except RuntimeError as exc:
+                        self._log(f"Cannot bridge {midi_to_name(target_note)}: {exc}")
+                        continue
+            if not target_path.exists():
+                continue
+            generated.append(
+                SampleInfo(
+                    path=target_path,
+                    root_note=target_note,
+                    lo_note=target_note,
+                    hi_note=target_note,
+                    label=f"BRIDGE {midi_to_name(target_note)} (derived/provisional)",
+                    mode="pitched",
+                    generated=True,
+                    provisional=True,
+                    source_roots=[source.root_note for source in sources],
+                    source_paths=[source.path for source in sources],
                 )
+            )
         return generated
 
     def _spread_recorded_pitched_samples(self) -> list[SampleInfo]:
@@ -2107,12 +2177,22 @@ class SampleSmithApp(tk.Tk):
             iid = str(sample.root_note)
             is_generated = sample.generated or sample.provisional
             file_name = f"[GENERATED provisional] {sample.path.name}" if is_generated else sample.path.name
-            values = (midi_to_name(sample.root_note), mapping_text(sample.lo_note, sample.hi_note), file_name)
+            values = (midi_to_name(sample.root_note), mapping_text(sample.lo_note, sample.hi_note), file_name, self._bridge_action_text(sample.root_note))
             if iid in self.note_tree.get_children():
                 self.note_tree.item(iid, values=values, tags=("generated",) if is_generated else ())
             else:
                 self.note_rows[sample.root_note] = "" if is_generated else str(sample.path)
                 self.note_tree.insert("", "end", iid=iid, values=values, tags=("generated",) if is_generated else ())
+        self._refresh_bridge_actions()
+
+    def _refresh_bridge_actions(self) -> None:
+        for item in self.note_tree.get_children():
+            note = int(item)
+            values = list(self.note_tree.item(item, "values"))
+            while len(values) < 4:
+                values.append("")
+            values[3] = self._bridge_action_text(note)
+            self.note_tree.item(item, values=tuple(values))
 
     def _sample_loop_text(self, sample: SampleInfo) -> str:
         if not sample.loop_enabled:
