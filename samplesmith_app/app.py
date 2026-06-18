@@ -1609,7 +1609,7 @@ class SampleSmithApp(tk.Tk):
     def _show_bridge_gap_menu(self, note: int, x_root: int, y_root: int) -> None:
         menu = tk.Menu(self, tearoff=False)
         note_name = midi_to_name(note)
-        menu.add_command(label=f"Bridge {note_name}", command=lambda: self._bridge_gap_for_notes([note]))
+        menu.add_command(label=f"Generate {note_name}", command=lambda: self._bridge_gap_for_notes([note]))
         targets = self._bridge_gap_targets(note)
         if len(targets) > 1:
             label = f"Bridge gap {midi_to_name(targets[0])}–{midi_to_name(targets[-1])}"
