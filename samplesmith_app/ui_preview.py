@@ -22,7 +22,6 @@ from .dspreset import (
     UI_GROUP_TOP_PADDING,
     UI_GROUP_TITLE_HEIGHT,
     UI_GROUP_TITLE_GAP,
-    UI_KNOB_GAP,
     UI_KNOB_VISIBLE_INSET_X,
     UI_KNOB_VISIBLE_INSET_Y,
     UI_KNOB_VISIBLE_WIDTH,
@@ -466,13 +465,15 @@ class DecentSamplerUiPreview:
                 continue
             start_x = min(pos["x"] for pos in current_positions)
             y = max(UI_KNOB_MIN_Y, min(UI_KNOB_MAX_Y, min(pos["y"] for pos in current_positions)))
-            if len(control_ids) == 1:
-                new_positions = [(start_x, y)]
+            if title == "Envelope":
+                natural_xs = [ui_bar_layout_position(str(control["id"]), int(control["index"]), None)[0] for control in controls]
             else:
-                step = UI_KNOB_VISIBLE_OUTER_WIDTH + UI_KNOB_GAP
-                width = step * (len(control_ids) - 1)
-                start_x = max(0, min(UI_KNOB_MAX_X - width, start_x))
-                new_positions = [(start_x + index * step, y) for index in range(len(control_ids))]
+                natural_xs = [ui_layout_position(str(control["id"]), int(control["index"]), None)[0] for control in controls]
+            natural_left = min(natural_xs)
+            natural_offsets = [x - natural_left for x in natural_xs]
+            width = max(natural_offsets, default=0)
+            start_x = max(0, min(UI_KNOB_MAX_X - width, start_x))
+            new_positions = [(start_x + offset, y) for offset in natural_offsets]
             for control_id, (x, new_y) in zip(control_ids, new_positions):
                 current = positions.get(control_id)
                 if current is None or current == {"x": x, "y": new_y}:
