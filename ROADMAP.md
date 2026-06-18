@@ -97,7 +97,7 @@ Wishlist:
 - keep bridge audio generation optional and explicit, not a hidden export side effect
 - allow bridge generation for one selected missing note
 - allow bridge generation for a selected range of missing notes
-- make generated bridge files clearly provisional and easy to replace with real recordings later
+- make generated bridge files clearly generated and easy to replace with real recordings later
 
 ### Import-first workflow
 

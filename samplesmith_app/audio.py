@@ -233,12 +233,12 @@ def render_bridge_wav(
     target_note: int,
     high_root_note: int,
 ) -> None:
-    """Write a provisional bridge WAV blended from the two neighbouring samples.
+    """Write a generated bridge WAV blended from the two neighbouring samples.
 
     Both neighbours are pitch-shifted to the missing target note, then mixed by
     distance: notes nearer the lower recording contain more of the lower source,
     and notes nearer the higher recording contain more of the higher source.
-    These files are explicitly provisional replacements for real recordings.
+    These files are explicitly generated replacements for real recordings.
     """
     try:
         import numpy as np
@@ -287,11 +287,11 @@ def render_retuned_bridge_wav(
     source_root_note: int,
     target_note: int,
 ) -> None:
-    """Write a provisional bridge WAV from one neighbouring source recording.
+    """Write a generated bridge WAV from one neighbouring source recording.
 
     This covers one-sided or "imaginary" gaps where there is no recorded sample
     on both sides of the target note. The result is still deliberately marked as
-    a provisional bridge so it is easy to replace with a real recording later.
+    a generated bridge so it is easy to replace with a real recording later.
     """
     try:
         import numpy as np

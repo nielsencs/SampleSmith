@@ -10,14 +10,14 @@ The aim is practical playable-instrument usefulness rather than laboratory purit
 
 SampleSmith currently supports two main workflows:
 
-1. **Pitched instruments** — for voice, whistles, single-note instruments, growls, drones, etc.
+1. **Note/keyboard instruments** — for voice, whistles, single-note instruments, growls, drones, one-shots on keys, etc.
    - detect or manually enter the lowest and highest notes
    - build a note list across the range
    - play reference notes
    - record matching samples
    - trim and normalise the WAVs
    - map the recorded samples across the keyboard
-   - optionally bridge gaps with clearly marked provisional WAVs from blended or retuned source recordings
+   - optionally bridge gaps with clearly marked generated WAVs from blended or retuned source recordings
    - generate a DecentSampler `.dspreset`
 
 2. **Unpitched / pad instruments** — for hits, breaths, mouth noises, objects, scrapes, claps, one-shots, etc.
@@ -51,7 +51,7 @@ From this folder:
 python samplesmith.py
 ```
 
-Set the instrument name and output folder, choose **Pitched** or **Unpitched / Pads**, then record. By default, single recordings start immediately; enable **Confirm before recording** if you want the old ready-check prompt. Pitched recordings can also play a reference tone first, controlled by **Play reference before pitched recording**. The right-hand **Selected sample** panel is the working area for the selected note or pad: play the reference tone, record the selected sample, see the waveform, choose sample start/end, play the full take or selected region, keep the selection, record another take, or reset an edited WAV from its original backup. Click an existing pitched-sample or pad row to load its WAV into the same panel for playback, waveform trimming, re-recording, or reset. Before SampleSmith overwrites an existing WAV from this panel, it keeps the original under `.samplesmith-backups/`. Starting another recording silently replaces the pending take; backup/reset covers existing WAV mistakes. Each kept recording writes/updates both the `.dspreset` and the `.samplesmith.json` project file automatically; the generate/save buttons are there for manual regeneration.
+Set the instrument name and output folder, choose **Notes** or **Unpitched / Pads**, then record. By default, single recordings start immediately; enable **Confirm before recording** if you want the old ready-check prompt. Note recordings can also play a reference tone first, controlled by **Play reference before pitched recording**. The right-hand **Selected sample** panel is the working area for the selected note or pad: play the reference tone, record the selected sample, see the waveform, choose sample start/end, play the full take or selected region, keep the selection, record another take, or reset an edited WAV from its original backup. Click an existing note or pad row to load its WAV into the same panel for playback, waveform trimming, re-recording, or reset. Before SampleSmith overwrites an existing WAV from this panel, it keeps the original under `.samplesmith-backups/`. Starting another recording silently replaces the pending take; backup/reset covers existing WAV mistakes. Each kept recording writes/updates both the `.dspreset` and the `.samplesmith.json` project file automatically; the generate/save buttons are there for manual regeneration.
 
 Use **New project** to clear the current app state and start a blank unsaved project; it does not delete saved projects or WAV files. If the current project has unsaved changes, SampleSmith asks whether to save, discard, or cancel first. New projects also avoid reusing an existing default project folder blindly. Use **Open project** to return to an existing SampleSmith project; it has the same save/discard/cancel guard.
 
@@ -98,14 +98,14 @@ python tools/make_octave_diagnostic_pack.py
 
 This recreates `octave-diagnostic-pack/` with one generated middle-C/C4 tone sample plus two presets: one rooted at key 60 and one rooted at key 72. In DecentSampler standalone, the C4 screen key should play the key-72 preset unshifted. The generated pack is ignored by Git.
 
-## Pitched mapping behaviour
+## Notes mapping behaviour
 
 Default pitched behaviour is classic sample spreading: SampleSmith generates a playable instrument from whatever samples have actually been recorded, even one sample.
 
 - One recorded pitched sample maps across the whole keyboard.
 - Multiple pitched samples map from the previous recorded root note to the next recorded root note.
 - Neighbouring samples overlap between their home notes.
-- Use **Bridge gap** in the Pitched tab note list to explicitly write provisional bridge files under `Samples/generated/`. A single missing note can be bridged, or a whole visible gap/range can be bridged at once. When there are recorded samples on both sides, SampleSmith blends retuned versions of both neighbours; when there is only one usable neighbour, it creates a retuned provisional copy from the nearest source recording. SampleSmith does not generate these files as a hidden export side effect. Existing generated bridge files are included in the visible/exported mapping and deliberately marked `[GENERATED provisional]` so they are easy to replace later with proper recorded samples.
+- Use **Bridge gap** in the Notes tab note list to explicitly write generated bridge files under `Samples/generated/`. A single missing note can be bridged, or a whole visible gap/range can be bridged at once. When there are recorded samples on both sides, SampleSmith blends retuned versions of both neighbours; when there is only one usable neighbour, it creates a retuned generated copy from the nearest source recording. SampleSmith does not generate these files as a hidden export side effect. Existing generated bridge files are included in the visible/exported mapping and deliberately marked `[GENERATED]` so they are easy to replace later with proper recorded samples.
 
 For example, recorded C3/C4 maps C3 from DS keys `0–72` and C4 from DS keys `60–127`, giving an overlap/blend zone between them. This can make strange-but-useful transformed sounds, such as very low growls.
 
@@ -150,4 +150,4 @@ Likely next steps:
 
 `samplesmith_app/assets/official-boilerplate.dspreset` stores a cleaned-name copy of DecentSampler’s official boilerplate template as a reference for generated UI/binding conventions.
 
-Pitched detection works best for clear single notes. If the sound is noisy, percussive, growly, breathy, or chord-like, use pad mode.
+Pitch detection works best for clear single notes. If the sound is noisy, percussive, growly, breathy, or chord-like, use pad mode.

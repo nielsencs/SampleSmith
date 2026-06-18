@@ -214,7 +214,7 @@ class SampleSmithApp(tk.Tk):
         self.pitched_tab = ttk.Frame(tabs, padding=8)
         self.pads_tab = ttk.Frame(tabs, padding=8)
         self.decent_sampler_tab = ttk.Frame(tabs, padding=8)
-        tabs.add(self.pitched_tab, text="Pitched")
+        tabs.add(self.pitched_tab, text="Notes")
         tabs.add(self.pads_tab, text="Unpitched / Pads")
         tabs.add(self.decent_sampler_tab, text="DecentSampler")
         self._build_pitched_tab()
@@ -570,7 +570,7 @@ class SampleSmithApp(tk.Tk):
                 "DecentSampler settings are split into sub-tabs. Loop controls here are fallback/default values; "
                 "double-click Source audio/Plays on keys to edit key mapping; double-click the other columns to edit loop points. "
                 "per-audio-file loop edits are shown in the mapping table and take priority during export. "
-                "Generated bridge samples are marked provisional/derived in the mapping table and saved under Samples/generated."
+                "Generated bridge samples are marked generated in the mapping table and saved under Samples/generated."
             ),
             wraplength=820,
             justify="left",
@@ -1686,10 +1686,9 @@ class SampleSmithApp(tk.Tk):
                     root_note=target_note,
                     lo_note=target_note,
                     hi_note=target_note,
-                    label=f"BRIDGE {midi_to_name(target_note)} (derived/provisional)",
+                    label=f"BRIDGE {midi_to_name(target_note)} (generated)",
                     mode="pitched",
                     generated=True,
-                    provisional=True,
                     source_roots=[source.root_note for source in sources],
                     source_paths=[source.path for source in sources],
                 )
@@ -1702,7 +1701,7 @@ class SampleSmithApp(tk.Tk):
         preset = self._write_preset()
         self._auto_save_project()
         created = len({path for path in written if path not in before})
-        self._log(f"Bridge gap wrote {len(written)} provisional sample(s); {created} newly created. Updated {preset.name}")
+        self._log(f"Bridge gap wrote {len(written)} generated sample(s); {created} newly created. Updated {preset.name}")
 
     def _record_note_sequence(self, notes: list[int]) -> None:
         if not notes:
@@ -2147,10 +2146,9 @@ class SampleSmithApp(tk.Tk):
                     root_note=target_note,
                     lo_note=target_note,
                     hi_note=target_note,
-                    label=f"BRIDGE {midi_to_name(target_note)} (derived/provisional)",
+                    label=f"BRIDGE {midi_to_name(target_note)} (generated)",
                     mode="pitched",
                     generated=True,
-                    provisional=True,
                     source_roots=[source.root_note for source in sources],
                     source_paths=[source.path for source in sources],
                 )
@@ -2200,7 +2198,7 @@ class SampleSmithApp(tk.Tk):
         for sample in exported:
             iid = str(sample.root_note)
             is_generated = sample.generated or sample.provisional
-            file_name = f"[GENERATED provisional] {sample.path.name}" if is_generated else sample.path.name
+            file_name = f"[GENERATED] {sample.path.name}" if is_generated else sample.path.name
             values = (midi_to_name(sample.root_note), mapping_text(sample.lo_note, sample.hi_note), file_name, self._bridge_action_text(sample.root_note))
             if iid in self.note_tree.get_children():
                 self.note_tree.item(iid, values=values, tags=("generated",) if is_generated else ())
@@ -2241,7 +2239,7 @@ class SampleSmithApp(tk.Tk):
                 "end",
                 iid=iid,
                 values=(
-                    f"[GENERATED provisional] {sample.path.name}" if sample.generated or sample.provisional else sample.path.name,
+                    f"[GENERATED] {sample.path.name}" if sample.generated or sample.provisional else sample.path.name,
                     mapping_text(sample.lo_note, sample.hi_note),
                     exported_root_text(sample.root_note, 0),
                     "bridge" if sample.generated or sample.provisional else sample.mode,
@@ -2284,7 +2282,7 @@ class SampleSmithApp(tk.Tk):
         if sample is None:
             messagebox.showinfo(
                 "SampleSmith",
-                "That row is generated/provisional. Record or import a real replacement first, then edit its loop points.",
+                "That generated row could not be made editable. Try refreshing the mapping, then try again.",
             )
             return
         if not sample.path.exists():
@@ -2308,7 +2306,7 @@ class SampleSmithApp(tk.Tk):
         if sample is None:
             messagebox.showinfo(
                 "SampleSmith",
-                "That row is generated/provisional. Record or import a real replacement first, then edit its key mapping.",
+                "That generated row could not be made editable. Try refreshing the mapping, then try again.",
             )
             return
         MappingEditorDialog(self, sample, self._apply_sample_mapping_edit)
