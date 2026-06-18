@@ -1679,6 +1679,21 @@ class SampleSmithApp(tk.Tk):
             except RuntimeError as exc:
                 self._log(f"Cannot bridge {midi_to_name(target_note)}: {exc}")
                 continue
+            sources = [source for source in (first, second) if source is not None]
+            self._upsert_sample(
+                SampleInfo(
+                    path=target_path,
+                    root_note=target_note,
+                    lo_note=target_note,
+                    hi_note=target_note,
+                    label=f"BRIDGE {midi_to_name(target_note)} (derived/provisional)",
+                    mode="pitched",
+                    generated=True,
+                    provisional=True,
+                    source_roots=[source.root_note for source in sources],
+                    source_paths=[source.path for source in sources],
+                )
+            )
             written.append(target_path)
             self._log(f"Bridged {midi_to_name(target_note)}: {target_path.relative_to(self._instrument_dir())} ({source_text})")
         if not written:
@@ -2087,6 +2102,11 @@ class SampleSmithApp(tk.Tk):
 
     def _generated_bridge_samples(self, render_missing: bool = False) -> list[SampleInfo]:
         generated: list[SampleInfo] = []
+        saved_generated = {
+            (sample.root_note, sample.path): sample
+            for sample in self.samples
+            if sample.mode == "pitched" and (sample.generated or sample.provisional)
+        }
         if self.note_tree.get_children():
             target_notes = [int(item) for item in self.note_tree.get_children()]
         elif self.low_note is not None and self.high_note is not None:
@@ -2116,6 +2136,10 @@ class SampleSmithApp(tk.Tk):
                         self._log(f"Cannot bridge {midi_to_name(target_note)}: {exc}")
                         continue
             if not target_path.exists():
+                continue
+            saved_sample = saved_generated.get((target_note, target_path))
+            if saved_sample is not None:
+                generated.append(saved_sample)
                 continue
             generated.append(
                 SampleInfo(
@@ -2229,6 +2253,10 @@ class SampleSmithApp(tk.Tk):
         for sample in self.samples:
             if sample.mode == exported.mode and sample.root_note == exported.root_note and sample.path == exported.path:
                 return sample
+        if exported.generated or exported.provisional:
+            self.samples.append(exported)
+            self.samples.sort(key=lambda sample: (sample.mode, sample.root_note, sample.path.name))
+            return exported
         return None
 
     def _edit_export_row_from_double_click(self, event) -> str:
