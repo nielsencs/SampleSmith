@@ -221,7 +221,8 @@ class SampleSmithApp(tk.Tk):
         project_buttons.grid(row=0, column=2, sticky="e", padx=(6, 0))
         ttk.Button(project_buttons, text="New", command=self._new_project).pack(side="left", padx=(0, 4))
         ttk.Button(project_buttons, text="Open", command=self._open_project_dialog).pack(side="left", padx=(0, 4))
-        ttk.Button(project_buttons, text="Save", command=self._save_project_command).pack(side="left")
+        ttk.Button(project_buttons, text="Save", command=self._save_project_command).pack(side="left", padx=(0, 4))
+        ttk.Button(project_buttons, text="Rename", command=self._rename_project_dialog).pack(side="left")
 
         ttk.Label(identity, text="Output").grid(row=1, column=0, sticky="w", padx=(0, 4), pady=(6, 0))
         ttk.Entry(identity, textvariable=self.output_var, width=42).grid(row=1, column=1, sticky="ew", pady=(6, 0))
@@ -1040,6 +1041,73 @@ class SampleSmithApp(tk.Tk):
             return saved
         except Exception as exc:
             messagebox.showerror("SampleSmith", f"Could not save project:\n\n{exc}")
+            return None
+
+    def _rename_project_dialog(self) -> None:
+        current_name = self.name_var.get().strip() or "NewInstrument"
+        new_name = simpledialog.askstring("SampleSmith", "New project/instrument name:", initialvalue=current_name)
+        if new_name is None:
+            return
+        self._rename_project_to(new_name)
+
+    def _rename_project_to(self, new_name: str) -> Path | None:
+        new_name = new_name.strip()
+        if not new_name:
+            messagebox.showwarning("SampleSmith", "Enter a project name first.")
+            return None
+        old_name = self.name_var.get().strip() or "NewInstrument"
+        if slugify(new_name) == slugify(old_name) and new_name == old_name:
+            self._log("Project name unchanged.")
+            return self.project_path
+
+        old_dir = self._instrument_dir()
+        old_project_path = self.project_path
+        output_root = Path(self.output_var.get()).expanduser()
+        new_dir = output_root / slugify(new_name)
+        if old_dir.resolve() != new_dir.resolve() and new_dir.exists():
+            messagebox.showerror("SampleSmith", f"A project folder already exists for that name:\n\n{new_dir}")
+            return None
+
+        try:
+            if old_dir.exists() and old_dir.resolve() != new_dir.resolve():
+                new_dir.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(old_dir), str(new_dir))
+                moved_from = old_dir
+                moved_to = new_dir
+            else:
+                moved_from = old_dir
+                moved_to = new_dir
+                new_dir.mkdir(parents=True, exist_ok=True)
+
+            self.name_var.set(new_name)
+            for sample in self.samples:
+                try:
+                    relative = sample.path.relative_to(moved_from)
+                except ValueError:
+                    continue
+                sample.path = moved_to / relative
+                if sample.source_paths:
+                    remapped = []
+                    for source_path in sample.source_paths:
+                        try:
+                            remapped.append(moved_to / source_path.relative_to(moved_from))
+                        except ValueError:
+                            remapped.append(source_path)
+                    sample.source_paths = remapped
+            self.project_path = self._default_project_path()
+            preset = self._write_preset()
+            saved = self._save_project()
+
+            if old_project_path is not None and moved_from != moved_to:
+                stale_name = moved_to / old_project_path.name
+                if stale_name.exists() and stale_name != saved:
+                    stale_name.unlink()
+
+            self._rebuild_trees_from_project()
+            self._log(f"Renamed project from {old_name} to {new_name}; saved {saved.name} and regenerated {preset.name}")
+            return saved
+        except Exception as exc:
+            messagebox.showerror("SampleSmith", f"Could not rename project:\n\n{exc}")
             return None
 
     @staticmethod
