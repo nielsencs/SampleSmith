@@ -5,13 +5,12 @@ The application implementation lives in :mod:`samplesmith_app`.
 """
 
 from samplesmith_app.app import SampleSmithApp, main
-from samplesmith_app.audio import AudioEngine, write_silent_wav
+from samplesmith_app.audio import AudioEngine
 from samplesmith_app.dspreset import generate_dspreset
 from samplesmith_app.looping import read_wav_smpl_loop_points
 from samplesmith_app.models import (
     A4_HZ,
     A4_MIDI,
-    DEFAULT_PAD_START_NOTE,
     DEFAULT_SAMPLE_RATE,
     NOTE_ALIASES,
     NOTE_NAMES_SHARP,
@@ -36,7 +35,6 @@ __all__ = [
     "A4_HZ",
     "A4_MIDI",
     "AudioEngine",
-    "DEFAULT_PAD_START_NOTE",
     "DEFAULT_SAMPLE_RATE",
     "NOTE_ALIASES",
     "NOTE_NAMES_SHARP",
@@ -59,7 +57,6 @@ __all__ = [
     "read_wav_smpl_loop_points",
     "slugify",
     "valid_loop_points",
-    "write_silent_wav",
 ]
 
 
