@@ -16,6 +16,7 @@ from .dspreset import (
     UI_KNOB_MAX_X,
     UI_KNOB_MAX_Y,
     UI_KNOB_WIDTH,
+    UI_BAR_WIDTH,
     UI_GROUP_PADDING,
     UI_GROUP_TOP_PADDING,
     UI_GROUP_TITLE_HEIGHT,
@@ -28,6 +29,7 @@ from .dspreset import (
     UI_KNOB_VISIBLE_OUTER_INSET_Y,
     UI_KNOB_VISIBLE_OUTER_WIDTH,
     ui_layout_position,
+    ui_bar_layout_position,
 )
 
 BARE_LAYOUT_IMAGE = Path(__file__).resolve().parent / "assets" / "decent_sampler_bare_layout.png"
@@ -164,17 +166,20 @@ class DecentSamplerUiPreview:
             if (index % UI_KNOB_COLUMNS) + len(included) > UI_KNOB_COLUMNS:
                 index += UI_KNOB_COLUMNS - (index % UI_KNOB_COLUMNS)
             for control_id, label in included:
-                x, y = ui_layout_position(control_id, index, owner.ui_layout)
+                if title == "Envelope":
+                    x, y = ui_bar_layout_position(control_id, index, owner.ui_layout)
+                else:
+                    x, y = ui_layout_position(control_id, index, owner.ui_layout)
                 controls.append({"id": control_id, "label": label, "group": title, "index": index, "x": x, "y": y})
                 index += 1
 
         add_group(
             "Envelope",
             [
-                (owner.amp_env_enabled_var.get() and owner.ds_knob_amp_env_var.get(), "amp_attack", "Attack"),
-                (owner.amp_env_enabled_var.get() and owner.ds_knob_amp_env_var.get(), "amp_decay", "Decay"),
-                (owner.amp_env_enabled_var.get() and owner.ds_knob_amp_env_var.get(), "amp_sustain", "Sustain"),
-                (owner.amp_env_enabled_var.get() and owner.ds_knob_amp_env_var.get(), "amp_release", "Release"),
+                (owner.amp_env_enabled_var.get() and owner.ds_knob_amp_env_var.get(), "amp_attack", "A"),
+                (owner.amp_env_enabled_var.get() and owner.ds_knob_amp_env_var.get(), "amp_decay", "D"),
+                (owner.amp_env_enabled_var.get() and owner.ds_knob_amp_env_var.get(), "amp_sustain", "S"),
+                (owner.amp_env_enabled_var.get() and owner.ds_knob_amp_env_var.get(), "amp_release", "R"),
             ],
         )
         add_group(
@@ -274,15 +279,16 @@ class DecentSamplerUiPreview:
         tag = f"ui:{control_id}"
         canvas_x = x + PREVIEW_ORIGIN_X
         canvas_y = y + PREVIEW_ORIGIN_Y
+        control_width = UI_BAR_WIDTH
         bar_width = 18
         bar_height = 46
-        bar_left = canvas_x + (UI_KNOB_WIDTH - bar_width) // 2
+        bar_left = canvas_x + (control_width - bar_width) // 2
         bar_top = canvas_y + 26
         bar_bottom = bar_top + bar_height
         fill_top = bar_top + 10
         items = [
-            self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + UI_KNOB_WIDTH, canvas_y + UI_KNOB_WIDTH, outline="#d8ccd6", dash=(2, 2), tags=(tag, "ui-knob")),
-            self.canvas.create_text(canvas_x + UI_KNOB_WIDTH // 2, canvas_y + 10, text=label, fill="#330033", font=("TkDefaultFont", 10), tags=(tag, "ui-knob")),
+            self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + control_width, canvas_y + UI_KNOB_WIDTH, outline="#d8ccd6", dash=(2, 2), tags=(tag, "ui-knob")),
+            self.canvas.create_text(canvas_x + control_width // 2, canvas_y + 10, text=label, fill="#330033", font=("TkDefaultFont", 10), tags=(tag, "ui-knob")),
             self.canvas.create_rectangle(bar_left, bar_top, bar_left + bar_width, bar_bottom, outline="#330033", width=2, tags=(tag, "ui-knob")),
             self.canvas.create_rectangle(bar_left + 4, fill_top, bar_left + bar_width - 4, bar_bottom - 4, fill="#330033", outline="#330033", tags=(tag, "ui-knob")),
         ]
