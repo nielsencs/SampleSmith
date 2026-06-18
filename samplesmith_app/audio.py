@@ -147,7 +147,7 @@ def _load_audio_for_bridge(path: Path):
     return audio, sample_rate
 
 
-def _pitch_shift_audio(audio, semitones: int):
+def _pitch_shift_audio_basic(audio, semitones: int):
     import numpy as np
 
     factor = 2 ** (semitones / 12.0)
@@ -159,6 +159,49 @@ def _pitch_shift_audio(audio, semitones: int):
     source_index = np.arange(audio.shape[0], dtype=np.float64)
     shifted_channels = [np.interp(source_positions, source_index, audio[:, channel]) for channel in range(audio.shape[1])]
     return np.stack(shifted_channels, axis=1).astype("float32")
+
+
+def _match_frame_count(audio, frame_count: int):
+    import numpy as np
+
+    if audio.shape[0] == frame_count:
+        return audio.astype("float32")
+    if audio.shape[0] > frame_count:
+        return audio[:frame_count, :].astype("float32")
+    padded = np.zeros((frame_count, audio.shape[1]), dtype="float32")
+    padded[: audio.shape[0], :] = audio
+    return padded
+
+
+def _pitch_shift_audio(audio, sample_rate: int, semitones: int):
+    """Pitch-shift audio while preserving duration when the DSP stack is present.
+
+    The old interpolation fallback is intentionally kept for machines without
+    librosa, but bridge generation prefers librosa's phase-vocoder based pitch
+    shift. That keeps high generated notes from becoming very short, which makes
+    loop imperfections much less likely to turn into audible low ghost notes.
+    """
+    import numpy as np
+
+    frame_count = audio.shape[0]
+    if semitones == 0:
+        return audio.astype("float32")
+    try:
+        import librosa  # type: ignore
+
+        channels = []
+        for channel in range(audio.shape[1]):
+            shifted = librosa.effects.pitch_shift(
+                audio[:, channel].astype(np.float32),
+                sr=sample_rate,
+                n_steps=semitones,
+                res_type="soxr_hq",
+            )
+            channels.append(shifted.astype("float32"))
+        shifted_audio = np.stack(channels, axis=1)
+        return _match_frame_count(shifted_audio, frame_count)
+    except Exception:
+        return _pitch_shift_audio_basic(audio, semitones)
 
 
 def _match_channels(audio, channels: int):
@@ -213,8 +256,8 @@ def render_bridge_wav(
     if not (low_root_note < target_note < high_root_note):
         raise RuntimeError("Bridge target note must sit between the two source root notes.")
 
-    low_shifted = _pitch_shift_audio(low_audio, target_note - low_root_note)
-    high_shifted = _pitch_shift_audio(high_audio, target_note - high_root_note)
+    low_shifted = _pitch_shift_audio(low_audio, low_rate, target_note - low_root_note)
+    high_shifted = _pitch_shift_audio(high_audio, high_rate, target_note - high_root_note)
 
     channels = max(low_shifted.shape[1], high_shifted.shape[1])
     low_shifted = _match_channels(low_shifted, channels)
@@ -257,7 +300,7 @@ def render_retuned_bridge_wav(
         raise RuntimeError("Bridge WAV generation needs soundfile and numpy installed.") from exc
 
     audio, sample_rate = _load_audio_for_bridge(source_path)
-    retuned = _pitch_shift_audio(audio, target_note - source_root_note)
+    retuned = _pitch_shift_audio(audio, sample_rate, target_note - source_root_note)
     peak = float(np.max(np.abs(retuned))) if retuned.size else 0.0
     if peak > 0.98:
         retuned *= 0.98 / peak

@@ -41,15 +41,7 @@ On the machine doing the recording:
 python -m pip install -r requirements.txt
 ```
 
-That installs `sounddevice`, `soundfile`, and `numpy`. Bridge WAV generation needs `soundfile` and `numpy`.
-
-Optional, for better pitch detection:
-
-```bash
-python -m pip install librosa
-```
-
-Without `librosa`, SampleSmith uses a simpler built-in autocorrelation pitch detector. That may be fine for clear monophonic sounds, but it will be less reliable for breathy/noisy notes.
+That installs `sounddevice`, `soundfile`, `numpy`, and `librosa`. Bridge generation uses `librosa` when available for duration-preserving pitch shifts, so high generated notes do not become artificially short and expose loop ghosts. Pitch detection also uses `librosa` when available, with a simpler built-in fallback for constrained machines.
 
 ## Run SampleSmith
 
