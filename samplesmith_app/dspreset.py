@@ -443,7 +443,6 @@ def generate_dspreset(
                     "value": value,
                     "defaultValue": default_value,
                     **OFFICIAL_KNOB_STYLE,
-                    "style": "rotary",
                 },
             )
             binding_attrs = {
@@ -536,7 +535,7 @@ def generate_dspreset(
                 "label",
                 {
                     "x": str(group_x),
-                    "y": str(max(0, group_y - UI_GROUP_TITLE_HEIGHT - UI_GROUP_TITLE_GAP)),
+                    "y": str(max(0, group_y - UI_GROUP_TITLE_HEIGHT // 2)),
                     "width": str(max(40, group_width)),
                     "height": "18",
                     "text": title,

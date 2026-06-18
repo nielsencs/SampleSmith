@@ -36,8 +36,8 @@ from .dspreset import (
 BARE_LAYOUT_IMAGE = Path(__file__).resolve().parent / "assets" / "decent_sampler_bare_layout.png"
 PREVIEW_ORIGIN_X = 0
 PREVIEW_ORIGIN_Y = 51
-PREVIEW_KNOB_ARC_START = -50
-PREVIEW_KNOB_ARC_EXTENT = 260
+PREVIEW_KNOB_ARC_START = 230
+PREVIEW_KNOB_ARC_EXTENT = -260
 PREVIEW_KNOB_ARC_WIDTH = 6
 PREVIEW_KNOB_ARC_INSET_X = 9
 PREVIEW_KNOB_ARC_INSET_Y = 24
@@ -275,7 +275,7 @@ class DecentSamplerUiPreview:
             x2 = min(DECENT_SAMPLER_UI_WIDTH, right + UI_GROUP_PADDING)
             y2 = min(DECENT_SAMPLER_UI_HEIGHT, bottom + UI_GROUP_PADDING)
             rectangle = self.canvas.create_rectangle(x1, y1, x2, y2, fill="#eee6dc", outline="#8a6a82", stipple="gray25", tags=(panel_tag, "ui-panel"))
-            title_y = max(0, int(round(y1 - PREVIEW_ORIGIN_Y)) - UI_GROUP_TITLE_HEIGHT - UI_GROUP_TITLE_GAP)
+            title_y = max(0, int(round(y1 - PREVIEW_ORIGIN_Y)) - UI_GROUP_TITLE_HEIGHT // 2)
             label = self.canvas.create_text(
                 x1 + (x2 - x1) // 2,
                 PREVIEW_ORIGIN_Y + title_y + UI_GROUP_TITLE_HEIGHT // 2,
@@ -375,7 +375,8 @@ class DecentSamplerUiPreview:
         knob_top = canvas_y + PREVIEW_KNOB_ARC_INSET_Y
         knob_right = knob_left + PREVIEW_KNOB_ARC_SIZE
         knob_bottom = knob_top + PREVIEW_KNOB_ARC_SIZE
-        value_extent = max(6, int(round(PREVIEW_KNOB_ARC_EXTENT * self._control_fraction(control_id))))
+        arc_direction = 1 if PREVIEW_KNOB_ARC_EXTENT >= 0 else -1
+        value_extent = arc_direction * max(6, int(round(abs(PREVIEW_KNOB_ARC_EXTENT) * self._control_fraction(control_id))))
         items = [
             self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + UI_KNOB_WIDTH, canvas_y + UI_KNOB_WIDTH, outline="#d8ccd6", dash=(2, 2), tags=(tag, "ui-knob")),
             self.canvas.create_text(canvas_x + UI_KNOB_WIDTH // 2, canvas_y + 10, text=label, fill="#330033", font=("TkDefaultFont", 10), tags=(tag, "ui-knob")),
