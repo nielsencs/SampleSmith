@@ -17,14 +17,14 @@ The goal is practical DecentSampler instrument building for ordinary musicians a
 ### 1. Sharpen recording and file handling
 
 - continue reducing unnecessary preamble/friction for straightforward single-sample recording
-- refine keep / waveform trim / record-another-take / reset-from-backup review after recording a note or pad into a right-hand selected-sample panel
+- refine keep / waveform trim / record-another-take / reset-from-backup review after recording a note into a right-hand selected-sample panel
 - make it easier to record several takes for the same note
 - review samples for clipping, very low level, silence, and too-short recordings
 - show basic audio-file facts in the GUI: duration, sample rate, channels, peak level, RMS-ish loudness
 - make normalise/trim behaviour waveform-based, visible, and less surprising
 - keep improving original-recording preservation now that edited WAVs get `.samplesmith-backups/` reset copies
 - support FLAC as well as WAV where DecentSampler/project workflow allows it
-- improve stray-file review so imported audio files can be assigned to notes, pads, velocity layers, or round-robin takes
+- improve stray-file review so imported audio files can be assigned to notes, velocity layers, or round-robin takes
 - support replacing one recorded audio file without disturbing the rest of the instrument
 
 ### 2. Round-robin takes
@@ -33,7 +33,7 @@ Real sampled instruments often use multiple samples for the same note so repeate
 
 Wishlist:
 
-- allow each note/pad to hold multiple WAV takes
+- allow each note to hold multiple WAV takes
 - export multiple `<sample>` entries for the same key/root/range with DecentSampler round-robin behaviour
 - show takes clearly in the mapping table
 - support add/remove/reorder takes
@@ -154,7 +154,7 @@ Wishlist:
 
 ## Open questions
 
-- Should round-robin be attached to pitched notes, pads, or both from the first implementation?
+- Should round-robin be attached to notes from the first implementation?
 - Should velocity layers come before or after round-robin?
 - Should original WAVs and processed WAVs both be kept, or is that too much clutter for early versions?
 - How much waveform editing should SampleSmith own, versus expecting Audacity/Reaper for heavy editing?

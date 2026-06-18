@@ -8,22 +8,7 @@ The aim is practical playable-instrument usefulness rather than laboratory purit
 
 ## What it does
 
-SampleSmith currently supports two main workflows:
-
-1. **Note/keyboard instruments** — for voice, whistles, single-note instruments, growls, drones, one-shots on keys, etc.
-   - detect or manually enter the lowest and highest notes
-   - build a note list across the range
-   - play reference notes
-   - record matching samples
-   - trim and normalise the WAVs
-   - map the recorded samples across the keyboard
-   - optionally bridge gaps with clearly marked generated WAVs from blended or retuned source recordings
-   - generate a DecentSampler `.dspreset`
-
-2. **Unpitched / pad instruments** — for hits, breaths, mouth noises, objects, scrapes, claps, one-shots, etc.
-   - record labelled sounds
-   - map each sound to consecutive MIDI notes/pads
-   - generate a DecentSampler `.dspreset`
+SampleSmith's main workflow is **Notes**: build a keyboard note list, record or import sounds onto those notes, trim/normalise the WAVs, bridge gaps with generated samples when useful, edit mapping/loops, and generate a DecentSampler `.dspreset`. Pitched notes, drones, growls, one-shots, hits, breaths, scrapes, and odd noises all belong in the same note-based workflow.
 
 SampleSmith also saves a `.samplesmith.json` project file so an instrument can be reopened and extended later.
 
@@ -51,7 +36,7 @@ From this folder:
 python samplesmith.py
 ```
 
-Set the instrument name and output folder, choose **Notes** or **Unpitched / Pads**, then record. By default, single recordings start immediately; enable **Confirm before recording** if you want the old ready-check prompt. Note recordings can also play a reference tone first, controlled by **Play reference before pitched recording**. The right-hand **Selected sample** panel is the working area for the selected note or pad: play the reference tone, record the selected sample, see the waveform, choose sample start/end, play the full take or selected region, keep the selection, record another take, or reset an edited WAV from its original backup. Click an existing note or pad row to load its WAV into the same panel for playback, waveform trimming, re-recording, or reset. Before SampleSmith overwrites an existing WAV from this panel, it keeps the original under `.samplesmith-backups/`. Starting another recording silently replaces the pending take; backup/reset covers existing WAV mistakes. Each kept recording writes/updates both the `.dspreset` and the `.samplesmith.json` project file automatically; the generate/save buttons are there for manual regeneration.
+Set the instrument name and output folder, then work in **Notes**. By default, single recordings start immediately; enable **Confirm before recording** if you want the old ready-check prompt. Recordings can also play a reference tone first, controlled by **Play reference before pitched recording**. The right-hand **Selected sample** panel is the working area for the selected note: play the reference tone, record the selected sample, see the waveform, choose sample start/end, play the full take or selected region, keep the selection, record another take, or reset an edited WAV from its original backup. Click an existing note row to load its WAV into the same panel for playback, waveform trimming, re-recording, or reset. Before SampleSmith overwrites an existing WAV from this panel, it keeps the original under `.samplesmith-backups/`. Starting another recording silently replaces the pending take; backup/reset covers existing WAV mistakes. Each kept recording writes/updates both the `.dspreset` and the `.samplesmith.json` project file automatically; the generate/save buttons are there for manual regeneration.
 
 Use **New project** to clear the current app state and start a blank unsaved project; it does not delete saved projects or WAV files. If the current project has unsaved changes, SampleSmith asks whether to save, discard, or cancel first. New projects also avoid reusing an existing default project folder blindly. Use **Open project** to return to an existing SampleSmith project; it has the same save/discard/cancel guard.
 
@@ -138,7 +123,7 @@ SampleSmith is useful now, but still growing. The broader wishlist lives in [ROA
 Likely next steps:
 
 - sharpen WAV recording/review handling, including waveform selection, original backups/reset, round-robin takes, and quality checks
-- add round-robin takes so one note or pad can have multiple natural-sounding sample variants
+- add round-robin takes so one note can have multiple natural-sounding sample variants
 - keep improving waveform loop visualisation beyond the first-pass loop/crossfade display
 - add more precise waveform zoom, marker dragging, nudging, and auditioning
 - add velocity layers
@@ -150,4 +135,4 @@ Likely next steps:
 
 `samplesmith_app/assets/official-boilerplate.dspreset` stores a cleaned-name copy of DecentSampler’s official boilerplate template as a reference for generated UI/binding conventions.
 
-Pitch detection works best for clear single notes. If the sound is noisy, percussive, growly, breathy, or chord-like, use pad mode.
+Pitch detection works best for clear single notes. If the sound is noisy, percussive, growly, breathy, or chord-like, enter the note manually.

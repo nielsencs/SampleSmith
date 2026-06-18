@@ -19,7 +19,6 @@ from .dspreset import export_dsbundle, generate_dspreset
 from .looping import read_wav_smpl_loop_points
 from .ui_preview import DecentSamplerUiPreview, normalise_ui_layout
 from .models import (
-    DEFAULT_PAD_START_NOTE,
     DEFAULT_SAMPLE_RATE,
     SampleInfo,
     build_key_ranges,
@@ -46,7 +45,6 @@ class SampleSmithApp(tk.Tk):
         self.high_note: int | None = None
         self.note_rows: dict[int, str] = {}
         self.export_samples_by_iid: dict[str, SampleInfo] = {}
-        self.pad_note = DEFAULT_PAD_START_NOTE
         self._output_update_after_id: str | None = None
         self.pending_recording_review: dict[str, object] | None = None
         self._updating_review_trim_fields = False
@@ -212,13 +210,10 @@ class SampleSmithApp(tk.Tk):
         tabs = ttk.Notebook(main_area)
         tabs.pack(side="left", fill="both", expand=True)
         self.pitched_tab = ttk.Frame(tabs, padding=8)
-        self.pads_tab = ttk.Frame(tabs, padding=8)
         self.decent_sampler_tab = ttk.Frame(tabs, padding=8)
         tabs.add(self.pitched_tab, text="Notes")
-        tabs.add(self.pads_tab, text="Unpitched / Pads")
         tabs.add(self.decent_sampler_tab, text="DecentSampler")
         self._build_pitched_tab()
-        self._build_pads_tab()
         self._build_decent_sampler_tab()
         self._bind_output_parameter_traces()
         self._build_recording_review_panel(main_area)
@@ -269,31 +264,10 @@ class SampleSmithApp(tk.Tk):
         buttons.pack(fill="x")
         ttk.Button(buttons, text="Record all missing", command=self._record_all_missing).pack(side="left")
 
-    def _build_pads_tab(self) -> None:
-        controls = ttk.Frame(self.pads_tab)
-        controls.pack(fill="x")
-        ttk.Label(controls, text="Pad label").pack(side="left")
-        self.pad_label_var = tk.StringVar()
-        ttk.Entry(controls, textvariable=self.pad_label_var, width=28).pack(side="left", padx=4)
-        ttk.Label(controls, text="Start note").pack(side="left", padx=(12, 2))
-        self.pad_start_var = tk.StringVar(value=midi_to_name(DEFAULT_PAD_START_NOTE))
-        ttk.Entry(controls, textvariable=self.pad_start_var, width=8).pack(side="left")
-        ttk.Button(controls, text="Record pad", command=self._record_pad).pack(side="left", padx=8)
-
-        self.pad_tree = ttk.Treeview(self.pads_tab, columns=("note", "label", "file"), show="headings", height=14)
-        self.pad_tree.heading("note", text="Maps to pad")
-        self.pad_tree.heading("label", text="Label")
-        self.pad_tree.heading("file", text="Sample file")
-        self.pad_tree.column("note", width=90, stretch=False)
-        self.pad_tree.column("label", width=160, stretch=False)
-        self.pad_tree.column("file", width=520)
-        self.pad_tree.pack(fill="both", expand=True, pady=8)
-        self.pad_tree.bind("<<TreeviewSelect>>", self._on_pad_selection_changed)
-
     def _build_recording_review_panel(self, parent) -> None:
         review = ttk.LabelFrame(parent, text="Selected sample")
         review.pack(side="right", fill="y", padx=(8, 0))
-        self.selected_sample_title_var = tk.StringVar(value="Select a pitched note or pad")
+        self.selected_sample_title_var = tk.StringVar(value="Select a note")
         ttk.Label(review, textvariable=self.selected_sample_title_var, wraplength=260, justify="left", font=("TkDefaultFont", 10, "bold")).pack(fill="x", padx=8, pady=(8, 4))
         action_row = ttk.Frame(review)
         action_row.pack(fill="x", padx=8, pady=(0, 6))
@@ -941,8 +915,6 @@ class SampleSmithApp(tk.Tk):
             "low_note": self.low_note,
             "high_note": self.high_note,
             "step": self.step_var.get(),
-            "pad_start": self.pad_start_var.get(),
-            "next_pad_note": self.pad_note,
             "samples": [sample.to_dict() for sample in self.samples],
             "ui_layout": self.ui_layout,
         }
@@ -1143,7 +1115,7 @@ class SampleSmithApp(tk.Tk):
             note_text = simpledialog.askstring(
                 "SampleSmith",
                 "Enter its root note for pitched mapping (e.g. C4 or 72).\n"
-                "Leave blank to import as the next unpitched pad.",
+                "Leave blank to skip this file.",
                 initialvalue=self._guess_note_from_audio_filename(wav),
             )
             if note_text is None:
@@ -1163,12 +1135,7 @@ class SampleSmithApp(tk.Tk):
                 imported += 1
                 self._log(f"Imported stray pitched audio: {wav.name} as {midi_to_name(root_note)}")
             else:
-                midi_note = self.pad_note
-                self.pad_note += 1
-                info = SampleInfo(path=wav, root_note=midi_note, lo_note=midi_note, hi_note=midi_note, label=wav.stem, mode="pad")
-                self._upsert_sample(info)
-                imported += 1
-                self._log(f"Imported stray pad audio: {wav.name} as {midi_to_name(midi_note)}")
+                self._log(f"Skipped stray audio without a root note: {wav.name}")
         if imported:
             self._rebuild_trees_from_project()
             preset = self._write_preset()
@@ -1205,7 +1172,7 @@ class SampleSmithApp(tk.Tk):
         migrated = dict(data)
         migrated["version"] = 2
         migrated["note_convention"] = "decent_sampler_screen_keys"
-        for key in ("low_note", "high_note", "next_pad_note"):
+        for key in ("low_note", "high_note"):
             if migrated.get(key) is not None:
                 migrated[key] = self._migrate_old_note_to_ds_key(migrated[key])
         migrated_samples = []
@@ -1347,8 +1314,6 @@ class SampleSmithApp(tk.Tk):
         self.low_entry_var.set(midi_to_name(self.low_note) if self.low_note is not None else "")
         self.high_entry_var.set(midi_to_name(self.high_note) if self.high_note is not None else "")
         self.step_var.set(int(data.get("step", 1)))
-        self.pad_start_var.set(str(data.get("pad_start", midi_to_name(DEFAULT_PAD_START_NOTE))))
-        self.pad_note = int(data.get("next_pad_note", DEFAULT_PAD_START_NOTE))
         self.samples = [SampleInfo.from_dict(item) for item in data.get("samples", [])]
         self._rebuild_trees_from_project()
 
@@ -1373,8 +1338,6 @@ class SampleSmithApp(tk.Tk):
     def _rebuild_trees_from_project(self) -> None:
         for item in self.note_tree.get_children():
             self.note_tree.delete(item)
-        for item in self.pad_tree.get_children():
-            self.pad_tree.delete(item)
         self.note_rows.clear()
         if self.low_note is not None and self.high_note is not None:
             notes = note_range(self.low_note, self.high_note, self.step_var.get())
@@ -1386,9 +1349,6 @@ class SampleSmithApp(tk.Tk):
                 action = self._bridge_action_text(note)
                 self.note_tree.insert("", "end", iid=str(note), values=(midi_to_name(note), mapping_text(lo, hi), recorded.path.name if recorded else "", action))
             self._refresh_pitched_mappings()
-        for sample in self.samples:
-            if sample.mode == "pad":
-                self.pad_tree.insert("", "end", values=(midi_to_name(sample.root_note), sample.label, sample.path.name))
         self._refresh_export_mapping()
 
     def _log(self, text: str) -> None:
@@ -1460,7 +1420,7 @@ class SampleSmithApp(tk.Tk):
             raw = audio.record(2.5)
             freq = audio.detect_pitch(raw)
             if freq is None:
-                raise RuntimeError("Could not detect a clear pitch. Try again, or use pad mode for noisy sounds.")
+                raise RuntimeError("Could not detect a clear pitch. Try again, or enter the note manually for noisy sounds.")
             midi = freq_to_midi(freq)
             name = midi_to_name(midi)
 
@@ -1523,7 +1483,7 @@ class SampleSmithApp(tk.Tk):
         selected = self.note_tree.selection()
         if not selected:
             self.selected_panel_kind = None
-            self.selected_sample_title_var.set("Select a pitched note or pad")
+            self.selected_sample_title_var.set("Select a note")
             self._set_panel_action_controls_enabled(False, False)
             return
         self.selected_panel_kind = "pitched"
@@ -1531,31 +1491,6 @@ class SampleSmithApp(tk.Tk):
         self.selected_sample_title_var.set(f"{midi_to_name(note)}")
         self._set_panel_action_controls_enabled(True, True)
         sample = self._sample_for_pitched_note(note)
-        if sample is not None:
-            self._schedule_sample_review_load(sample)
-        else:
-            self._clear_pending_recording_review()
-
-    def _sample_for_pad_tree_item(self, item_id: str) -> SampleInfo | None:
-        values = self.pad_tree.item(item_id, "values")
-        if len(values) < 3:
-            return None
-        file_name = str(values[2])
-        return next((sample for sample in self.samples if sample.mode == "pad" and sample.path.name == file_name), None)
-
-    def _on_pad_selection_changed(self, _event=None) -> None:
-        selected = self.pad_tree.selection()
-        if not selected:
-            self.selected_panel_kind = None
-            self.selected_sample_title_var.set("Select a pitched note or pad")
-            self._set_panel_action_controls_enabled(False, False)
-            return
-        self.selected_panel_kind = "pad"
-        values = self.pad_tree.item(selected[0], "values")
-        title = str(values[1]) if len(values) > 1 else "Selected pad"
-        self.selected_sample_title_var.set(title)
-        self._set_panel_action_controls_enabled(False, False)
-        sample = self._sample_for_pad_tree_item(selected[0])
         if sample is not None:
             self._schedule_sample_review_load(sample)
         else:
@@ -2047,49 +1982,6 @@ class SampleSmithApp(tk.Tk):
         if not on_reset:
             return
         on_reset()
-
-    def _record_pad(self) -> None:
-        label = self.pad_label_var.get().strip()
-        if not label:
-            messagebox.showwarning("SampleSmith", "Enter a pad label first.")
-            return
-        if not self.pad_tree.get_children():
-            try:
-                self.pad_note = int(self.pad_start_var.get())
-            except ValueError:
-                self.pad_note = name_to_midi(self.pad_start_var.get())
-        midi_note = self.pad_note
-        self.pad_note += 1
-        path = self._sample_path(f"pad_{midi_to_name(midi_note).replace('#', 'sharp')}_{slugify(label)}")
-        if not self._confirm_recording(f"Ready to record pad {midi_to_name(midi_note)}: {label}?", path):
-            self.pad_note -= 1
-            return
-
-        def work():
-            audio = self._audio()
-            raw = audio.record(self.record_seconds_var.get())
-            selection = raw
-            info = SampleInfo(path=path, root_note=midi_note, lo_note=midi_note, hi_note=midi_note, label=label, mode="pad")
-
-            def apply():
-                def keep(reviewed):
-                    self._write_reviewed_wav(path, reviewed)
-                    self._upsert_sample(info)
-                    self.pad_tree.insert("", "end", values=(midi_to_name(midi_note), label, path.name))
-                    self.pad_label_var.set("")
-                    preset = self._write_preset()
-                    self._log(f"Recorded pad {midi_to_name(midi_note)}: {path.name}")
-                    self._log(f"Updated DecentSampler patch: {preset.name}")
-                    self._auto_save_project()
-
-                def record_take():
-                    self.pad_note -= 1
-                    self._record_pad()
-
-                self._set_pending_recording_review(f"Review pad {label}", raw, selection, keep, record_take)
-            return apply
-
-        self._run_worker(f"Recording pad {label}...", work)
 
     def _upsert_sample(self, info: SampleInfo) -> None:
         self.samples = [sample for sample in self.samples if not (sample.mode == info.mode and sample.root_note == info.root_note)]
