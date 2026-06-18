@@ -98,7 +98,6 @@ def generate_dspreset(
     amp_sustain: float = 1.0,
     amp_release: float = 0.8,
     ds_knob_amp_env: bool = True,
-    root_note_offset: int = 0,
     delay_enabled: bool = False,
     delay_time: float = 0.7,
     delay_stereo_offset: float = 0.0,
@@ -568,8 +567,6 @@ def generate_dspreset(
         sample_loop_enabled = loop_enabled if sample.loop_enabled is None else sample.loop_enabled
         attrs = {
             "path": sample.path.relative_to(output_dir).as_posix(),
-            # rootNote is a MIDI note number. root_note_offset is ignored for
-            # compatibility with older project/export callers that may pass it.
             "rootNote": str(decent_sampler_root_note(sample.root_note)),
             "loNote": str(sample.lo_note),
             "hiNote": str(sample.hi_note),
@@ -584,7 +581,7 @@ def generate_dspreset(
                 if sample_loop_crossfade > 0:
                     attrs["loopCrossfade"] = f"{sample_loop_crossfade:.1f}"
                     attrs["loopCrossfadeMode"] = sample_loop_crossfade_mode
-        if sample.generated or sample.provisional:
+        if sample.generated:
             source_bits = ""
             if sample.source_roots:
                 source_bits = " from roots " + ", ".join(str(root) for root in sample.source_roots)

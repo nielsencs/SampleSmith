@@ -14,7 +14,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from .audio import AudioEngine, render_bridge_wav, render_retuned_bridge_wav, write_silent_wav
+from .audio import AudioEngine, render_bridge_wav, render_retuned_bridge_wav
 from .dspreset import export_dsbundle, generate_dspreset
 from .looping import read_wav_smpl_loop_points
 from .ui_preview import DecentSamplerUiPreview, normalise_ui_layout
@@ -200,7 +200,7 @@ class SampleSmithApp(tk.Tk):
         ttk.Button(project, text="New project", command=self._new_project).grid(row=2, column=2, sticky="w", pady=(6, 0), padx=4)
         ttk.Button(project, text="Open project", command=self._open_project_dialog).grid(row=2, column=3, sticky="w", pady=(6, 0), padx=4)
         ttk.Button(project, text="Save project", command=self._save_project_command).grid(row=2, column=4, sticky="w", pady=(6, 0), padx=4)
-        ttk.Button(project, text="Review stray audio", command=self._review_stray_wavs).grid(row=3, column=3, sticky="w", pady=(6, 0), padx=4)
+        ttk.Button(project, text="Review stray audio", command=self._review_stray_audio).grid(row=3, column=3, sticky="w", pady=(6, 0), padx=4)
         ttk.Checkbutton(project, text="Confirm before recording", variable=self.confirm_before_record_var).grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
         ttk.Checkbutton(project, text="Play reference before pitched recording", variable=self.play_reference_before_record_var).grid(row=3, column=2, sticky="w", pady=(6, 0), padx=4)
         project.columnconfigure(3, weight=1)
@@ -754,9 +754,6 @@ class SampleSmithApp(tk.Tk):
     def _backup_path_for_sample(self, path: Path) -> Path:
         return path.parent / ".samplesmith-backups" / f"{path.stem}.original{path.suffix}"
 
-    def _legacy_backup_path_for_sample(self, path: Path) -> Path:
-        return path.parent / ".samplesmith-backups" / f"{path.name}.original.wav"
-
     def _ensure_sample_backup(self, path: Path) -> Path | None:
         if not path.exists():
             return None
@@ -770,16 +767,13 @@ class SampleSmithApp(tk.Tk):
     def _restore_sample_backup(self, path: Path) -> bool:
         backup = self._backup_path_for_sample(path)
         if not backup.exists():
-            legacy_backup = self._legacy_backup_path_for_sample(path)
-            backup = legacy_backup if legacy_backup.exists() else backup
-        if not backup.exists():
             messagebox.showinfo("SampleSmith", "No original backup exists for this audio file yet.")
             return False
         shutil.copy2(backup, path)
         self._log(f"Restored original audio: {path.name}")
         return True
 
-    def _write_reviewed_wav(self, path: Path, audio, sample_rate: int | None = None) -> None:
+    def _write_reviewed_audio(self, path: Path, audio, sample_rate: int | None = None) -> None:
         self._ensure_sample_backup(path)
         self._audio().write_audio(path, audio, sample_rate=sample_rate)
 
@@ -989,7 +983,7 @@ class SampleSmithApp(tk.Tk):
         if self.project_path is not None and self.project_path.exists():
             try:
                 saved = json.loads(self.project_path.read_text(encoding="utf-8"))
-                return current != self._migrate_project_note_convention(saved)
+                return current != saved
             except Exception:
                 return True
         blank = dict(self.blank_project_data)
@@ -1072,12 +1066,12 @@ class SampleSmithApp(tk.Tk):
                 return str(note_number)
         return ""
 
-    def _stray_wav_candidates(self) -> list[Path]:
+    def _stray_audio_candidates(self) -> list[Path]:
         roots = [self._instrument_dir(), self._instrument_dir() / "Samples"]
         if self.project_path is not None:
             roots.append(self.project_path.parent)
         seen_roots: set[Path] = set()
-        seen_wavs: set[Path] = set()
+        seen_audio: set[Path] = set()
         known = {sample.path.resolve() for sample in self.samples if sample.path.exists()}
         strays: list[Path] = []
         for root in roots:
@@ -1090,15 +1084,15 @@ class SampleSmithApp(tk.Tk):
             seen_roots.add(resolved_root)
             audio_files = sorted(path for path in root.iterdir() if path.is_file() and path.suffix.lower() in {".wav", ".flac"})
             for audio_file in audio_files:
-                resolved_wav = audio_file.resolve()
-                if resolved_wav in known or resolved_wav in seen_wavs:
+                resolved_audio = audio_file.resolve()
+                if resolved_audio in known or resolved_audio in seen_audio:
                     continue
-                seen_wavs.add(resolved_wav)
+                seen_audio.add(resolved_audio)
                 strays.append(audio_file)
         return strays
 
-    def _review_stray_wavs(self) -> None:
-        strays = self._stray_wav_candidates()
+    def _review_stray_audio(self) -> None:
+        strays = self._stray_audio_candidates()
         if not strays:
             self._log("No stray audio files found in this instrument/project folder.")
             messagebox.showinfo("SampleSmith", "No stray audio files found in this instrument/project folder.")
@@ -1114,15 +1108,15 @@ class SampleSmithApp(tk.Tk):
             self._log(f"Stray audio review skipped ({len(strays)} found).")
             return
         imported = 0
-        for wav in strays:
-            rel = str(wav.relative_to(self._instrument_dir())) if wav.is_relative_to(self._instrument_dir()) else str(wav)
+        for audio_path in strays:
+            rel = str(audio_path.relative_to(self._instrument_dir())) if audio_path.is_relative_to(self._instrument_dir()) else str(audio_path)
             if not messagebox.askyesno("SampleSmith", f"Include this audio file in the project?\n\n{rel}"):
                 continue
             note_text = simpledialog.askstring(
                 "SampleSmith",
                 "Enter its root note for pitched mapping (e.g. C4 or 72).\n"
                 "Leave blank to skip this file.",
-                initialvalue=self._guess_note_from_audio_filename(wav),
+                initialvalue=self._guess_note_from_audio_filename(audio_path),
             )
             if note_text is None:
                 continue
@@ -1134,14 +1128,14 @@ class SampleSmithApp(tk.Tk):
                     except ValueError:
                         root_note = name_to_midi(note_text)
                 except ValueError as exc:
-                    messagebox.showwarning("SampleSmith", f"Skipping {wav.name}: {exc}")
+                    messagebox.showwarning("SampleSmith", f"Skipping {audio_path.name}: {exc}")
                     continue
-                info = SampleInfo(path=wav, root_note=root_note, lo_note=root_note, hi_note=root_note, label=wav.stem, mode="pitched")
+                info = SampleInfo(path=audio_path, root_note=root_note, lo_note=root_note, hi_note=root_note, label=audio_path.stem, mode="pitched")
                 self._upsert_sample(info)
                 imported += 1
-                self._log(f"Imported stray pitched audio: {wav.name} as {midi_to_name(root_note)}")
+                self._log(f"Imported stray pitched audio: {audio_path.name} as {midi_to_name(root_note)}")
             else:
-                self._log(f"Skipped stray audio without a root note: {wav.name}")
+                self._log(f"Skipped stray audio without a root note: {audio_path.name}")
         if imported:
             self._rebuild_trees_from_project()
             preset = self._write_preset()
@@ -1165,39 +1159,7 @@ class SampleSmithApp(tk.Tk):
         if chosen and self._confirm_replace_current_project("opening another project"):
             self._open_project(Path(chosen))
 
-    @staticmethod
-    def _migrate_old_note_to_ds_key(value: object, *, preserve_full_range_edge: bool = False) -> int:
-        note = int(value)
-        if preserve_full_range_edge and note in {0, 127}:
-            return note
-        return max(0, min(127, note + 12))
-
-    def _migrate_project_note_convention(self, data: dict[str, object]) -> dict[str, object]:
-        if data.get("note_convention") == "decent_sampler_screen_keys":
-            return data
-        migrated = dict(data)
-        migrated["version"] = 2
-        migrated["note_convention"] = "decent_sampler_screen_keys"
-        for key in ("low_note", "high_note"):
-            if migrated.get(key) is not None:
-                migrated[key] = self._migrate_old_note_to_ds_key(migrated[key])
-        migrated_samples = []
-        for item in migrated.get("samples", []):
-            sample = dict(item)
-            for key in ("root_note",):
-                if sample.get(key) is not None:
-                    sample[key] = self._migrate_old_note_to_ds_key(sample[key])
-            for key in ("lo_note", "hi_note"):
-                if sample.get(key) is not None:
-                    sample[key] = self._migrate_old_note_to_ds_key(sample[key], preserve_full_range_edge=True)
-            if sample.get("source_roots"):
-                sample["source_roots"] = [self._migrate_old_note_to_ds_key(note) for note in sample["source_roots"]]
-            migrated_samples.append(sample)
-        migrated["samples"] = migrated_samples
-        return migrated
-
     def _load_project_data(self, data: dict[str, object], project_path: Path | None) -> None:
-        data = self._migrate_project_note_convention(data)
         self.project_path = project_path
         self.name_var.set(str(data.get("name", "NewInstrument")))
         self.output_var.set(str(data.get("output", str(Path.cwd() / "samplesmith-projects"))))
@@ -1330,14 +1292,14 @@ class SampleSmithApp(tk.Tk):
         self._remember_last_project(path)
         self._log(f"Opened project: {path}")
         if prompt_for_strays:
-            self.after_idle(self._prompt_for_stray_wavs_if_any)
+            self.after_idle(self._prompt_for_stray_audio_if_any)
 
-    def _prompt_for_stray_wavs_if_any(self) -> None:
-        strays = self._stray_wav_candidates()
+    def _prompt_for_stray_audio_if_any(self) -> None:
+        strays = self._stray_audio_candidates()
         if not strays:
             return
         if messagebox.askyesno("SampleSmith", f"Found {len(strays)} stray audio file(s) in this project/instrument folder. Review them now?"):
-            self._review_stray_wavs()
+            self._review_stray_audio()
         else:
             self._log(f"Stray audio files found but not imported: {len(strays)}")
 
@@ -1669,7 +1631,7 @@ class SampleSmithApp(tk.Tk):
 
             def apply():
                 def keep(reviewed):
-                    self._write_reviewed_wav(path, reviewed)
+                    self._write_reviewed_audio(path, reviewed)
                     self._upsert_sample(info)
                     self.note_rows[note] = str(path)
                     self._refresh_pitched_mappings()
@@ -1725,7 +1687,7 @@ class SampleSmithApp(tk.Tk):
             return
 
         def keep(reviewed):
-            self._write_reviewed_wav(sample.path, reviewed, sample_rate=sample_rate)
+            self._write_reviewed_audio(sample.path, reviewed, sample_rate=sample_rate)
             preset = self._write_preset()
             self._auto_save_project()
             self._log(f"Updated reviewed audio: {sample.path.name}")
@@ -1755,7 +1717,7 @@ class SampleSmithApp(tk.Tk):
 
             def apply():
                 def keep(reviewed):
-                    self._write_reviewed_wav(sample.path, reviewed, sample_rate=sample_rate)
+                    self._write_reviewed_audio(sample.path, reviewed, sample_rate=sample_rate)
                     preset = self._write_preset()
                     self._auto_save_project()
                     self._log(f"Updated reviewed audio: {sample.path.name}")
@@ -2002,7 +1964,7 @@ class SampleSmithApp(tk.Tk):
         saved_generated = {
             (sample.root_note, sample.path): sample
             for sample in self.samples
-            if sample.mode == "pitched" and (sample.generated or sample.provisional)
+            if sample.mode == "pitched" and sample.generated
         }
         if self.note_tree.get_children():
             target_notes = [int(item) for item in self.note_tree.get_children()]
@@ -2053,11 +2015,10 @@ class SampleSmithApp(tk.Tk):
             )
         return generated
 
-    def _spread_recorded_pitched_samples(self) -> list[SampleInfo]:
+    def _exportable_note_samples(self) -> list[SampleInfo]:
         pitched = self._recorded_pitched_samples() + self._generated_bridge_samples()
-        pads = [sample for sample in self.samples if sample.mode == "pad"]
         if not pitched:
-            return sorted(pads, key=lambda sample: (sample.mode, sample.root_note, sample.path.name))
+            return []
         ranges = dict((root, (lo, hi)) for root, lo, hi in build_overlapping_key_ranges([sample.root_note for sample in pitched]))
         spread = [
             SampleInfo(
@@ -2073,19 +2034,18 @@ class SampleSmithApp(tk.Tk):
                 loop_crossfade=sample.loop_crossfade,
                 loop_crossfade_mode=sample.loop_crossfade_mode,
                 generated=sample.generated,
-                provisional=sample.provisional,
                 custom_mapping=sample.custom_mapping,
                 source_roots=sample.source_roots,
                 source_paths=sample.source_paths,
             )
             for sample in pitched
         ]
-        return sorted(spread + pads, key=lambda sample: (sample.mode, sample.root_note, sample.path.name))
+        return sorted(spread, key=lambda sample: (sample.mode, sample.root_note, sample.path.name))
 
     def _refresh_pitched_mappings(self) -> None:
-        exported = [sample for sample in self._spread_recorded_pitched_samples() if sample.mode == "pitched"]
+        exported = [sample for sample in self._exportable_note_samples() if sample.mode == "pitched"]
         exported_roots = {sample.root_note for sample in exported}
-        recorded_roots = {sample.root_note for sample in exported if not (sample.generated or sample.provisional)}
+        recorded_roots = {sample.root_note for sample in exported if not sample.generated}
         generated_roots = exported_roots - recorded_roots
         for item in list(self.note_tree.get_children()):
             note = int(item)
@@ -2095,7 +2055,7 @@ class SampleSmithApp(tk.Tk):
 
         for sample in exported:
             iid = str(sample.root_note)
-            is_generated = sample.generated or sample.provisional
+            is_generated = sample.generated
             file_name = f"[GENERATED] {sample.path.name}" if is_generated else sample.path.name
             values = (midi_to_name(sample.root_note), mapping_text(sample.lo_note, sample.hi_note), file_name, self._bridge_action_text(sample.root_note))
             if iid in self.note_tree.get_children():
@@ -2129,7 +2089,7 @@ class SampleSmithApp(tk.Tk):
         for item in self.export_tree.get_children():
             self.export_tree.delete(item)
         self.export_samples_by_iid.clear()
-        for index, sample in enumerate(self._spread_recorded_pitched_samples()):
+        for index, sample in enumerate(self._exportable_note_samples()):
             iid = f"export-{index}"
             self.export_samples_by_iid[iid] = sample
             self.export_tree.insert(
@@ -2137,10 +2097,10 @@ class SampleSmithApp(tk.Tk):
                 "end",
                 iid=iid,
                 values=(
-                    f"[GENERATED] {sample.path.name}" if sample.generated or sample.provisional else sample.path.name,
+                    f"[GENERATED] {sample.path.name}" if sample.generated else sample.path.name,
                     mapping_text(sample.lo_note, sample.hi_note),
-                    exported_root_text(sample.root_note, 0),
-                    "bridge" if sample.generated or sample.provisional else sample.mode,
+                    exported_root_text(sample.root_note),
+                    "bridge" if sample.generated else sample.mode,
                     self._sample_loop_text(sample),
                 ),
             )
@@ -2149,7 +2109,7 @@ class SampleSmithApp(tk.Tk):
         for sample in self.samples:
             if sample.mode == exported.mode and sample.root_note == exported.root_note and sample.path == exported.path:
                 return sample
-        if exported.generated or exported.provisional:
+        if exported.generated:
             self.samples.append(exported)
             self.samples.sort(key=lambda sample: (sample.mode, sample.root_note, sample.path.name))
             return exported
@@ -2346,7 +2306,7 @@ class SampleSmithApp(tk.Tk):
         )
 
     def _write_preset(self) -> Path:
-        samples = self._spread_recorded_pitched_samples()
+        samples = self._exportable_note_samples()
         preset = generate_dspreset(
             self.name_var.get(),
             self._instrument_dir(),
@@ -2379,7 +2339,7 @@ class SampleSmithApp(tk.Tk):
         if not self.samples:
             messagebox.showwarning("SampleSmith", "No recorded samples yet.")
             return
-        samples = self._spread_recorded_pitched_samples()
+        samples = self._exportable_note_samples()
         bundle = export_dsbundle(
             self.name_var.get(),
             self._instrument_dir(),

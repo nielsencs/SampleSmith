@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import wave
 from pathlib import Path
 
-from .models import DEFAULT_SAMPLE_RATE, midi_to_freq
+from .models import midi_to_freq
 
 class AudioEngine:
     def __init__(self, sample_rate: int, trim_threshold_db: float, pre_roll_ms: float, post_roll_ms: float, normalise: bool) -> None:
@@ -124,15 +123,6 @@ class AudioEngine:
             return None
         lag = int(np.argmax(corr[min_lag:max_lag])) + min_lag
         return self.sample_rate / lag if lag > 0 else None
-
-
-def write_silent_wav(path: Path, sample_rate: int = DEFAULT_SAMPLE_RATE) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with wave.open(str(path), "wb") as handle:
-        handle.setnchannels(1)
-        handle.setsampwidth(2)
-        handle.setframerate(sample_rate)
-        handle.writeframes(b"\x00\x00" * int(sample_rate * 0.1))
 
 
 def _load_audio_for_bridge(path: Path):
