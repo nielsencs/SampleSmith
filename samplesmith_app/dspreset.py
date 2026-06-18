@@ -454,6 +454,7 @@ def generate_dspreset(
                     "x": str(x_pos),
                     "y": str(y_pos),
                     "width": str(UI_KNOB_WIDTH),
+                    "height": str(UI_KNOB_WIDTH),
                     "label": label,
                     "parameterName": label,
                     "type": "float",
@@ -462,7 +463,7 @@ def generate_dspreset(
                     "value": value,
                     "defaultValue": default_value,
                     **OFFICIAL_KNOB_STYLE,
-                    "style": "rotary",
+                    "style": "linear_bar_vertical",
                 },
             )
             ET.SubElement(

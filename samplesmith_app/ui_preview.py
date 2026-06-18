@@ -213,9 +213,17 @@ class DecentSamplerUiPreview:
         controls = self.visible_controls()
         self._draw_group_panels(controls)
         for control in controls:
-            self._draw_knob(str(control["id"]), str(control["label"]), str(control["group"]), int(control["x"]), int(control["y"]))
+            control_id = str(control["id"])
+            label = str(control["label"])
+            group = str(control["group"])
+            x = int(control["x"])
+            y = int(control["y"])
+            if group == "Envelope":
+                self._draw_bar(control_id, label, x, y)
+            else:
+                self._draw_knob(control_id, label, group, x, y)
         if controls:
-            self.status_var.set(f"{len(controls)} visible DecentSampler knob(s). Drag knobs/groups, or double-click a group rectangle to tidy it.")
+            self.status_var.set(f"{len(controls)} visible DecentSampler control(s). Drag controls/groups, or double-click a group rectangle to tidy it.")
         else:
             self.status_var.set("No visible knobs yet. Enable effects and K boxes to add controls.")
 
@@ -261,6 +269,27 @@ class DecentSamplerUiPreview:
             self.canvas.tag_bind(panel_tag, "<B1-Motion>", self._drag_panel)
             self.canvas.tag_bind(panel_tag, "<ButtonRelease-1>", self._end_drag)
             self.canvas.tag_bind(panel_tag, "<Double-Button-1>", self._tidy_panel_from_event)
+
+    def _draw_bar(self, control_id: str, label: str, x: int, y: int) -> None:
+        tag = f"ui:{control_id}"
+        canvas_x = x + PREVIEW_ORIGIN_X
+        canvas_y = y + PREVIEW_ORIGIN_Y
+        bar_width = 18
+        bar_height = 46
+        bar_left = canvas_x + (UI_KNOB_WIDTH - bar_width) // 2
+        bar_top = canvas_y + 26
+        bar_bottom = bar_top + bar_height
+        fill_top = bar_top + 10
+        items = [
+            self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + UI_KNOB_WIDTH, canvas_y + UI_KNOB_WIDTH, outline="#d8ccd6", dash=(2, 2), tags=(tag, "ui-knob")),
+            self.canvas.create_text(canvas_x + UI_KNOB_WIDTH // 2, canvas_y + 10, text=label, fill="#330033", font=("TkDefaultFont", 10), tags=(tag, "ui-knob")),
+            self.canvas.create_rectangle(bar_left, bar_top, bar_left + bar_width, bar_bottom, outline="#330033", width=2, tags=(tag, "ui-knob")),
+            self.canvas.create_rectangle(bar_left + 4, fill_top, bar_left + bar_width - 4, bar_bottom - 4, fill="#330033", outline="#330033", tags=(tag, "ui-knob")),
+        ]
+        self.canvas_items[control_id] = items
+        self.canvas.tag_bind(tag, "<ButtonPress-1>", self._start_drag)
+        self.canvas.tag_bind(tag, "<B1-Motion>", self._drag_knob)
+        self.canvas.tag_bind(tag, "<ButtonRelease-1>", self._end_drag)
 
     def _draw_knob(self, control_id: str, label: str, group: str, x: int, y: int) -> None:
         tag = f"ui:{control_id}"
