@@ -46,6 +46,10 @@ OFFICIAL_KNOB_STYLE = {
     "trackForegroundColor": "CC000000",
     "trackBackgroundColor": "66999999",
 }
+UI_GROUP_TITLE_STYLE = {
+    "textColor": OFFICIAL_KNOB_STYLE["textColor"],
+    "textSize": OFFICIAL_KNOB_STYLE["textSize"],
+}
 
 
 def tone_control_value_for_frequency(frequency: float) -> float:
@@ -535,12 +539,11 @@ def generate_dspreset(
                 "label",
                 {
                     "x": str(group_x),
-                    "y": str(max(0, group_y - UI_GROUP_TITLE_HEIGHT // 2)),
+                    "y": str(group_y + 2),
                     "width": str(max(40, group_width)),
                     "height": "18",
                     "text": title,
-                    "textColor": "DD330033",
-                    "textSize": "14",
+                    **UI_GROUP_TITLE_STYLE,
                     "hAlign": "center",
                 },
             )

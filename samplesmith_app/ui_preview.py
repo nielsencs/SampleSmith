@@ -28,6 +28,7 @@ from .dspreset import (
     UI_KNOB_VISIBLE_OUTER_INSET_X,
     UI_KNOB_VISIBLE_OUTER_INSET_Y,
     UI_KNOB_VISIBLE_OUTER_WIDTH,
+    UI_GROUP_TITLE_STYLE,
     tone_control_value_for_frequency,
     ui_layout_position,
     ui_bar_layout_position,
@@ -275,13 +276,12 @@ class DecentSamplerUiPreview:
             x2 = min(DECENT_SAMPLER_UI_WIDTH, right + UI_GROUP_PADDING)
             y2 = min(DECENT_SAMPLER_UI_HEIGHT, bottom + UI_GROUP_PADDING)
             rectangle = self.canvas.create_rectangle(x1, y1, x2, y2, fill="#eee6dc", outline="#8a6a82", stipple="gray25", tags=(panel_tag, "ui-panel"))
-            title_y = max(0, int(round(y1 - PREVIEW_ORIGIN_Y)) - UI_GROUP_TITLE_HEIGHT // 2)
             label = self.canvas.create_text(
                 x1 + (x2 - x1) // 2,
-                PREVIEW_ORIGIN_Y + title_y + UI_GROUP_TITLE_HEIGHT // 2,
+                y1 + 2 + UI_GROUP_TITLE_HEIGHT // 2,
                 text=title,
                 fill="#330033",
-                font=("TkDefaultFont", 10),
+                font=("TkDefaultFont", max(8, int(int(UI_GROUP_TITLE_STYLE["textSize"]) * 0.625))),
                 tags=(panel_tag, "ui-panel"),
             )
             self.panel_items[title] = [rectangle, label]
