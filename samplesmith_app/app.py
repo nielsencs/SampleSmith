@@ -1041,12 +1041,47 @@ class SampleSmithApp(tk.Tk):
             messagebox.showerror("SampleSmith", f"Could not save project:\n\n{exc}")
             return None
 
+    @staticmethod
+    def _directory_is_empty(path: Path) -> bool:
+        return path.is_dir() and not any(path.iterdir())
+
     def _rename_project_dialog(self) -> None:
         current_name = self.name_var.get().strip() or "NewInstrument"
         new_name = simpledialog.askstring("SampleSmith", "New project/instrument name:", initialvalue=current_name)
         if new_name is None:
             return
         self._rename_project_to(new_name)
+
+    def _remap_project_paths(self, old_dir: Path, new_dir: Path) -> None:
+        for sample in self.samples:
+            try:
+                relative = sample.path.relative_to(old_dir)
+            except ValueError:
+                continue
+            sample.path = new_dir / relative
+            if sample.source_paths:
+                remapped = []
+                for source_path in sample.source_paths:
+                    try:
+                        remapped.append(new_dir / source_path.relative_to(old_dir))
+                    except ValueError:
+                        remapped.append(source_path)
+                sample.source_paths = remapped
+
+    def _move_project_folder(self, old_dir: Path, new_dir: Path) -> None:
+        if old_dir.resolve() == new_dir.resolve():
+            new_dir.mkdir(parents=True, exist_ok=True)
+            return
+        if new_dir.exists():
+            if self._directory_is_empty(new_dir):
+                new_dir.rmdir()
+            else:
+                raise FileExistsError(f"A project folder already exists for that name:\n\n{new_dir}")
+        if old_dir.exists():
+            new_dir.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(old_dir), str(new_dir))
+        else:
+            new_dir.mkdir(parents=True, exist_ok=True)
 
     def _rename_project_to(self, new_name: str) -> Path | None:
         new_name = new_name.strip()
@@ -1062,42 +1097,17 @@ class SampleSmithApp(tk.Tk):
         old_project_path = self.project_path
         output_root = Path(self.output_var.get()).expanduser()
         new_dir = output_root / slugify(new_name)
-        if old_dir.resolve() != new_dir.resolve() and new_dir.exists():
-            messagebox.showerror("SampleSmith", f"A project folder already exists for that name:\n\n{new_dir}")
-            return None
 
         try:
-            if old_dir.exists() and old_dir.resolve() != new_dir.resolve():
-                new_dir.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(old_dir), str(new_dir))
-                moved_from = old_dir
-                moved_to = new_dir
-            else:
-                moved_from = old_dir
-                moved_to = new_dir
-                new_dir.mkdir(parents=True, exist_ok=True)
-
+            self._move_project_folder(old_dir, new_dir)
             self.name_var.set(new_name)
-            for sample in self.samples:
-                try:
-                    relative = sample.path.relative_to(moved_from)
-                except ValueError:
-                    continue
-                sample.path = moved_to / relative
-                if sample.source_paths:
-                    remapped = []
-                    for source_path in sample.source_paths:
-                        try:
-                            remapped.append(moved_to / source_path.relative_to(moved_from))
-                        except ValueError:
-                            remapped.append(source_path)
-                    sample.source_paths = remapped
+            self._remap_project_paths(old_dir, new_dir)
             self.project_path = self._default_project_path()
             preset = self._write_preset()
             saved = self._save_project()
 
-            if old_project_path is not None and moved_from != moved_to:
-                stale_name = moved_to / old_project_path.name
+            if old_project_path is not None and old_dir.resolve() != new_dir.resolve():
+                stale_name = new_dir / old_project_path.name
                 if stale_name.exists() and stale_name != saved:
                     stale_name.unlink()
 
@@ -2384,7 +2394,27 @@ class SampleSmithApp(tk.Tk):
             ui_layout=self.ui_layout,
         )
 
+    def _sync_manual_project_name_change(self) -> None:
+        if self.project_path is None:
+            return
+        old_dir = self.project_path.parent
+        new_dir = self._instrument_dir()
+        if old_dir.resolve() == new_dir.resolve():
+            return
+        project_owned = [sample for sample in self.samples if sample.path.exists() and sample.path.is_relative_to(old_dir)]
+        if not project_owned:
+            return
+        self._move_project_folder(old_dir, new_dir)
+        self._remap_project_paths(old_dir, new_dir)
+        old_project_path = self.project_path
+        self.project_path = self._default_project_path()
+        stale_name = new_dir / old_project_path.name
+        if stale_name.exists() and stale_name != self.project_path:
+            stale_name.unlink()
+        self._log(f"Moved project folder to match instrument name: {new_dir.name}")
+
     def _write_preset(self) -> Path:
+        self._sync_manual_project_name_change()
         samples = self._exportable_note_samples()
         preset = generate_dspreset(
             self.name_var.get(),
@@ -2401,7 +2431,11 @@ class SampleSmithApp(tk.Tk):
         if not self.samples:
             self._auto_save_project()
             return
-        preset = self._write_preset()
+        try:
+            preset = self._write_preset()
+        except Exception as exc:
+            self._log(f"Could not update DecentSampler patch: {exc}")
+            return
         self._log(f"Updated DecentSampler patch: {preset.name}")
         self._auto_save_project()
 
