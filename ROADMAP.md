@@ -11,6 +11,7 @@ The goal is practical DecentSampler instrument building for ordinary musicians a
 - keep DecentSampler output readable and portable
 - help people make playable instruments from imperfect real-world recordings
 - stay focused on the graphical app rather than adding a separate command-line workflow
+- cooperate with DAWs/audio editors when useful, but never become a DAW itself
 
 ## Near-term priorities
 
@@ -101,11 +102,28 @@ Wishlist:
 
 ### Import-first workflow
 
+SampleSmith should support audio that was recorded or rendered elsewhere without becoming a DAW. The app's job is still instrument assembly: review, map, bridge, loop, check, and export.
+
+- add **Import audio folder…** for `.flac` / `.wav` files
 - import a folder of audio files and infer notes from filenames where possible
 - refine stray-audio note/root filename guessing and show confidence before accepting inferred mappings
 - support common filename patterns like `Instrument_C3_01.wav`, `C#4_rr2.wav`, `note60_vel90.wav`, or `root_72_take_2.flac`
-- offer a review screen before accepting inferred mappings
+- recognise take/round-robin hints like `_take2`, `_rr2`, `_soft`, `_loud`, or `_vel90` when those features exist
+- offer a review screen before accepting inferred mappings, with editable guessed note/root/status columns
 - allow drag/drop of audio files if Tkinter support is practical
+- show what will be copied/linked/ignored before committing the import
+- keep folder import as a normal Notes workflow, not a separate “DAW mode”
+
+### Naming convention helper
+
+Predictable names make import, debugging, and hand inspection easier, but SampleSmith should help rather than enforce.
+
+- prefer simple generated recording names like `Instrument_Note.flac`
+- use clear take names when takes exist, e.g. `Instrument_Note_take2.flac`
+- use clear generated names under `Samples/generated/`, e.g. `Instrument_Note_generated.flac`
+- offer a “suggest tidy names” or “rename imported files” review step before changing anything
+- warn when two files look like they describe the same note/take
+- document filename patterns that SampleSmith understands
 
 ### Better note and pitch handling
 
@@ -123,15 +141,53 @@ Wishlist:
 - consider a simple DecentSampler UI theme/layout choice
 - support more visible controls for sample start, loop, tone, envelope, and effects where bindings are verified
 - document which exported features need newer DecentSampler versions
-- add an export summary: samples, mappings, loops, effects, visible controls
 
-## Reaper / DAW workflow ideas
+### Export summary and XML confidence view
 
-- add a Reaper-friendly recording workflow note or helper
-- maybe generate a Reaper project/template for stepping through notes
+Before or after export, SampleSmith should give a reassuring plain-English summary rather than forcing users to read XML.
+
+- show counts: audio files, note rows, recorded samples, generated samples, covered notes, loops, visible DS controls
+- show mapping summary: lowest/highest key, root-note convention, overlaps, uncovered notes
+- show loop summary: custom loops, fallback/default loop settings, invalid or suspicious loops
+- show export paths for `.dspreset`, `.dsbundle`, `Samples/`, and copied IR files
+- provide a **View XML** button for debugging/confidence, but keep it read-only by default
+- optionally add “copy XML snippet” for reporting/export debugging later
+
+## Instrument checks and diagnostics
+
+Add a **Check instrument** button/panel that catches common DecentSampler and SampleSmith problems before export.
+
+Possible checks:
+
+- missing audio files
+- generated file referenced by the project but missing on disk
+- note has no own audio and is not covered by any mapped sample
+- surprising overlapping key ranges
+- root note outside its playable key range
+- impossible loop: end before start, loop outside file length, or crossfade longer than the loop
+- loop points on very short files or almost-silent regions
+- filename suggests one note but the project root note says another
+- suspicious audio: silence, clipping, extremely low level, very short duration, odd sample rate/channel count
+- export folder contains stray audio not in the project
+- duplicate-looking files or duplicate-looking note/take mappings
+
+Presentation idea:
+
+- ✅ OK items stay quiet unless expanded
+- ⚠️ warnings for things that may be intentional, such as a covered note with no own recording
+- ❌ errors for things likely to break export/playback, such as missing files
+- each warning should offer a relevant action where possible: select note, open loop editor, review stray audio, locate file, generate bridge sample
+
+## Working alongside other audio tools
+
+SampleSmith should be comfortable in a Reaper/Audacity/TextPad-style workflow, but it should not become a DAW.
+
+- add a short “record elsewhere, assemble here” guide
+- add a Reaper-friendly recording/rendering note if it genuinely helps Carl's process
 - add a reference-note playback mode that is easy to record against
 - make it easy to open the output folder after export
 - maybe add a `build test pack` button for diagnostic instruments
+- avoid timeline editing, multitrack recording, plugin hosting, mixing, or DAW-style transport features
 
 ## Quality checks and tests
 
