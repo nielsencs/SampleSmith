@@ -44,7 +44,7 @@ class SampleSmithApp(tk.Tk):
         self.low_note: int | None = None
         self.high_note: int | None = None
         self.note_rows: dict[int, str] = {}
-        self.export_samples_by_iid: dict[str, SampleInfo] = {}
+        self.note_samples_by_iid: dict[str, SampleInfo] = {}
         self._output_update_after_id: str | None = None
         self.pending_recording_review: dict[str, object] | None = None
         self._updating_review_trim_fields = False
@@ -247,19 +247,32 @@ class SampleSmithApp(tk.Tk):
         ttk.Spinbox(controls, textvariable=self.step_var, from_=1, to=12, width=4).pack(side="left")
         ttk.Button(controls, text="Build note list", command=self._build_note_list).pack(side="left", padx=8)
 
-        self.note_tree = ttk.Treeview(self.pitched_tab, columns=("note", "maps", "file", "action"), show="headings", height=14)
-        self.note_tree.heading("note", text="Target note")
-        self.note_tree.heading("maps", text="Maps to keys")
-        self.note_tree.heading("file", text="Sample file")
+        self.note_tree = ttk.Treeview(
+            self.pitched_tab,
+            columns=("note", "keys", "root", "file", "status", "loop", "action"),
+            show="headings",
+            height=14,
+        )
+        self.note_tree.heading("note", text="Note")
+        self.note_tree.heading("keys", text="Plays on keys")
+        self.note_tree.heading("root", text="Root note")
+        self.note_tree.heading("file", text="Audio file")
+        self.note_tree.heading("status", text="Status")
+        self.note_tree.heading("loop", text="Loop")
         self.note_tree.heading("action", text="Action")
-        self.note_tree.column("note", width=120, stretch=False)
-        self.note_tree.column("maps", width=230, stretch=False)
-        self.note_tree.column("file", width=340)
+        self.note_tree.column("note", width=80, stretch=False)
+        self.note_tree.column("keys", width=150, stretch=False)
+        self.note_tree.column("root", width=140, stretch=False)
+        self.note_tree.column("file", width=240)
+        self.note_tree.column("status", width=90, stretch=False)
+        self.note_tree.column("loop", width=130, stretch=False)
         self.note_tree.column("action", width=110, stretch=False, anchor="center")
         self.note_tree.tag_configure("generated", foreground="#666666")
+        self.note_tree.tag_configure("covered", foreground="#555555")
         self.note_tree.pack(fill="both", expand=True, pady=8)
         self.note_tree.bind("<<TreeviewSelect>>", self._on_pitched_selection_changed)
         self.note_tree.bind("<Button-1>", self._on_note_tree_click, add="+")
+        self.note_tree.bind("<Double-1>", self._edit_note_row_from_double_click)
         buttons = ttk.Frame(self.pitched_tab)
         buttons.pack(fill="x")
         ttk.Button(buttons, text="Record all missing", command=self._record_all_missing).pack(side="left")
@@ -342,13 +355,11 @@ class SampleSmithApp(tk.Tk):
         space_tab = ttk.Frame(ds_tabs, padding=8)
         shape_tab = ttk.Frame(ds_tabs, padding=8)
         ui_tab = ttk.Frame(ds_tabs, padding=8)
-        mapping_tab = ttk.Frame(ds_tabs, padding=8)
         ds_tabs.add(basics_tab, text="Basics / Export")
         ds_tabs.add(tone_tab, text="Tone")
         ds_tabs.add(space_tab, text="Space")
         ds_tabs.add(shape_tab, text="Shape")
         ds_tabs.add(ui_tab, text="UI Preview")
-        ds_tabs.add(mapping_tab, text="Mapping")
 
         export = ttk.LabelFrame(basics_tab, text="DecentSampler output")
         export.pack(fill="x")
@@ -515,40 +526,6 @@ class SampleSmithApp(tk.Tk):
         defaults_button(shape, row, "bit_crusher")
 
         self.ui_preview = DecentSamplerUiPreview(ui_tab, self)
-
-        mapping = ttk.LabelFrame(mapping_tab, text="Effective exported sample mapping")
-        mapping.pack(fill="both", expand=True)
-        self.export_tree = ttk.Treeview(mapping, columns=("source", "keys", "root", "mode", "loop"), show="headings", height=10)
-        self.export_tree.heading("source", text="Source audio")
-        self.export_tree.heading("keys", text="Plays on keys")
-        self.export_tree.heading("root", text="Root note")
-        self.export_tree.heading("mode", text="Mode")
-        self.export_tree.heading("loop", text="Loop")
-        self.export_tree.column("source", width=250)
-        self.export_tree.column("keys", width=220)
-        self.export_tree.column("root", width=150)
-        self.export_tree.column("mode", width=80, stretch=False)
-        self.export_tree.column("loop", width=150, stretch=False)
-        self.export_tree.pack(fill="both", expand=True, padx=6, pady=6)
-        self.export_tree.bind("<Double-1>", self._edit_export_row_from_double_click)
-        mapping_buttons = ttk.Frame(mapping)
-        mapping_buttons.pack(fill="x", padx=6, pady=(0, 6))
-        ttk.Button(mapping_buttons, text="Edit plays-on keys…", command=self._edit_selected_sample_mapping).pack(side="left", padx=(0, 6))
-        ttk.Button(mapping_buttons, text="Edit selected audio loop…", command=self._edit_selected_sample_loop).pack(side="left")
-
-        notes = ttk.LabelFrame(mapping_tab, text="Notes")
-        notes.pack(fill="x", pady=(10, 0))
-        ttk.Label(
-            notes,
-            text=(
-                "DecentSampler settings are split into sub-tabs. Loop controls here are fallback/default values; "
-                "double-click Source audio/Plays on keys to edit key mapping; double-click the other columns to edit loop points. "
-                "per-audio-file loop edits are shown in the mapping table and take priority during export. "
-                "Generated bridge samples are marked generated in the mapping table and saved under Samples/generated."
-            ),
-            wraplength=820,
-            justify="left",
-        ).pack(anchor="w", padx=6, pady=6)
 
     def _normalise_ui_layout(self, raw_layout: object) -> dict[str, dict[str, int]]:
         return normalise_ui_layout(raw_layout)
@@ -1315,9 +1292,8 @@ class SampleSmithApp(tk.Tk):
                 recorded = next((sample for sample in self.samples if sample.mode == "pitched" and sample.root_note == note), None)
                 self.note_rows[note] = str(recorded.path) if recorded else ""
                 action = self._bridge_action_text(note)
-                self.note_tree.insert("", "end", iid=str(note), values=(midi_to_name(note), mapping_text(lo, hi), recorded.path.name if recorded else "", action))
+                self.note_tree.insert("", "end", iid=str(note), values=self._note_tree_values(note, recorded, action=action))
             self._refresh_pitched_mappings()
-        self._refresh_export_mapping()
 
     def _log(self, text: str) -> None:
         self.log.insert("end", text + "\n")
@@ -1420,7 +1396,7 @@ class SampleSmithApp(tk.Tk):
             iid = str(note)
             lo, hi = ranges[note]
             self.note_rows[note] = ""
-            self.note_tree.insert("", "end", iid=iid, values=(midi_to_name(note), mapping_text(lo, hi), "", self._bridge_action_text(note)))
+            self.note_tree.insert("", "end", iid=iid, values=self._note_tree_values(note, None, plays_on=(lo, hi)))
         self._log("Built note list with full-keyboard sample mapping")
 
     def _selected_note(self) -> int | None:
@@ -1458,7 +1434,7 @@ class SampleSmithApp(tk.Tk):
         note = int(selected[0])
         self.selected_sample_title_var.set(f"{midi_to_name(note)}")
         self._set_panel_action_controls_enabled(True, True)
-        sample = self._sample_for_pitched_note(note)
+        sample = self.note_samples_by_iid.get(selected[0]) or self._sample_for_pitched_note(note)
         if sample is not None:
             self._schedule_sample_review_load(sample)
         else:
@@ -1488,9 +1464,9 @@ class SampleSmithApp(tk.Tk):
             return None
 
     def _record_all_missing(self) -> None:
-        notes = [int(item) for item in self.note_tree.get_children() if not self.note_rows.get(int(item))]
+        notes = [int(item) for item in self.note_tree.get_children() if item not in self.note_samples_by_iid]
         if not notes:
-            self._log("No missing pitched samples")
+            self._log("No notes without audio")
             return
         self._record_note_sequence(notes)
 
@@ -1499,7 +1475,7 @@ class SampleSmithApp(tk.Tk):
             return
         row_id = self.note_tree.identify_row(event.y)
         column = self.note_tree.identify_column(event.x)
-        if not row_id or column != "#4":
+        if not row_id or column != "#7":
             return
         try:
             note = int(row_id)
@@ -2042,106 +2018,133 @@ class SampleSmithApp(tk.Tk):
         ]
         return sorted(spread, key=lambda sample: (sample.mode, sample.root_note, sample.path.name))
 
+    def _note_tree_values(
+        self,
+        note: int,
+        sample: SampleInfo | None,
+        *,
+        plays_on: tuple[int, int] | None = None,
+        action: str | None = None,
+        covered: bool = False,
+    ) -> tuple[str, str, str, str, str, str, str]:
+        if sample is None:
+            return (
+                midi_to_name(note),
+                mapping_text(*plays_on) if plays_on is not None else "",
+                "",
+                "",
+                "",
+                "",
+                self._bridge_action_text(note) if action is None else action,
+            )
+        status = "Generated" if sample.generated else "Covered" if covered else "Recorded"
+        audio_file = f"[GENERATED] {sample.path.name}" if sample.generated else sample.path.name
+        return (
+            midi_to_name(note),
+            mapping_text(sample.lo_note, sample.hi_note),
+            exported_root_text(sample.root_note),
+            audio_file,
+            status,
+            self._sample_loop_text(sample),
+            self._bridge_action_text(note) if action is None else action,
+        )
+
+    def _tag_for_note_row(self, sample: SampleInfo | None, *, covered: bool = False) -> tuple[str, ...]:
+        if sample is None:
+            return ()
+        if sample.generated:
+            return ("generated",)
+        if covered:
+            return ("covered",)
+        return ()
+
+    def _sample_playing_note(self, note: int, exported: list[SampleInfo]) -> tuple[SampleInfo | None, bool]:
+        exact = next((sample for sample in exported if sample.root_note == note), None)
+        if exact is not None:
+            return exact, False
+        covered = [sample for sample in exported if sample.lo_note <= note <= sample.hi_note]
+        if not covered:
+            return None, False
+        return min(covered, key=lambda sample: (abs(sample.root_note - note), sample.root_note)), True
+
     def _refresh_pitched_mappings(self) -> None:
         exported = [sample for sample in self._exportable_note_samples() if sample.mode == "pitched"]
         exported_roots = {sample.root_note for sample in exported}
-        recorded_roots = {sample.root_note for sample in exported if not sample.generated}
-        generated_roots = exported_roots - recorded_roots
         for item in list(self.note_tree.get_children()):
             note = int(item)
-            if "generated" in self.note_tree.item(item, "tags") and note not in generated_roots and note not in recorded_roots:
+            if "generated" in self.note_tree.item(item, "tags") and note not in exported_roots:
                 self.note_tree.delete(item)
                 self.note_rows.pop(note, None)
 
-        for sample in exported:
-            iid = str(sample.root_note)
-            is_generated = sample.generated
-            file_name = f"[GENERATED] {sample.path.name}" if is_generated else sample.path.name
-            values = (midi_to_name(sample.root_note), mapping_text(sample.lo_note, sample.hi_note), file_name, self._bridge_action_text(sample.root_note))
+        existing_notes = {int(item) for item in self.note_tree.get_children()}
+        target_notes = set(existing_notes) | exported_roots
+        if self.low_note is not None and self.high_note is not None:
+            target_notes.update(note_range(self.low_note, self.high_note, self.step_var.get()))
+
+        self.note_samples_by_iid.clear()
+        for note in sorted(target_notes):
+            sample, covered = self._sample_playing_note(note, exported)
+            iid = str(note)
+            values = self._note_tree_values(note, sample, covered=covered)
+            tags = self._tag_for_note_row(sample, covered=covered)
+            if sample is not None:
+                self.note_samples_by_iid[iid] = sample
+            if sample is not None and sample.root_note == note and not sample.generated:
+                self.note_rows[note] = str(sample.path)
+            elif note not in self.note_rows:
+                self.note_rows[note] = ""
             if iid in self.note_tree.get_children():
-                self.note_tree.item(iid, values=values, tags=("generated",) if is_generated else ())
+                self.note_tree.item(iid, values=values, tags=tags)
             else:
-                self.note_rows[sample.root_note] = "" if is_generated else str(sample.path)
-                self.note_tree.insert("", "end", iid=iid, values=values, tags=("generated",) if is_generated else ())
-        self._refresh_bridge_actions()
+                self.note_rows[note] = "" if sample is None or sample.generated else str(sample.path)
+                self.note_tree.insert("", "end", iid=iid, values=values, tags=tags)
 
     def _refresh_bridge_actions(self) -> None:
-        for item in self.note_tree.get_children():
-            note = int(item)
-            values = list(self.note_tree.item(item, "values"))
-            while len(values) < 4:
-                values.append("")
-            values[3] = self._bridge_action_text(note)
-            self.note_tree.item(item, values=tuple(values))
+        self._refresh_pitched_mappings()
 
     def _sample_loop_text(self, sample: SampleInfo) -> str:
         if not sample.loop_enabled:
-            return "—"
+            return ""
         start, end = optional_non_negative_int(sample.loop_start), optional_non_negative_int(sample.loop_end)
         if start is None or end is None or end <= start:
-            return "on"
+            return "Looped"
         text = f"{start}–{end}"
         if sample.loop_crossfade and sample.loop_crossfade > 0:
-            text += f" / xfade {sample.loop_crossfade:g}"
+            text += f" / fade {sample.loop_crossfade:g}"
         return text
 
-    def _refresh_export_mapping(self) -> None:
-        for item in self.export_tree.get_children():
-            self.export_tree.delete(item)
-        self.export_samples_by_iid.clear()
-        for index, sample in enumerate(self._exportable_note_samples()):
-            iid = f"export-{index}"
-            self.export_samples_by_iid[iid] = sample
-            self.export_tree.insert(
-                "",
-                "end",
-                iid=iid,
-                values=(
-                    f"[GENERATED] {sample.path.name}" if sample.generated else sample.path.name,
-                    mapping_text(sample.lo_note, sample.hi_note),
-                    exported_root_text(sample.root_note),
-                    "bridge" if sample.generated else sample.mode,
-                    self._sample_loop_text(sample),
-                ),
-            )
-
-    def _editable_sample_for_exported(self, exported: SampleInfo) -> SampleInfo | None:
+    def _editable_sample_for_note_row(self) -> SampleInfo | None:
+        selected = self.note_tree.selection()
+        if not selected:
+            return None
+        displayed = self.note_samples_by_iid.get(selected[0])
+        if displayed is None:
+            return None
         for sample in self.samples:
-            if sample.mode == exported.mode and sample.root_note == exported.root_note and sample.path == exported.path:
+            if sample.mode == displayed.mode and sample.root_note == displayed.root_note and sample.path == displayed.path:
                 return sample
-        if exported.generated:
-            self.samples.append(exported)
+        if displayed.generated:
+            self.samples.append(displayed)
             self.samples.sort(key=lambda sample: (sample.mode, sample.root_note, sample.path.name))
-            return exported
+            return displayed
         return None
 
-    def _edit_export_row_from_double_click(self, event) -> str:
-        row_id = self.export_tree.identify_row(event.y)
+    def _edit_note_row_from_double_click(self, event) -> str:
+        row_id = self.note_tree.identify_row(event.y)
         if not row_id:
             return "break"
-        self.export_tree.selection_set(row_id)
-        column = self.export_tree.identify_column(event.x)
-        if column in {"#1", "#2"}:
+        self.note_tree.selection_set(row_id)
+        column = self.note_tree.identify_column(event.x)
+        if column in {"#2", "#3", "#4"}:
             self._edit_selected_sample_mapping()
-        else:
+        elif column == "#6":
             self._edit_selected_sample_loop()
         return "break"
 
     def _edit_selected_sample_loop(self) -> None:
-        selected = self.export_tree.selection()
-        if not selected:
-            messagebox.showwarning("SampleSmith", "Select an audio file in the exported mapping first.")
-            return
-        exported = self.export_samples_by_iid.get(selected[0])
-        if exported is None:
-            messagebox.showwarning("SampleSmith", "Could not find that exported sample. Try refreshing the mapping.")
-            return
-        sample = self._editable_sample_for_exported(exported)
+        sample = self._editable_sample_for_note_row()
         if sample is None:
-            messagebox.showinfo(
-                "SampleSmith",
-                "That generated row could not be made editable. Try refreshing the mapping, then try again.",
-            )
+            messagebox.showwarning("SampleSmith", "Select a note with an audio file first.")
             return
         if not sample.path.exists():
             messagebox.showwarning("SampleSmith", f"Audio file not found:\n{sample.path}")
@@ -2152,20 +2155,9 @@ class SampleSmithApp(tk.Tk):
             messagebox.showerror("SampleSmith", str(exc))
 
     def _edit_selected_sample_mapping(self) -> None:
-        selected = self.export_tree.selection()
-        if not selected:
-            messagebox.showwarning("SampleSmith", "Select a row in the exported mapping first.")
-            return
-        exported = self.export_samples_by_iid.get(selected[0])
-        if exported is None:
-            messagebox.showwarning("SampleSmith", "Could not find that exported sample. Try refreshing the mapping.")
-            return
-        sample = self._editable_sample_for_exported(exported)
+        sample = self._editable_sample_for_note_row()
         if sample is None:
-            messagebox.showinfo(
-                "SampleSmith",
-                "That generated row could not be made editable. Try refreshing the mapping, then try again.",
-            )
+            messagebox.showwarning("SampleSmith", "Select a note with an audio file first.")
             return
         MappingEditorDialog(self, sample, self._apply_sample_mapping_edit)
 
@@ -2314,7 +2306,6 @@ class SampleSmithApp(tk.Tk):
             **self._dspreset_options(),
         )
         self._refresh_pitched_mappings()
-        self._refresh_export_mapping()
         return preset
 
     def _on_output_parameter_changed(self) -> None:
@@ -2347,7 +2338,6 @@ class SampleSmithApp(tk.Tk):
             **self._dspreset_options(),
         )
         self._refresh_pitched_mappings()
-        self._refresh_export_mapping()
         self._log(f"Exported DecentSampler bundle: {bundle}")
         messagebox.showinfo("SampleSmith", f"Exported .dsbundle:\n{bundle}")
 
