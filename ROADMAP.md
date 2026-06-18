@@ -22,7 +22,7 @@ The goal is practical DecentSampler instrument building for ordinary musicians a
 - review samples for clipping, very low level, silence, and too-short recordings
 - show basic audio-file facts in the GUI: duration, sample rate, channels, peak level, RMS-ish loudness
 - make normalise/trim behaviour waveform-based, visible, and less surprising
-- keep improving original-recording preservation now that edited WAVs get `.samplesmith-backups/` reset copies
+- keep improving original-recording preservation now that edited audio files get `.samplesmith-backups/` reset copies
 - support FLAC as well as WAV where DecentSampler/project workflow allows it
 - improve stray-file review so imported audio files can be assigned to notes, velocity layers, or round-robin takes
 - support replacing one recorded audio file without disturbing the rest of the instrument
@@ -33,12 +33,12 @@ Real sampled instruments often use multiple samples for the same note so repeate
 
 Wishlist:
 
-- allow each note to hold multiple WAV takes
+- allow each note to hold multiple audio takes
 - export multiple `<sample>` entries for the same key/root/range with DecentSampler round-robin behaviour
 - show takes clearly in the mapping table
 - support add/remove/reorder takes
 - support naming takes, e.g. `soft`, `normal`, `bright`, `growly`, or `take 1/2/3`
-- decide how round-robin interacts with generated bridge WAVs
+- decide how round-robin interacts with generated bridge samples
 - decide how round-robin interacts with velocity layers
 - optionally allow random or sequential playback mode if DecentSampler supports both well enough
 
@@ -101,7 +101,7 @@ Wishlist:
 
 ### Import-first workflow
 
-- import a folder of WAV/FLAC files and infer notes from filenames where possible
+- import a folder of audio files and infer notes from filenames where possible
 - refine stray-audio note/root filename guessing and show confidence before accepting inferred mappings
 - support common filename patterns like `Instrument_C3_01.wav`, `C#4_rr2.wav`, `note60_vel90.wav`, or `root_72_take_2.flac`
 - offer a review screen before accepting inferred mappings
@@ -156,7 +156,7 @@ Wishlist:
 
 - Should round-robin be attached to notes from the first implementation?
 - Should velocity layers come before or after round-robin?
-- Should original WAVs and processed WAVs both be kept, or is that too much clutter for early versions?
+- Should original audio files and processed audio files both be kept, or is that too much clutter for early versions?
 - How much waveform editing should SampleSmith own, versus expecting Audacity/Reaper for heavy editing?
 - Should bridge audio remain a visible/manual feature only, or eventually become a more guided workflow?
 - How should SampleSmith present DecentSampler features that are version-dependent or only partly documented?

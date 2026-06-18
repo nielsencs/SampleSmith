@@ -279,7 +279,7 @@ class SampleSmithApp(tk.Tk):
             button = ttk.Button(action_row, text=text, command=command)
             button.pack(side="left", fill="x", expand=True, padx=(0, 4))
             self.panel_action_buttons.append(button)
-        self.recording_review_status_var = tk.StringVar(value="No WAV loaded.")
+        self.recording_review_status_var = tk.StringVar(value="No audio loaded.")
         ttk.Label(review, textvariable=self.recording_review_status_var, wraplength=260, justify="left").pack(fill="x", padx=8, pady=(2, 6))
 
         self.review_canvas_width = 260
@@ -752,6 +752,9 @@ class SampleSmithApp(tk.Tk):
         return self._instrument_dir() / "Samples" / f"{slugify(self.name_var.get())}_{label}{suffix}"
 
     def _backup_path_for_sample(self, path: Path) -> Path:
+        return path.parent / ".samplesmith-backups" / f"{path.stem}.original{path.suffix}"
+
+    def _legacy_backup_path_for_sample(self, path: Path) -> Path:
         return path.parent / ".samplesmith-backups" / f"{path.name}.original.wav"
 
     def _ensure_sample_backup(self, path: Path) -> Path | None:
@@ -767,10 +770,13 @@ class SampleSmithApp(tk.Tk):
     def _restore_sample_backup(self, path: Path) -> bool:
         backup = self._backup_path_for_sample(path)
         if not backup.exists():
-            messagebox.showinfo("SampleSmith", "No original backup exists for this WAV yet.")
+            legacy_backup = self._legacy_backup_path_for_sample(path)
+            backup = legacy_backup if legacy_backup.exists() else backup
+        if not backup.exists():
+            messagebox.showinfo("SampleSmith", "No original backup exists for this audio file yet.")
             return False
         shutil.copy2(backup, path)
-        self._log(f"Restored original WAV: {path.name}")
+        self._log(f"Restored original audio: {path.name}")
         return True
 
     def _write_reviewed_wav(self, path: Path, audio, sample_rate: int | None = None) -> None:
@@ -1094,15 +1100,15 @@ class SampleSmithApp(tk.Tk):
     def _review_stray_wavs(self) -> None:
         strays = self._stray_wav_candidates()
         if not strays:
-            self._log("No stray WAV/FLAC files found in this instrument/project folder.")
-            messagebox.showinfo("SampleSmith", "No stray WAV/FLAC files found in this instrument/project folder.")
+            self._log("No stray audio files found in this instrument/project folder.")
+            messagebox.showinfo("SampleSmith", "No stray audio files found in this instrument/project folder.")
             return
         preview = "\n".join(str(path.relative_to(self._instrument_dir())) if path.is_relative_to(self._instrument_dir()) else str(path) for path in strays[:12])
         if len(strays) > 12:
             preview += f"\n… and {len(strays) - 12} more"
         if not messagebox.askyesno(
             "SampleSmith",
-            "Found WAV/FLAC files in the project/instrument folders that are not in the current mapping.\n\n"
+            "Found audio files in the project/instrument folders that are not in the current mapping.\n\n"
             f"{preview}\n\nReview and import any of these now?",
         ):
             self._log(f"Stray audio review skipped ({len(strays)} found).")
@@ -1110,7 +1116,7 @@ class SampleSmithApp(tk.Tk):
         imported = 0
         for wav in strays:
             rel = str(wav.relative_to(self._instrument_dir())) if wav.is_relative_to(self._instrument_dir()) else str(wav)
-            if not messagebox.askyesno("SampleSmith", f"Include this WAV in the project?\n\n{rel}"):
+            if not messagebox.askyesno("SampleSmith", f"Include this audio file in the project?\n\n{rel}"):
                 continue
             note_text = simpledialog.askstring(
                 "SampleSmith",
@@ -1602,7 +1608,7 @@ class SampleSmithApp(tk.Tk):
             missing_sources = [source.path for source in (first, second) if source is not None and not source.path.exists()]
             if missing_sources:
                 for path in missing_sources:
-                    self._log(f"Cannot bridge {midi_to_name(target_note)}; source WAV is missing: {path}")
+                    self._log(f"Cannot bridge {midi_to_name(target_note)}; source audio is missing: {path}")
                 continue
             try:
                 if kind == "blend" and second is not None:
@@ -1709,20 +1715,20 @@ class SampleSmithApp(tk.Tk):
             self._clear_pending_recording_review()
         if not sample.path.exists():
             if confirm_discard:
-                messagebox.showwarning("SampleSmith", f"Could not find this WAV:\n\n{sample.path}")
+                messagebox.showwarning("SampleSmith", f"Could not find this audio file:\n\n{sample.path}")
             return
         try:
             raw, sample_rate = self._audio().read_audio(sample.path)
             self._ensure_sample_backup(sample.path)
         except Exception as exc:
-            messagebox.showerror("SampleSmith", f"Could not load this WAV for review:\n\n{exc}")
+            messagebox.showerror("SampleSmith", f"Could not load this audio file for review:\n\n{exc}")
             return
 
         def keep(reviewed):
             self._write_reviewed_wav(sample.path, reviewed, sample_rate=sample_rate)
             preset = self._write_preset()
             self._auto_save_project()
-            self._log(f"Updated reviewed WAV: {sample.path.name}")
+            self._log(f"Updated reviewed audio: {sample.path.name}")
             self._log(f"Updated DecentSampler patch: {preset.name}")
 
         def record_take():
@@ -1752,7 +1758,7 @@ class SampleSmithApp(tk.Tk):
                     self._write_reviewed_wav(sample.path, reviewed, sample_rate=sample_rate)
                     preset = self._write_preset()
                     self._auto_save_project()
-                    self._log(f"Updated reviewed WAV: {sample.path.name}")
+                    self._log(f"Updated reviewed audio: {sample.path.name}")
                     self._log(f"Updated DecentSampler patch: {preset.name}")
 
                 def record_take():
@@ -1775,7 +1781,7 @@ class SampleSmithApp(tk.Tk):
 
     def _review_status_text(self) -> str:
         if not self.pending_recording_review:
-            return "No WAV loaded yet. Record sample to capture one, or select a row with an existing WAV."
+            return "No audio loaded yet. Record a sample, or select a row with an existing audio file."
         return (
             f"{self.pending_recording_review['title']} — "
             f"full {self._duration_text(self.pending_recording_review['raw_audio'], self.pending_recording_review['sample_rate'])}; "
@@ -2013,7 +2019,7 @@ class SampleSmithApp(tk.Tk):
             missing_sources = [source.path for source in sources if not source.path.exists()]
             if render_missing and missing_sources:
                 for path in missing_sources:
-                    self._log(f"Cannot bridge {midi_to_name(target_note)}; source WAV is missing: {path}")
+                    self._log(f"Cannot bridge {midi_to_name(target_note)}; source audio is missing: {path}")
                 continue
             if render_missing and not missing_sources:
                 source_mtime = max(source.path.stat().st_mtime for source in sources)
@@ -2552,7 +2558,7 @@ class LoopEditorDialog(tk.Toplevel):
 
         controls = ttk.Frame(outer)
         controls.pack(fill="x", pady=10)
-        ttk.Checkbutton(controls, text="Loop this WAV", variable=self.loop_enabled_var, command=self._draw).grid(row=0, column=0, sticky="w", padx=(0, 12))
+        ttk.Checkbutton(controls, text="Loop this sample", variable=self.loop_enabled_var, command=self._draw).grid(row=0, column=0, sticky="w", padx=(0, 12))
         ttk.Label(controls, text="start").grid(row=0, column=1, sticky="w")
         ttk.Entry(controls, textvariable=self.loop_start_var, width=12).grid(row=0, column=2, sticky="w", padx=(3, 12))
         ttk.Label(controls, text="end").grid(row=0, column=3, sticky="w")
@@ -2568,7 +2574,7 @@ class LoopEditorDialog(tk.Toplevel):
         ttk.Button(buttons, text="Audition raw", command=lambda: self._start_loop_audition("raw")).pack(side="left", padx=6)
         ttk.Button(buttons, text="Audition xfade", command=lambda: self._start_loop_audition("xfade")).pack(side="left")
         ttk.Button(buttons, text="Stop", command=self._stop_loop_audition).pack(side="left", padx=(6, 0))
-        ttk.Button(buttons, text="Clear per-WAV loop", command=self._clear_loop).pack(side="left", padx=6)
+        ttk.Button(buttons, text="Clear sample loop", command=self._clear_loop).pack(side="left", padx=6)
         ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="right")
         ttk.Button(buttons, text="Apply", command=self._apply).pack(side="right", padx=6)
         ttk.Label(outer, textvariable=self.audition_status_var, foreground="#555555").pack(anchor="w", pady=(6, 0))
@@ -2587,9 +2593,9 @@ class LoopEditorDialog(tk.Toplevel):
         try:
             audio, sample_rate = sf.read(path, always_2d=True, dtype="float32")
         except Exception as exc:
-            raise RuntimeError(f"Could not read WAV for loop editing: {path}") from exc
+            raise RuntimeError(f"Could not read audio file for loop editing: {path}") from exc
         if audio.size == 0:
-            raise RuntimeError(f"Cannot edit an empty WAV: {path}")
+            raise RuntimeError(f"Cannot edit an empty audio file: {path}")
         mono = np.mean(audio, axis=1)
         abs_mono = np.abs(mono)
         frames = int(abs_mono.shape[0])
@@ -2763,7 +2769,7 @@ class LoopEditorDialog(tk.Toplevel):
             else:
                 self.visual_status_var.set("Crossfade display is centred around the selected loop start/end points.")
         else:
-            self.visual_status_var.set("Loop is disabled for this WAV; enable it to visualise the loop region and crossfade.")
+            self.visual_status_var.set("Loop is disabled for this sample; enable it to visualise the loop region and crossfade.")
         self.canvas.create_line(start_x, 0, start_x, self.canvas_height, fill="#30d158", width=3, tags=("start",))
         self.canvas.create_line(end_x, 0, end_x, self.canvas_height, fill="#ff453a", width=3, tags=("end",))
         self.canvas.create_text(start_x + 4, 12, text=f"start {start}", anchor="w", fill="#30d158")
@@ -2863,7 +2869,7 @@ class LoopEditorDialog(tk.Toplevel):
     def _import_marker(self) -> None:
         marker = read_wav_smpl_loop_points(self.sample.path)
         if marker is None:
-            messagebox.showinfo("SampleSmith", "No embedded WAV smpl loop marker found in this WAV.")
+            messagebox.showinfo("SampleSmith", "No embedded WAV smpl loop marker found in this audio file.")
             return
         start, end = marker
         self.loop_enabled_var.set(True)

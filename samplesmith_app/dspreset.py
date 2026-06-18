@@ -588,7 +588,7 @@ def generate_dspreset(
             source_bits = ""
             if sample.source_roots:
                 source_bits = " from roots " + ", ".join(str(root) for root in sample.source_roots)
-            group.append(ET.Comment(f" GENERATED bridge sample{source_bits}; replace with a recorded WAV when ready. "))
+            group.append(ET.Comment(f" GENERATED bridge sample{source_bits}; replace with a recorded sample when ready. "))
         ET.SubElement(group, "sample", attrs)
     if effects_to_write:
         effects = ET.SubElement(root, "effects")

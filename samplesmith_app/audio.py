@@ -1,4 +1,4 @@
-"""Audio recording, playback, and WAV writing helpers for SampleSmith."""
+"""Audio recording, playback, and sample-file writing helpers for SampleSmith."""
 
 from __future__ import annotations
 
@@ -139,11 +139,11 @@ def _load_audio_for_bridge(path: Path):
     try:
         import soundfile as sf
     except ImportError as exc:
-        raise RuntimeError("Bridge WAV generation needs soundfile and numpy installed.") from exc
+        raise RuntimeError("Bridge sample generation needs soundfile and numpy installed.") from exc
 
     audio, sample_rate = sf.read(path, always_2d=True, dtype="float32")
     if audio.size == 0:
-        raise RuntimeError(f"Cannot generate bridge sample from empty WAV: {path}")
+        raise RuntimeError(f"Cannot generate bridge sample from empty audio file: {path}")
     return audio, sample_rate
 
 
@@ -233,7 +233,7 @@ def render_bridge_wav(
     target_note: int,
     high_root_note: int,
 ) -> None:
-    """Write a generated bridge WAV blended from the two neighbouring samples.
+    """Write a generated bridge sample blended from the two neighbouring samples.
 
     Both neighbours are pitch-shifted to the missing target note, then mixed by
     distance: notes nearer the lower recording contain more of the lower source,
@@ -244,13 +244,13 @@ def render_bridge_wav(
         import numpy as np
         import soundfile as sf
     except ImportError as exc:
-        raise RuntimeError("Bridge WAV generation needs soundfile and numpy installed.") from exc
+        raise RuntimeError("Bridge sample generation needs soundfile and numpy installed.") from exc
 
     low_audio, low_rate = _load_audio_for_bridge(low_source_path)
     high_audio, high_rate = _load_audio_for_bridge(high_source_path)
     if low_rate != high_rate:
         raise RuntimeError(
-            "Cannot blend bridge sample from WAVs with different sample rates: "
+            "Cannot blend bridge sample from audio files with different sample rates: "
             f"{low_source_path.name} is {low_rate} Hz, {high_source_path.name} is {high_rate} Hz."
         )
     if not (low_root_note < target_note < high_root_note):
@@ -287,7 +287,7 @@ def render_retuned_bridge_wav(
     source_root_note: int,
     target_note: int,
 ) -> None:
-    """Write a generated bridge WAV from one neighbouring source recording.
+    """Write a generated bridge sample from one neighbouring source recording.
 
     This covers one-sided or "imaginary" gaps where there is no recorded sample
     on both sides of the target note. The result is still deliberately marked as
@@ -297,7 +297,7 @@ def render_retuned_bridge_wav(
         import numpy as np
         import soundfile as sf
     except ImportError as exc:
-        raise RuntimeError("Bridge WAV generation needs soundfile and numpy installed.") from exc
+        raise RuntimeError("Bridge sample generation needs soundfile and numpy installed.") from exc
 
     audio, sample_rate = _load_audio_for_bridge(source_path)
     retuned = _pitch_shift_audio(audio, sample_rate, target_note - source_root_note)
