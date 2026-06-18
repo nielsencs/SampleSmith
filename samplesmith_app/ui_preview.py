@@ -17,6 +17,7 @@ from .dspreset import (
     UI_KNOB_MAX_Y,
     UI_KNOB_WIDTH,
     UI_BAR_WIDTH,
+    UI_BAR_GROUP_GRID_SLOTS,
     UI_GROUP_PADDING,
     UI_GROUP_TOP_PADDING,
     UI_GROUP_TITLE_HEIGHT,
@@ -163,15 +164,18 @@ class DecentSamplerUiPreview:
             included = [(control_id, label) for include, control_id, label in specs if include]
             if not included:
                 return
-            if (index % UI_KNOB_COLUMNS) + len(included) > UI_KNOB_COLUMNS:
+            compact_bars = title == "Envelope"
+            grid_slots = UI_BAR_GROUP_GRID_SLOTS if compact_bars else len(included)
+            if (index % UI_KNOB_COLUMNS) + grid_slots > UI_KNOB_COLUMNS:
                 index += UI_KNOB_COLUMNS - (index % UI_KNOB_COLUMNS)
-            for control_id, label in included:
-                if title == "Envelope":
-                    x, y = ui_bar_layout_position(control_id, index, owner.ui_layout)
+            start_index = index
+            for offset, (control_id, label) in enumerate(included):
+                if compact_bars:
+                    x, y = ui_bar_layout_position(control_id, start_index + offset, owner.ui_layout)
                 else:
-                    x, y = ui_layout_position(control_id, index, owner.ui_layout)
-                controls.append({"id": control_id, "label": label, "group": title, "index": index, "x": x, "y": y})
-                index += 1
+                    x, y = ui_layout_position(control_id, start_index + offset, owner.ui_layout)
+                controls.append({"id": control_id, "label": label, "group": title, "index": start_index + offset, "x": x, "y": y})
+            index = start_index + grid_slots
 
         add_group(
             "Envelope",
@@ -251,10 +255,16 @@ class DecentSamplerUiPreview:
             panel_tag = f"ui-panel:{panel_index}"
             self.panel_tags[panel_tag] = title
             self.panel_controls[title] = [str(control["id"]) for control in group_controls]
-            left = min(int(control["x"]) + PREVIEW_ORIGIN_X + UI_KNOB_VISIBLE_OUTER_INSET_X for control in group_controls)
-            top = min(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_KNOB_VISIBLE_OUTER_INSET_Y for control in group_controls)
-            right = max(int(control["x"]) + PREVIEW_ORIGIN_X + UI_KNOB_VISIBLE_OUTER_INSET_X + UI_KNOB_VISIBLE_OUTER_WIDTH for control in group_controls)
-            bottom = max(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_KNOB_VISIBLE_OUTER_INSET_Y + UI_KNOB_VISIBLE_OUTER_WIDTH for control in group_controls)
+            if title == "Envelope":
+                left = min(int(control["x"]) + PREVIEW_ORIGIN_X for control in group_controls)
+                top = min(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_KNOB_VISIBLE_OUTER_INSET_Y for control in group_controls)
+                right = max(int(control["x"]) + PREVIEW_ORIGIN_X + UI_BAR_WIDTH for control in group_controls)
+                bottom = max(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_KNOB_VISIBLE_OUTER_INSET_Y + UI_KNOB_VISIBLE_OUTER_WIDTH for control in group_controls)
+            else:
+                left = min(int(control["x"]) + PREVIEW_ORIGIN_X + UI_KNOB_VISIBLE_OUTER_INSET_X for control in group_controls)
+                top = min(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_KNOB_VISIBLE_OUTER_INSET_Y for control in group_controls)
+                right = max(int(control["x"]) + PREVIEW_ORIGIN_X + UI_KNOB_VISIBLE_OUTER_INSET_X + UI_KNOB_VISIBLE_OUTER_WIDTH for control in group_controls)
+                bottom = max(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_KNOB_VISIBLE_OUTER_INSET_Y + UI_KNOB_VISIBLE_OUTER_WIDTH for control in group_controls)
             x1 = max(0, left - UI_GROUP_PADDING)
             y1 = max(0, top - UI_GROUP_TOP_PADDING)
             x2 = min(DECENT_SAMPLER_UI_WIDTH, right + UI_GROUP_PADDING)

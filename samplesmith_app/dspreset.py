@@ -20,6 +20,7 @@ UI_KNOB_STEP_Y = 76
 UI_KNOB_WIDTH = 90
 UI_BAR_WIDTH = 42
 UI_BAR_STEP_X = 34
+UI_BAR_GROUP_GRID_SLOTS = 3
 UI_KNOB_START_X = 30
 UI_KNOB_START_Y = 75
 UI_KNOB_MIN_Y = 30
@@ -459,10 +460,8 @@ def generate_dspreset(
                 )
             ET.SubElement(knob, "binding", binding_attrs)
 
-        def add_amp_knob(control_id: str, label: str, parameter: str, min_value: str, max_value: str, value: str, default_value: str) -> None:
-            nonlocal visible_control_index
-            x_pos, y_pos = ui_bar_layout_position(control_id, visible_control_index, ui_layout)
-            visible_control_index += 1
+        def add_amp_knob(control_id: str, label: str, parameter: str, min_value: str, max_value: str, value: str, default_value: str, layout_index: int) -> None:
+            x_pos, y_pos = ui_bar_layout_position(control_id, layout_index, ui_layout)
             knob = ET.SubElement(
                 tab,
                 "labeled-knob",
@@ -493,21 +492,27 @@ def generate_dspreset(
                 },
             )
 
-        def add_control_panel(title: str, control_ids: list[str], compact_bars: bool = False) -> None:
+        def add_control_panel(title: str, control_ids: list[str], compact_bars: bool = False) -> int:
             nonlocal visible_control_index
             control_count = len(control_ids)
             if control_count <= 0:
-                return
-            if (visible_control_index % UI_KNOB_COLUMNS) + control_count > UI_KNOB_COLUMNS:
+                return visible_control_index
+            grid_slots = UI_BAR_GROUP_GRID_SLOTS if compact_bars else control_count
+            if (visible_control_index % UI_KNOB_COLUMNS) + grid_slots > UI_KNOB_COLUMNS:
                 visible_control_index += UI_KNOB_COLUMNS - (visible_control_index % UI_KNOB_COLUMNS)
+            start_index = visible_control_index
             if compact_bars:
-                positions = [ui_bar_layout_position(control_id, visible_control_index + offset, ui_layout) for offset, control_id in enumerate(control_ids)]
+                positions = [ui_bar_layout_position(control_id, start_index + offset, ui_layout) for offset, control_id in enumerate(control_ids)]
+                left = min(x for x, _y in positions)
+                top = min(y + UI_KNOB_VISIBLE_OUTER_INSET_Y for _x, y in positions)
+                right = max(x + UI_BAR_WIDTH for x, _y in positions)
+                bottom = max(y + UI_KNOB_VISIBLE_OUTER_INSET_Y + UI_KNOB_VISIBLE_OUTER_WIDTH for _x, y in positions)
             else:
-                positions = [ui_layout_position(control_id, visible_control_index + offset, ui_layout) for offset, control_id in enumerate(control_ids)]
-            left = min(x + UI_KNOB_VISIBLE_OUTER_INSET_X for x, _y in positions)
-            top = min(y + UI_KNOB_VISIBLE_OUTER_INSET_Y for _x, y in positions)
-            right = max(x + UI_KNOB_VISIBLE_OUTER_INSET_X + UI_KNOB_VISIBLE_OUTER_WIDTH for x, _y in positions)
-            bottom = max(y + UI_KNOB_VISIBLE_OUTER_INSET_Y + UI_KNOB_VISIBLE_OUTER_WIDTH for _x, y in positions)
+                positions = [ui_layout_position(control_id, start_index + offset, ui_layout) for offset, control_id in enumerate(control_ids)]
+                left = min(x + UI_KNOB_VISIBLE_OUTER_INSET_X for x, _y in positions)
+                top = min(y + UI_KNOB_VISIBLE_OUTER_INSET_Y for _x, y in positions)
+                right = max(x + UI_KNOB_VISIBLE_OUTER_INSET_X + UI_KNOB_VISIBLE_OUTER_WIDTH for x, _y in positions)
+                bottom = max(y + UI_KNOB_VISIBLE_OUTER_INSET_Y + UI_KNOB_VISIBLE_OUTER_WIDTH for _x, y in positions)
             group_x = max(0, left - UI_GROUP_PADDING)
             group_y = max(0, top - UI_GROUP_TOP_PADDING)
             group_width = min(DECENT_SAMPLER_UI_WIDTH - group_x, right - group_x + UI_GROUP_PADDING)
@@ -539,8 +544,10 @@ def generate_dspreset(
                     "hAlign": "center",
                 },
             )
+            return start_index
 
         def add_amp_env_knobs() -> None:
+            nonlocal visible_control_index
             if not has_amp_env_knobs:
                 return
             specs = [
@@ -549,9 +556,10 @@ def generate_dspreset(
                 ("amp_sustain", "S", "ENV_SUSTAIN", "0", "1", f"{amp_sustain:.3f}", "1.000"),
                 ("amp_release", "R", "ENV_RELEASE", "0", "25", f"{amp_release:.3f}", "0.800"),
             ]
-            add_control_panel("Envelope", [control_id for control_id, *_rest in specs], compact_bars=True)
-            for control_id, label, parameter, min_value, max_value, value, default_value in specs:
-                add_amp_knob(control_id, label, parameter, min_value, max_value, value, default_value)
+            start_index = add_control_panel("Envelope", [control_id for control_id, *_rest in specs], compact_bars=True)
+            for offset, (control_id, label, parameter, min_value, max_value, value, default_value) in enumerate(specs):
+                add_amp_knob(control_id, label, parameter, min_value, max_value, value, default_value, start_index + offset)
+            visible_control_index = start_index + UI_BAR_GROUP_GRID_SLOTS
 
         def add_knob_group(title: str, specs: list[tuple[bool, str, str, str, str, str, str, str, str]]) -> None:
             included_specs = [spec for spec in specs if spec[0]]
