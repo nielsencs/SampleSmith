@@ -341,18 +341,22 @@ class DecentSamplerUiPreview:
         canvas_x = x + PREVIEW_ORIGIN_X
         canvas_y = y + PREVIEW_ORIGIN_Y
         control_width = UI_BAR_WIDTH
-        bar_width = 16
-        bar_height = 38
+        bar_width = 20
+        bar_height = 34
         bar_left = canvas_x + (control_width - bar_width) // 2
-        bar_top = canvas_y + 20
+        bar_top = canvas_y + 21
         bar_bottom = bar_top + bar_height
-        fill_top = bar_bottom - max(3, int(round((bar_height - 5) * self._control_fraction(control_id))))
+        fill_pixels = int(round((bar_height - 3) * self._control_fraction(control_id)))
         items = [
             self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + control_width, canvas_y + UI_BAR_HEIGHT, outline="", tags=(tag, "ui-knob")),
             self.canvas.create_text(canvas_x + control_width // 2, canvas_y + 9, text=label, fill=PREVIEW_BAR_LABEL_COLOR, font=("TkDefaultFont", 8), tags=(tag, "ui-knob")),
-            self.canvas.create_rectangle(bar_left, bar_top, bar_left + bar_width, bar_bottom, fill="#efe9ef", outline=PREVIEW_KNOB_TRACK_COLOR, width=1, tags=(tag, "ui-knob")),
-            self.canvas.create_rectangle(bar_left + 3, fill_top, bar_left + bar_width - 3, bar_bottom - 3, fill=PREVIEW_KNOB_VALUE_COLOR, outline=PREVIEW_KNOB_VALUE_COLOR, tags=(tag, "ui-knob")),
+            self.canvas.create_rectangle(bar_left, bar_top, bar_left + bar_width, bar_bottom, fill="", outline=PREVIEW_KNOB_TRACK_COLOR, width=1, tags=(tag, "ui-knob")),
         ]
+        if fill_pixels > 0:
+            fill_top = bar_bottom - 2 - fill_pixels
+            items.append(
+                self.canvas.create_rectangle(bar_left + 2, fill_top, bar_left + bar_width - 2, bar_bottom - 2, fill=PREVIEW_KNOB_VALUE_COLOR, outline=PREVIEW_KNOB_VALUE_COLOR, tags=(tag, "ui-knob"))
+            )
         self.canvas_items[control_id] = items
         self.canvas.tag_bind(tag, "<ButtonPress-1>", self._start_drag)
         self.canvas.tag_bind(tag, "<B1-Motion>", self._drag_knob)
