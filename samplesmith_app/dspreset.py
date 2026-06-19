@@ -14,6 +14,11 @@ OFFICIAL_BOILERPLATE_PATH = ASSETS_DIR / "official-boilerplate.dspreset"
 OFFICIAL_TONE_TRANSLATION_TABLE = "0,33;0.3,150;0.4,450;0.5,1100;0.7,4100;0.9,11000;1.0001,22000"
 DECENT_SAMPLER_UI_WIDTH = 812
 DECENT_SAMPLER_UI_HEIGHT = 375
+UI_TITLE_X = 34
+UI_TITLE_Y = 18
+UI_TITLE_WIDTH = 744
+UI_TITLE_HEIGHT = 22
+UI_TITLE_TEXT_SIZE = 18
 UI_KNOB_COLUMNS = 10
 UI_KNOB_STEP_X = 70
 UI_KNOB_STEP_Y = 70
@@ -321,13 +326,13 @@ def generate_dspreset(
             tab,
             "label",
             {
-                "x": "30",
-                "y": "12",
-                "width": "752",
-                "height": "28",
+                "x": str(UI_TITLE_X),
+                "y": str(UI_TITLE_Y),
+                "width": str(UI_TITLE_WIDTH),
+                "height": str(UI_TITLE_HEIGHT),
                 "text": instrument_name,
                 "textColor": "DD330033",
-                "textSize": "22",
+                "textSize": str(UI_TITLE_TEXT_SIZE),
                 "hAlign": "center",
             },
         )

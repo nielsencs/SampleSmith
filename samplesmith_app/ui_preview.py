@@ -10,6 +10,11 @@ from typing import Protocol
 from .dspreset import (
     DECENT_SAMPLER_UI_HEIGHT,
     DECENT_SAMPLER_UI_WIDTH,
+    UI_TITLE_HEIGHT,
+    UI_TITLE_TEXT_SIZE,
+    UI_TITLE_WIDTH,
+    UI_TITLE_X,
+    UI_TITLE_Y,
     UI_KNOB_COLUMNS,
     UI_KNOB_MIN_Y,
     UI_KNOB_MAX_X,
@@ -258,11 +263,11 @@ class DecentSamplerUiPreview:
     def _draw_instrument_name(self) -> None:
         name = self.owner.name_var.get().strip() or "Untitled instrument"
         self.canvas.create_text(
-            PREVIEW_ORIGIN_X + DECENT_SAMPLER_UI_WIDTH // 2,
-            PREVIEW_ORIGIN_Y + 26,
+            PREVIEW_ORIGIN_X + UI_TITLE_X + UI_TITLE_WIDTH // 2,
+            PREVIEW_ORIGIN_Y + UI_TITLE_Y + UI_TITLE_HEIGHT // 2,
             text=name,
             fill="#3b143b",
-            font=("TkDefaultFont", 12),
+            font=("TkDefaultFont", max(9, int(UI_TITLE_TEXT_SIZE * 0.58))),
             tags=("ui-title",),
         )
 
