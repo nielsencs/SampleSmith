@@ -173,6 +173,8 @@ class DecentSamplerUiPreview:
         )
         self.canvas.pack(anchor="nw")
         self.canvas.bind("<ButtonPress-1>", self._start_background_drag)
+        self.canvas.bind("<B1-Motion>", self._drag_background)
+        self.canvas.bind("<ButtonRelease-1>", self._end_drag)
         self.status_var = tk.StringVar(value="No visible knobs yet. Enable effects and K boxes to add controls.")
         ttk.Label(parent, textvariable=self.status_var).pack(anchor="w", pady=(6, 0))
         self.redraw()
@@ -513,6 +515,8 @@ class DecentSamplerUiPreview:
         title_layout = self._current_title_layout()
         if title_layout["x"] <= x <= title_layout["x"] + title_layout["width"] and title_layout["y"] + PREVIEW_ORIGIN_Y <= y <= title_layout["y"] + PREVIEW_ORIGIN_Y + title_layout["height"]:
             self._start_title_drag(event)
+            if self.drag:
+                self.drag["background"] = True
             return
         for title, items in reversed(list(self.panel_items.items())):
             if not items:
@@ -522,8 +526,16 @@ class DecentSamplerUiPreview:
                 continue
             x1, y1, x2, y2 = bbox
             if x1 <= x <= x2 and y1 <= y <= y2:
-                self.drag = {"kind": "panel", "group": title, "x": x, "y": y}
+                self.drag = {"kind": "panel", "group": title, "x": x, "y": y, "background": True}
                 return
+
+    def _drag_background(self, event) -> None:
+        if not self.drag or not self.drag.get("background"):
+            return
+        if self.drag.get("kind") == "title":
+            self._drag_title(event)
+        elif self.drag.get("kind") == "panel":
+            self._drag_panel(event)
 
     def _drag_title(self, event) -> None:
         if not self.drag or self.drag.get("kind") != "title":
