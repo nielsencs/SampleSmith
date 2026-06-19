@@ -83,7 +83,7 @@ The `.dsbundle` export copies the mapped audio into its own `Samples/` folder an
 
 For visual/layout polishing, SampleSmith includes a repeatable capture harness that generates a tiny test instrument, captures SampleSmith's 812×375 DecentSampler preview, optionally loads the generated `.dspreset` in DecentSampler, and writes a PNG/HTML comparison report.
 
-In the UI preview tab, drag the instrument title, knobs, or group boxes to reposition them. Use **Title −/+** to change title text size and **Title W−/W+** to change its title box width. The layout is saved with the project and exported into the `.dspreset`.
+In the UI preview tab, drag the instrument title, knobs, or group boxes to reposition them. Use **Title −/+** to change title text size. The layout is saved with the project and exported into the `.dspreset`.
 
 On a headless Linux machine with Xvfb, ImageMagick, DecentSampler, and the optional dev dependencies installed:
 

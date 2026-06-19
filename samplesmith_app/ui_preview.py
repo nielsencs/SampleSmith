@@ -155,8 +155,6 @@ class DecentSamplerUiPreview:
         ).pack(side="left")
         ttk.Button(tools, text="Reset layout", command=self.reset_layout).pack(side="right", padx=(6, 0))
         ttk.Button(tools, text="Tidy groups", command=self.tidy_groups).pack(side="right", padx=(6, 0))
-        ttk.Button(tools, text="Title W+", command=lambda: self.resize_title_width(40)).pack(side="right", padx=(6, 0))
-        ttk.Button(tools, text="Title W−", command=lambda: self.resize_title_width(-40)).pack(side="right", padx=(6, 0))
         ttk.Button(tools, text="Title +", command=lambda: self.resize_title(2)).pack(side="right", padx=(6, 0))
         ttk.Button(tools, text="Title −", command=lambda: self.resize_title(-2)).pack(side="right", padx=(6, 0))
         ttk.Button(tools, text="Refresh", command=self.redraw).pack(side="right")
@@ -169,6 +167,7 @@ class DecentSamplerUiPreview:
             highlightbackground="#999999",
         )
         self.canvas.pack(anchor="nw")
+        self.canvas.bind("<ButtonPress-1>", self._start_background_drag)
         self.status_var = tk.StringVar(value="No visible knobs yet. Enable effects and K boxes to add controls.")
         ttk.Label(parent, textvariable=self.status_var).pack(anchor="w", pady=(6, 0))
         self.redraw()
@@ -271,13 +270,13 @@ class DecentSamplerUiPreview:
 
     def _draw_instrument_name(self) -> None:
         name = self.owner.name_var.get().strip() or "Untitled instrument"
-        title_layout = ui_title_layout(self.owner.ui_layout)
+        title_layout = self._current_title_layout()
         x = PREVIEW_ORIGIN_X + title_layout["x"]
         y = PREVIEW_ORIGIN_Y + title_layout["y"]
         width = title_layout["width"]
         height = title_layout["height"]
         tag = "ui-title"
-        hitbox = self.canvas.create_rectangle(x, y, x + width, y + height, outline="", fill="", tags=(tag,))
+        hitbox = self.canvas.create_rectangle(x, y, x + width, y + height, outline="#b9a7b9", fill="", tags=(tag,))
         text = self.canvas.create_text(
             x + width // 2,
             y + height // 2,
@@ -464,10 +463,10 @@ class DecentSamplerUiPreview:
         return groups
 
     def _current_title_layout(self) -> dict[str, int]:
-        return ui_title_layout(self.owner.ui_layout)
+        return ui_title_layout(self.owner.ui_layout, self.owner.name_var.get().strip() or "Untitled instrument")
 
     def _set_title_layout(self, layout: dict[str, int]) -> None:
-        self.owner.ui_layout[UI_TITLE_ID] = ui_title_layout({UI_TITLE_ID: layout})
+        self.owner.ui_layout[UI_TITLE_ID] = ui_title_layout({UI_TITLE_ID: layout}, self.owner.name_var.get().strip() or "Untitled instrument")
 
     def resize_title(self, delta: int) -> None:
         layout = self._current_title_layout()
@@ -475,46 +474,57 @@ class DecentSamplerUiPreview:
         if new_size == layout["textSize"]:
             return
         layout["textSize"] = new_size
-        layout["height"] = max(14, int(round(new_size * 1.25)))
         self._set_title_layout(layout)
-        self.redraw()
-        self.owner._auto_save_project()
-        self.owner._on_output_parameter_changed()
-
-    def resize_title_width(self, delta: int) -> None:
-        layout = self._current_title_layout()
-        centre = layout["x"] + layout["width"] // 2
-        layout["width"] = layout["width"] + delta
-        layout["x"] = centre - layout["width"] // 2
-        cleaned = ui_title_layout({UI_TITLE_ID: layout})
-        if cleaned == self._current_title_layout():
-            return
-        self._set_title_layout(cleaned)
         self.redraw()
         self.owner._auto_save_project()
         self.owner._on_output_parameter_changed()
 
     def _start_title_drag(self, event) -> None:
         layout = self._current_title_layout()
-        self.drag = {"kind": "title", "x": int(event.x), "y": int(event.y), "title_x": layout["x"], "title_y": layout["y"]}
+        self.drag = {"kind": "title", "x": int(event.x), "y": int(event.y), "centerX": layout["centerX"], "centerY": layout["centerY"]}
+
+    def _start_background_drag(self, event) -> None:
+        if self.drag:
+            return
+        current = self.canvas.find_withtag("current")
+        if current:
+            tags = self.canvas.gettags(current[0])
+            if any(tag.startswith("ui:") or tag == "ui-title" or tag.startswith("ui-panel:") for tag in tags):
+                return
+        x = int(event.x)
+        y = int(event.y)
+        title_layout = self._current_title_layout()
+        if title_layout["x"] <= x <= title_layout["x"] + title_layout["width"] and title_layout["y"] + PREVIEW_ORIGIN_Y <= y <= title_layout["y"] + PREVIEW_ORIGIN_Y + title_layout["height"]:
+            self._start_title_drag(event)
+            return
+        for title, items in reversed(list(self.panel_items.items())):
+            if not items:
+                continue
+            bbox = self.canvas.bbox(*items)
+            if not bbox:
+                continue
+            x1, y1, x2, y2 = bbox
+            if x1 <= x <= x2 and y1 <= y <= y2:
+                self.drag = {"kind": "panel", "group": title, "x": x, "y": y}
+                return
 
     def _drag_title(self, event) -> None:
         if not self.drag or self.drag.get("kind") != "title":
             return
         layout = self._current_title_layout()
-        requested_x = int(self.drag["title_x"]) + int(event.x) - int(self.drag["x"])
-        requested_y = int(self.drag["title_y"]) + int(event.y) - int(self.drag["y"])
-        new_x = max(0, min(DECENT_SAMPLER_UI_WIDTH - layout["width"], requested_x))
-        new_y = max(0, min(DECENT_SAMPLER_UI_HEIGHT - layout["height"], requested_y))
-        dx = new_x - layout["x"]
-        dy = new_y - layout["y"]
+        new_center_x = int(self.drag["centerX"]) + int(event.x) - int(self.drag["x"])
+        new_center_y = int(self.drag["centerY"]) + int(event.y) - int(self.drag["y"])
+        updated = dict(layout)
+        updated["centerX"] = new_center_x
+        updated["centerY"] = new_center_y
+        cleaned = ui_title_layout({UI_TITLE_ID: updated}, self.owner.name_var.get().strip() or "Untitled instrument")
+        dx = cleaned["centerX"] - layout["centerX"]
+        dy = cleaned["centerY"] - layout["centerY"]
         if dx == 0 and dy == 0:
             return
         for item in self.title_items:
             self.canvas.move(item, dx, dy)
-        layout["x"] = new_x
-        layout["y"] = new_y
-        self._set_title_layout(layout)
+        self._set_title_layout(cleaned)
 
     def _start_drag(self, event) -> None:
         control_id = self._control_id_from_event()
