@@ -1,0 +1,3 @@
+# Build-only dependency for creating standalone app bundles.
+-r requirements.txt
+pyinstaller

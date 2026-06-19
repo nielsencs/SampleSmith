@@ -5,3 +5,7 @@ effects-test-pack/
 .octave-diagnostic-pack/
 octave-diagnostic-pack/
 ui-comparison-output/
+
+build/
+dist/
+*.spec.tmp

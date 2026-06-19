@@ -12,6 +12,18 @@ SampleSmith's main workflow is **Notes**: build a keyboard note list, record or 
 
 SampleSmith also saves a `.samplesmith.json` project file so an instrument can be reopened and extended later.
 
+## Windows app download
+
+For a friend who does not know Python, use the GitHub Actions build artifact:
+
+1. Open the repository's **Actions** tab.
+2. Choose **Build Windows app**.
+3. Open the latest successful run.
+4. Download **SampleSmith-Windows**.
+5. Unzip it and run `SampleSmith.exe` inside the `SampleSmith` folder.
+
+Windows may warn that the app is from an unknown publisher because it is not code-signed yet.
+
 ## Install dependencies
 
 SampleSmith uses Tkinter for the GUI. Python often includes it, but if not:
