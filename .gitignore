@@ -4,3 +4,4 @@ __pycache__/
 effects-test-pack/
 .octave-diagnostic-pack/
 octave-diagnostic-pack/
+ui-comparison-output/

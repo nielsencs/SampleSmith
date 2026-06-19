@@ -1,0 +1,5 @@
+# Optional tools for local/headless UI comparison captures.
+-r requirements.txt
+pyautogui
+python-xlib
+pillow

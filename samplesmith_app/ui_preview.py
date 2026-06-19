@@ -262,7 +262,7 @@ class DecentSamplerUiPreview:
             PREVIEW_ORIGIN_Y + 26,
             text=name,
             fill="#3b143b",
-            font=("TkDefaultFont", 16, "bold"),
+            font=("TkDefaultFont", 12),
             tags=("ui-title",),
         )
 

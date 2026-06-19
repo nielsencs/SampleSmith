@@ -65,6 +65,21 @@ samplesmith-projects/<InstrumentName>.dsbundle/
 
 The `.dsbundle` export copies the mapped audio into its own `Samples/` folder and writes relative sample paths, so the bundle can be moved as one folder. Open the `.dspreset` or `.dsbundle` in DecentSampler, including from Reaper.
 
+## Compare the SampleSmith UI preview with DecentSampler
+
+For visual/layout polishing, SampleSmith includes a repeatable capture harness that generates a tiny test instrument, captures SampleSmith's 812×375 DecentSampler preview, optionally loads the generated `.dspreset` in DecentSampler, and writes a PNG/HTML comparison report.
+
+On a headless Linux machine with Xvfb, ImageMagick, DecentSampler, and the optional dev dependencies installed:
+
+```bash
+python -m pip install -r requirements-dev.txt
+xvfb-run -a --server-args='-screen 0 1280x1024x24' \
+  python tools/capture_ui_comparison.py \
+  --decent-sampler /path/to/DecentSampler
+```
+
+By default the output goes to `ui-comparison-output/`, which is ignored by Git.
+
 ## Build a DecentSampler effects test pack
 
 To audibly check DecentSampler effect support on a local machine with audio, generate the listening pack:
