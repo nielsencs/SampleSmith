@@ -53,7 +53,9 @@ PREVIEW_KNOB_TRACK_COLOR = "#bfb9b9"
 PREVIEW_KNOB_VALUE_COLOR = "#252025"
 PREVIEW_TITLE_FONT_FAMILY = "Arial Narrow"
 PREVIEW_TITLE_FALLBACK_FONT_FAMILY = "Liberation Sans Narrow"
-PREVIEW_BAR_LABEL_COLOR = "#330033"
+PREVIEW_PANEL_OUTLINE_COLOR = "#c7b9c7"
+PREVIEW_PANEL_LABEL_COLOR = "#555055"
+PREVIEW_BAR_LABEL_COLOR = PREVIEW_PANEL_LABEL_COLOR
 
 
 class UiPreviewOwner(Protocol):
@@ -269,7 +271,7 @@ class DecentSamplerUiPreview:
             372,
             26,
             text=name,
-            fill="#111111",
+            fill="#f3f3f3",
             font=("TkDefaultFont", 8),
             tags=("ui-chrome-title",),
         )
@@ -282,7 +284,7 @@ class DecentSamplerUiPreview:
         width = title_layout["width"]
         height = title_layout["height"]
         tag = "ui-title"
-        hitbox = self.canvas.create_rectangle(x, y, x + width, y + height, outline="#b9a7b9", fill="", tags=(tag,))
+        hitbox = self.canvas.create_rectangle(x, y, x + width, y + height, outline="", fill="", tags=(tag,))
         title_size = max(9, int(title_layout["textSize"] * 0.58))
         title_font = tkfont.Font(family=PREVIEW_TITLE_FONT_FAMILY, size=title_size)
         if title_font.actual("family") == "Arial":
@@ -323,12 +325,12 @@ class DecentSamplerUiPreview:
             y1 = max(0, top - UI_GROUP_TOP_PADDING)
             x2 = min(DECENT_SAMPLER_UI_WIDTH, right + UI_GROUP_PADDING)
             y2 = min(DECENT_SAMPLER_UI_HEIGHT, bottom + UI_GROUP_PADDING)
-            rectangle = self.canvas.create_rectangle(x1, y1, x2, y2, fill="", outline="#8a6a82", tags=(panel_tag, "ui-panel"))
+            rectangle = self.canvas.create_rectangle(x1, y1, x2, y2, fill="", outline=PREVIEW_PANEL_OUTLINE_COLOR, tags=(panel_tag, "ui-panel"))
             label = self.canvas.create_text(
                 x1 + (x2 - x1) // 2,
                 y1 + 2 + UI_GROUP_TITLE_HEIGHT // 2,
                 text=title,
-                fill="#330033",
+                fill=PREVIEW_PANEL_LABEL_COLOR,
                 font=("TkDefaultFont", max(8, int(int(UI_GROUP_TITLE_STYLE["textSize"]) * 0.625))),
                 tags=(panel_tag, "ui-panel"),
             )
