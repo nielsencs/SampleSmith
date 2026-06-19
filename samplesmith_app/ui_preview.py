@@ -54,7 +54,6 @@ PREVIEW_KNOB_VALUE_COLOR = "#252025"
 PREVIEW_TITLE_FONT_FAMILY = "Arial Narrow"
 PREVIEW_TITLE_FALLBACK_FONT_FAMILY = "Liberation Sans Narrow"
 PREVIEW_BAR_LABEL_COLOR = "#330033"
-PREVIEW_BAR_VALUE_COLOR = "#4c3f4c"
 
 
 class UiPreviewOwner(Protocol):
@@ -354,36 +353,11 @@ class DecentSamplerUiPreview:
             self.canvas.create_text(canvas_x + control_width // 2, canvas_y + 9, text=label, fill=PREVIEW_BAR_LABEL_COLOR, font=("TkDefaultFont", 8), tags=(tag, "ui-knob")),
             self.canvas.create_rectangle(bar_left, bar_top, bar_left + bar_width, bar_bottom, fill="#efe9ef", outline=PREVIEW_KNOB_TRACK_COLOR, width=1, tags=(tag, "ui-knob")),
             self.canvas.create_rectangle(bar_left + 3, fill_top, bar_left + bar_width - 3, bar_bottom - 3, fill=PREVIEW_KNOB_VALUE_COLOR, outline=PREVIEW_KNOB_VALUE_COLOR, tags=(tag, "ui-knob")),
-            self.canvas.create_text(canvas_x + control_width // 2, canvas_y + UI_BAR_HEIGHT - 7, text=self._control_display_value(control_id), fill=PREVIEW_BAR_VALUE_COLOR, font=("TkDefaultFont", 7), tags=(tag, "ui-knob")),
         ]
         self.canvas_items[control_id] = items
         self.canvas.tag_bind(tag, "<ButtonPress-1>", self._start_drag)
         self.canvas.tag_bind(tag, "<B1-Motion>", self._drag_knob)
         self.canvas.tag_bind(tag, "<ButtonRelease-1>", self._end_drag)
-
-    def _control_display_value(self, control_id: str) -> str:
-        specs = {
-            "amp_attack": ("amp_attack_var", "s"),
-            "amp_decay": ("amp_decay_var", "s"),
-            "amp_sustain": ("amp_sustain_var", "%"),
-            "amp_release": ("amp_release_var", "s"),
-        }
-        spec = specs.get(control_id)
-        if spec is None:
-            return ""
-        variable_name, unit = spec
-        variable = getattr(self.owner, variable_name, None)
-        if variable is None:
-            return ""
-        try:
-            value = float(variable.get())
-        except (TypeError, ValueError, tk.TclError):
-            return ""
-        if unit == "%":
-            return f"{round(value * 100):.0f}%"
-        if value < 1:
-            return f"{value:.2f}s"
-        return f"{value:.1f}s"
 
     def _control_fraction(self, control_id: str) -> float:
         specs = {
