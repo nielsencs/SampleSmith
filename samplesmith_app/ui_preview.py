@@ -39,10 +39,10 @@ PREVIEW_ORIGIN_X = 0
 PREVIEW_ORIGIN_Y = 51
 PREVIEW_KNOB_ARC_START = 230
 PREVIEW_KNOB_ARC_EXTENT = -260
-PREVIEW_KNOB_ARC_WIDTH = 6
-PREVIEW_KNOB_ARC_INSET_X = 9
-PREVIEW_KNOB_ARC_INSET_Y = 24
-PREVIEW_KNOB_ARC_SIZE = 54
+PREVIEW_KNOB_ARC_WIDTH = 4
+PREVIEW_KNOB_ARC_INSET_X = 17
+PREVIEW_KNOB_ARC_INSET_Y = 28
+PREVIEW_KNOB_ARC_SIZE = 38
 PREVIEW_KNOB_TRACK_COLOR = "#bfb9b9"
 PREVIEW_KNOB_VALUE_COLOR = "#252025"
 
@@ -224,6 +224,7 @@ class DecentSamplerUiPreview:
             self.canvas.create_image(0, 0, anchor="nw", image=self.background_image)
         else:
             self.canvas.create_rectangle(0, 0, DECENT_SAMPLER_UI_WIDTH, DECENT_SAMPLER_UI_HEIGHT, fill="#f6f0e6", outline="#999999")
+        self._draw_top_bar_name()
         self._draw_instrument_name()
         controls = self.visible_controls()
         self._draw_group_panels(controls)
@@ -241,6 +242,18 @@ class DecentSamplerUiPreview:
             self.status_var.set(f"{len(controls)} visible DecentSampler control(s). Drag controls/groups, or double-click a group rectangle to tidy it.")
         else:
             self.status_var.set("No visible knobs yet. Enable effects and K boxes to add controls.")
+
+    def _draw_top_bar_name(self) -> None:
+        name = self.owner.name_var.get().strip() or "Untitled instrument"
+        self.canvas.create_rectangle(300, 17, 445, 35, fill="#6f6f6f", outline="#6f6f6f", tags=("ui-chrome-title",))
+        self.canvas.create_text(
+            372,
+            26,
+            text=name,
+            fill="#111111",
+            font=("TkDefaultFont", 8),
+            tags=("ui-chrome-title",),
+        )
 
     def _draw_instrument_name(self) -> None:
         name = self.owner.name_var.get().strip() or "Untitled instrument"
@@ -302,8 +315,8 @@ class DecentSamplerUiPreview:
         bar_bottom = bar_top + bar_height
         fill_top = bar_top + 10
         items = [
-            self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + control_width, canvas_y + UI_BAR_HEIGHT, outline="#d8ccd6", dash=(2, 2), tags=(tag, "ui-knob")),
-            self.canvas.create_text(canvas_x + control_width // 2, canvas_y + 10, text=label, fill="#330033", font=("TkDefaultFont", 10), tags=(tag, "ui-knob")),
+            self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + control_width, canvas_y + UI_BAR_HEIGHT, outline="", tags=(tag, "ui-knob")),
+            self.canvas.create_text(canvas_x + control_width // 2, canvas_y + 10, text=label, fill="#330033", font=("TkDefaultFont", 8), tags=(tag, "ui-knob")),
             self.canvas.create_rectangle(bar_left, bar_top, bar_left + bar_width, bar_bottom, outline="#330033", width=2, tags=(tag, "ui-knob")),
             self.canvas.create_rectangle(bar_left + 4, fill_top, bar_left + bar_width - 4, bar_bottom - 4, fill="#330033", outline="#330033", tags=(tag, "ui-knob")),
         ]
@@ -378,8 +391,8 @@ class DecentSamplerUiPreview:
         arc_direction = 1 if PREVIEW_KNOB_ARC_EXTENT >= 0 else -1
         value_extent = arc_direction * max(6, int(round(abs(PREVIEW_KNOB_ARC_EXTENT) * self._control_fraction(control_id))))
         items = [
-            self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + UI_KNOB_WIDTH, canvas_y + UI_KNOB_WIDTH, outline="#d8ccd6", dash=(2, 2), tags=(tag, "ui-knob")),
-            self.canvas.create_text(canvas_x + UI_KNOB_WIDTH // 2, canvas_y + 10, text=label, fill="#330033", font=("TkDefaultFont", 10), tags=(tag, "ui-knob")),
+            self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + UI_KNOB_WIDTH, canvas_y + UI_KNOB_WIDTH, outline="", tags=(tag, "ui-knob")),
+            self.canvas.create_text(canvas_x + UI_KNOB_WIDTH // 2, canvas_y + 10, text=label, fill="#330033", font=("TkDefaultFont", 8), tags=(tag, "ui-knob")),
             self.canvas.create_arc(knob_left, knob_top, knob_right, knob_bottom, start=PREVIEW_KNOB_ARC_START, extent=PREVIEW_KNOB_ARC_EXTENT, style="arc", outline=PREVIEW_KNOB_TRACK_COLOR, width=PREVIEW_KNOB_ARC_WIDTH, tags=(tag, "ui-knob")),
             self.canvas.create_arc(knob_left, knob_top, knob_right, knob_bottom, start=PREVIEW_KNOB_ARC_START, extent=value_extent, style="arc", outline=PREVIEW_KNOB_VALUE_COLOR, width=PREVIEW_KNOB_ARC_WIDTH, tags=(tag, "ui-knob")),
         ]
