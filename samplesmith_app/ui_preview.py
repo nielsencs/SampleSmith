@@ -263,7 +263,6 @@ class DecentSamplerUiPreview:
 
     def _draw_top_bar_name(self) -> None:
         name = self.owner.name_var.get().strip() or "Untitled instrument"
-        self.canvas.create_rectangle(300, 17, 445, 35, fill="#6f6f6f", outline="#6f6f6f", tags=("ui-chrome-title",))
         self.canvas.create_text(
             372,
             26,
