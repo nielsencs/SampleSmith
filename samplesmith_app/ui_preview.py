@@ -360,6 +360,10 @@ class DecentSamplerUiPreview:
 
     def _control_fraction(self, control_id: str) -> float:
         specs = {
+            "amp_attack": ("amp_attack_var", 0.0, 10.0),
+            "amp_decay": ("amp_decay_var", 0.0, 25.0),
+            "amp_sustain": ("amp_sustain_var", 0.0, 1.0),
+            "amp_release": ("amp_release_var", 0.0, 25.0),
             "filter_tone": ("lowpass_frequency_var", 0.0, 1.0, tone_control_value_for_frequency),
             "filter_resonance": ("filter_resonance_var", 0.0, 5.0),
             "notch_frequency": ("notch_frequency_var", 60.0, 22000.0),
