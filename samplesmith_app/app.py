@@ -220,6 +220,7 @@ class SampleSmithApp(tk.Tk):
         ttk.Button(project_buttons, text="New", command=self._new_project).pack(side="left", padx=(0, 4))
         ttk.Button(project_buttons, text="Open", command=self._open_project_dialog).pack(side="left", padx=(0, 4))
         ttk.Button(project_buttons, text="Save", command=self._save_project_command).pack(side="left", padx=(0, 4))
+        ttk.Button(project_buttons, text="Save As…", command=self._save_project_as_dialog).pack(side="left", padx=(0, 4))
         ttk.Button(project_buttons, text="Rename", command=self._rename_project_dialog).pack(side="left", padx=(0, 4))
         import_buttons = ttk.Frame(identity)
         import_buttons.grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 6))
@@ -934,6 +935,69 @@ class SampleSmithApp(tk.Tk):
         self._remember_last_project(target)
         return target
 
+    @staticmethod
+    def _project_name_from_save_path(path: Path) -> str:
+        name = path.name
+        if name.endswith(".samplesmith.json"):
+            return name[: -len(".samplesmith.json")] or path.parent.name
+        if name.endswith(".json"):
+            return name[: -len(".json")] or path.parent.name
+        return path.stem or path.parent.name
+
+    def _normal_project_save_path(self, chosen: Path) -> Path:
+        chosen = chosen.expanduser()
+        name = self._project_name_from_save_path(chosen)
+        slug = slugify(name)
+        if chosen.parent.name == slug:
+            return chosen.parent / f"{slug}.samplesmith.json"
+        return chosen.parent / slug / f"{slug}.samplesmith.json"
+
+    def _copy_and_remap_project_paths(self, old_dir: Path, new_dir: Path) -> None:
+        if old_dir.resolve() == new_dir.resolve():
+            new_dir.mkdir(parents=True, exist_ok=True)
+            return
+        new_dir.mkdir(parents=True, exist_ok=True)
+        for sample in self.samples:
+            try:
+                relative = sample.path.relative_to(old_dir)
+            except ValueError:
+                continue
+            target = new_dir / relative
+            if sample.path.exists() and sample.path.resolve() != target.resolve():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(sample.path, target)
+            sample.path = target
+            if sample.source_paths:
+                remapped = []
+                for source_path in sample.source_paths:
+                    try:
+                        source_relative = source_path.relative_to(old_dir)
+                    except ValueError:
+                        remapped.append(source_path)
+                        continue
+                    source_target = new_dir / source_relative
+                    if source_path.exists() and source_path.resolve() != source_target.resolve():
+                        source_target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(source_path, source_target)
+                    remapped.append(source_target)
+                sample.source_paths = remapped
+
+    def _save_project_as(self, chosen: Path) -> Path:
+        target = self._normal_project_save_path(chosen)
+        new_name = self._project_name_from_save_path(target)
+        old_dir = self._instrument_dir()
+        new_dir = target.parent
+
+        self.name_var.set(new_name)
+        self.output_var.set(str(new_dir.parent))
+        self.project_path = target
+        self._copy_and_remap_project_paths(old_dir, new_dir)
+        if self.samples:
+            self._write_preset()
+        saved = self._save_project(target)
+        self._rebuild_trees_from_project()
+        return saved
+
     def _settings_path(self) -> Path:
         override = os.environ.get("SAMPLESMITH_SETTINGS_PATH")
         if override:
@@ -1036,9 +1100,12 @@ class SampleSmithApp(tk.Tk):
         )
         if not chosen:
             return None
-        saved = self._save_project(Path(chosen))
+        saved = self._save_project_as(Path(chosen))
         self._log(f"Saved project: {saved}")
         return saved
+
+    def _save_project_as_dialog(self) -> Path | None:
+        return self._save_project_dialog()
 
     def _save_project_command(self) -> Path | None:
         try:

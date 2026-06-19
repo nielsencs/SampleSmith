@@ -276,19 +276,19 @@ class DecentSamplerUiPreview:
             self.panel_controls[title] = [str(control["id"]) for control in group_controls]
             if title == "Envelope":
                 left = min(int(control["x"]) + PREVIEW_ORIGIN_X for control in group_controls)
-                top = min(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_KNOB_VISIBLE_OUTER_INSET_Y for control in group_controls)
+                top = min(int(control["y"]) + PREVIEW_ORIGIN_Y for control in group_controls)
                 right = max(int(control["x"]) + PREVIEW_ORIGIN_X + UI_BAR_WIDTH for control in group_controls)
-                bottom = max(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_KNOB_VISIBLE_OUTER_INSET_Y + UI_KNOB_VISIBLE_OUTER_WIDTH for control in group_controls)
+                bottom = max(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_BAR_HEIGHT for control in group_controls)
             else:
-                left = min(int(control["x"]) + PREVIEW_ORIGIN_X + UI_KNOB_VISIBLE_OUTER_INSET_X for control in group_controls)
-                top = min(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_KNOB_VISIBLE_OUTER_INSET_Y for control in group_controls)
-                right = max(int(control["x"]) + PREVIEW_ORIGIN_X + UI_KNOB_VISIBLE_OUTER_INSET_X + UI_KNOB_VISIBLE_OUTER_WIDTH for control in group_controls)
-                bottom = max(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_KNOB_VISIBLE_OUTER_INSET_Y + UI_KNOB_VISIBLE_OUTER_WIDTH for control in group_controls)
+                left = min(int(control["x"]) + PREVIEW_ORIGIN_X for control in group_controls)
+                top = min(int(control["y"]) + PREVIEW_ORIGIN_Y for control in group_controls)
+                right = max(int(control["x"]) + PREVIEW_ORIGIN_X + UI_KNOB_WIDTH for control in group_controls)
+                bottom = max(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_KNOB_WIDTH for control in group_controls)
             x1 = max(0, left - UI_GROUP_PADDING)
             y1 = max(0, top - UI_GROUP_TOP_PADDING)
             x2 = min(DECENT_SAMPLER_UI_WIDTH, right + UI_GROUP_PADDING)
             y2 = min(DECENT_SAMPLER_UI_HEIGHT, bottom + UI_GROUP_PADDING)
-            rectangle = self.canvas.create_rectangle(x1, y1, x2, y2, fill="#eee6dc", outline="#8a6a82", stipple="gray25", tags=(panel_tag, "ui-panel"))
+            rectangle = self.canvas.create_rectangle(x1, y1, x2, y2, fill="", outline="#8a6a82", tags=(panel_tag, "ui-panel"))
             label = self.canvas.create_text(
                 x1 + (x2 - x1) // 2,
                 y1 + 2 + UI_GROUP_TITLE_HEIGHT // 2,
@@ -308,17 +308,17 @@ class DecentSamplerUiPreview:
         canvas_x = x + PREVIEW_ORIGIN_X
         canvas_y = y + PREVIEW_ORIGIN_Y
         control_width = UI_BAR_WIDTH
-        bar_width = 18
-        bar_height = 38
+        bar_width = 14
+        bar_height = 42
         bar_left = canvas_x + (control_width - bar_width) // 2
         bar_top = canvas_y + 22
         bar_bottom = bar_top + bar_height
-        fill_top = bar_top + 10
+        fill_top = bar_bottom - max(3, int(round(bar_height * self._control_fraction(control_id))))
         items = [
             self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + control_width, canvas_y + UI_BAR_HEIGHT, outline="", tags=(tag, "ui-knob")),
             self.canvas.create_text(canvas_x + control_width // 2, canvas_y + 10, text=label, fill="#330033", font=("TkDefaultFont", 8), tags=(tag, "ui-knob")),
-            self.canvas.create_rectangle(bar_left, bar_top, bar_left + bar_width, bar_bottom, outline="#330033", width=2, tags=(tag, "ui-knob")),
-            self.canvas.create_rectangle(bar_left + 4, fill_top, bar_left + bar_width - 4, bar_bottom - 4, fill="#330033", outline="#330033", tags=(tag, "ui-knob")),
+            self.canvas.create_rectangle(bar_left, bar_top, bar_left + bar_width, bar_bottom, outline=PREVIEW_KNOB_TRACK_COLOR, width=2, tags=(tag, "ui-knob")),
+            self.canvas.create_rectangle(bar_left + 3, fill_top, bar_left + bar_width - 3, bar_bottom - 3, fill=PREVIEW_KNOB_VALUE_COLOR, outline=PREVIEW_KNOB_VALUE_COLOR, tags=(tag, "ui-knob")),
         ]
         self.canvas_items[control_id] = items
         self.canvas.tag_bind(tag, "<ButtonPress-1>", self._start_drag)

@@ -14,22 +14,22 @@ OFFICIAL_BOILERPLATE_PATH = ASSETS_DIR / "official-boilerplate.dspreset"
 OFFICIAL_TONE_TRANSLATION_TABLE = "0,33;0.3,150;0.4,450;0.5,1100;0.7,4100;0.9,11000;1.0001,22000"
 DECENT_SAMPLER_UI_WIDTH = 812
 DECENT_SAMPLER_UI_HEIGHT = 375
-UI_KNOB_COLUMNS = 8
+UI_KNOB_COLUMNS = 10
 UI_KNOB_STEP_X = 70
-UI_KNOB_STEP_Y = 95
+UI_KNOB_STEP_Y = 70
 UI_KNOB_WIDTH = 72
 UI_BAR_WIDTH = 42
 UI_BAR_HEIGHT = 72
 UI_BAR_STEP_X = 34
 UI_BAR_GROUP_GRID_SLOTS = 3
 UI_KNOB_START_X = 30
-UI_KNOB_START_Y = 75
+UI_KNOB_START_Y = 64
 UI_KNOB_MIN_Y = 30
-UI_KNOB_MAX_X = 725
-UI_KNOB_MAX_Y = 265
+UI_KNOB_MAX_X = 735
+UI_KNOB_MAX_Y = 204
 UI_GROUP_TITLE_HEIGHT = 20
-UI_GROUP_PADDING = 3
-UI_GROUP_TOP_PADDING = 30
+UI_GROUP_PADDING = 6
+UI_GROUP_TOP_PADDING = 24
 UI_GROUP_TITLE_GAP = 8
 UI_KNOB_GAP = 6
 UI_KNOB_VISIBLE_INSET_X = 9
@@ -48,7 +48,7 @@ OFFICIAL_KNOB_STYLE = {
 }
 UI_GROUP_TITLE_STYLE = {
     "textColor": OFFICIAL_KNOB_STYLE["textColor"],
-    "textSize": OFFICIAL_KNOB_STYLE["textSize"],
+    "textSize": "14",
 }
 
 
@@ -508,15 +508,15 @@ def generate_dspreset(
             if compact_bars:
                 positions = [ui_bar_layout_position(control_id, start_index + offset, ui_layout) for offset, control_id in enumerate(control_ids)]
                 left = min(x for x, _y in positions)
-                top = min(y + UI_KNOB_VISIBLE_OUTER_INSET_Y for _x, y in positions)
+                top = min(y for _x, y in positions)
                 right = max(x + UI_BAR_WIDTH for x, _y in positions)
-                bottom = max(y + UI_KNOB_VISIBLE_OUTER_INSET_Y + UI_KNOB_VISIBLE_OUTER_WIDTH for _x, y in positions)
+                bottom = max(y + UI_BAR_HEIGHT for _x, y in positions)
             else:
                 positions = [ui_layout_position(control_id, start_index + offset, ui_layout) for offset, control_id in enumerate(control_ids)]
-                left = min(x + UI_KNOB_VISIBLE_OUTER_INSET_X for x, _y in positions)
-                top = min(y + UI_KNOB_VISIBLE_OUTER_INSET_Y for _x, y in positions)
-                right = max(x + UI_KNOB_VISIBLE_OUTER_INSET_X + UI_KNOB_VISIBLE_OUTER_WIDTH for x, _y in positions)
-                bottom = max(y + UI_KNOB_VISIBLE_OUTER_INSET_Y + UI_KNOB_VISIBLE_OUTER_WIDTH for _x, y in positions)
+                left = min(x for x, _y in positions)
+                top = min(y for _x, y in positions)
+                right = max(x + UI_KNOB_WIDTH for x, _y in positions)
+                bottom = max(y + UI_KNOB_WIDTH for _x, y in positions)
             group_x = max(0, left - UI_GROUP_PADDING)
             group_y = max(0, top - UI_GROUP_TOP_PADDING)
             group_width = min(DECENT_SAMPLER_UI_WIDTH - group_x, right - group_x + UI_GROUP_PADDING)
@@ -529,8 +529,8 @@ def generate_dspreset(
                     "y": str(group_y),
                     "width": str(group_width),
                     "height": str(group_height),
-                    "fillColor": "#0D330033",
-                    "borderColor": "#55330033",
+                    "fillColor": "#00000000",
+                    "borderColor": "#33330033",
                     "borderThickness": "1",
                 },
             )
