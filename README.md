@@ -40,7 +40,9 @@ Set the instrument name and output folder, then work in **Notes**. By default, s
 
 Use **New project** to clear the current app state and start a blank unsaved project; it does not delete saved projects or audio files. If the current project has unsaved changes, SampleSmith asks whether to save, discard, or cancel first. New projects also avoid reusing an existing default project folder blindly. Use **Open project** to return to an existing SampleSmith project; it has the same save/discard/cancel guard.
 
-Use **Review stray audio** if you have copied or recorded audio files into the current instrument/project folders outside SampleSmith. SampleSmith checks only the current instrument folder, its `Samples/` folder, and the project file's own folder one level deep; it does not recurse into neighbouring project folders, guesses root notes from filenames where it can, and asks before importing anything into the mapping.
+Use **Import audio…** to bring selected WAV/FLAC files into the current instrument, or **Import folder…** to import the WAV/FLAC files directly inside a folder. SampleSmith copies imported files into the instrument's `Samples/` folder, guesses root notes from filenames where it can (`Piano_C4.wav`, `note72.flac`, etc.), asks for the root note for each file, then updates the Notes table, project file, and `.dspreset`.
+
+Use **Review stray audio** if you have already copied or recorded audio files into the current instrument/project folders outside SampleSmith. SampleSmith checks only the current instrument folder, its `Samples/` folder, and the project file's own folder one level deep; it does not recurse into neighbouring project folders, guesses root notes from filenames where it can, and asks before importing anything into the mapping.
 
 Output defaults to:
 

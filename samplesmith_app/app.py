@@ -221,13 +221,17 @@ class SampleSmithApp(tk.Tk):
         ttk.Button(project_buttons, text="Open", command=self._open_project_dialog).pack(side="left", padx=(0, 4))
         ttk.Button(project_buttons, text="Save", command=self._save_project_command).pack(side="left", padx=(0, 4))
         ttk.Button(project_buttons, text="Rename", command=self._rename_project_dialog).pack(side="left", padx=(0, 4))
-        ttk.Button(project_buttons, text="Review stray audio", command=self._review_stray_audio).pack(side="left")
+        import_buttons = ttk.Frame(identity)
+        import_buttons.grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 6))
+        ttk.Button(import_buttons, text="Import audio…", command=self._import_audio_files_dialog).pack(side="left", padx=(0, 4))
+        ttk.Button(import_buttons, text="Import folder…", command=self._import_audio_folder_dialog).pack(side="left", padx=(0, 4))
+        ttk.Button(import_buttons, text="Review stray audio", command=self._review_stray_audio).pack(side="left")
 
-        ttk.Label(identity, text="Instrument").grid(row=1, column=0, sticky="w", padx=(0, 4))
-        ttk.Entry(identity, textvariable=self.name_var, width=26).grid(row=1, column=1, sticky="ew")
-        ttk.Label(identity, text="Output").grid(row=2, column=0, sticky="w", padx=(0, 4), pady=(6, 0))
-        ttk.Entry(identity, textvariable=self.output_var, width=42).grid(row=2, column=1, sticky="ew", pady=(6, 0))
-        ttk.Button(identity, text="Browse", command=self._browse_output).grid(row=2, column=2, sticky="e", padx=(6, 0), pady=(6, 0))
+        ttk.Label(identity, text="Instrument").grid(row=2, column=0, sticky="w", padx=(0, 4))
+        ttk.Entry(identity, textvariable=self.name_var, width=26).grid(row=2, column=1, sticky="ew")
+        ttk.Label(identity, text="Output").grid(row=3, column=0, sticky="w", padx=(0, 4), pady=(6, 0))
+        ttk.Entry(identity, textvariable=self.output_var, width=42).grid(row=3, column=1, sticky="ew", pady=(6, 0))
+        ttk.Button(identity, text="Browse", command=self._browse_output).grid(row=3, column=2, sticky="e", padx=(6, 0), pady=(6, 0))
 
         recording = ttk.LabelFrame(project, text="Recording defaults")
         recording.grid(row=0, column=1, sticky="nsew", padx=(0, 6), pady=6)
@@ -1139,6 +1143,115 @@ class SampleSmithApp(tk.Tk):
             if 0 <= note_number <= 127:
                 return str(note_number)
         return ""
+
+    def _root_note_from_audio_filename(self, path: Path) -> int | None:
+        guess = self._guess_note_from_audio_filename(path).strip()
+        if not guess:
+            return None
+        try:
+            try:
+                return int(guess)
+            except ValueError:
+                return name_to_midi(guess)
+        except ValueError:
+            return None
+
+    def _unique_import_sample_path(self, source: Path) -> Path:
+        samples_dir = self._instrument_dir() / "Samples"
+        samples_dir.mkdir(parents=True, exist_ok=True)
+        stem = slugify(source.stem)
+        suffix = source.suffix.lower()
+        candidate = samples_dir / f"{stem}{suffix}"
+        if not candidate.exists() or source.resolve() == candidate.resolve():
+            return candidate
+        counter = 2
+        while True:
+            candidate = samples_dir / f"{stem}_{counter}{suffix}"
+            if not candidate.exists():
+                return candidate
+            counter += 1
+
+    def _copy_import_audio(self, source: Path) -> Path:
+        target = self._unique_import_sample_path(source)
+        if source.resolve() != target.resolve():
+            shutil.copy2(source, target)
+        return target
+
+    def _import_audio_files_dialog(self) -> None:
+        chosen = filedialog.askopenfilenames(
+            title="Import audio files",
+            initialdir=str(Path(self.output_var.get()).expanduser() if self.output_var.get() else Path.cwd()),
+            filetypes=[("Audio files", "*.wav *.flac"), ("WAV", "*.wav"), ("FLAC", "*.flac"), ("All files", "*.*")],
+        )
+        if chosen:
+            self._import_audio_paths([Path(path) for path in chosen])
+
+    def _import_audio_folder_dialog(self) -> None:
+        chosen = filedialog.askdirectory(
+            title="Import audio folder",
+            initialdir=str(Path(self.output_var.get()).expanduser() if self.output_var.get() else Path.cwd()),
+        )
+        if not chosen:
+            return
+        folder = Path(chosen)
+        audio_paths = sorted(path for path in folder.iterdir() if path.is_file() and path.suffix.lower() in {".wav", ".flac"})
+        if not audio_paths:
+            messagebox.showinfo("SampleSmith", "No WAV or FLAC files found in that folder.")
+            return
+        self._import_audio_paths(audio_paths)
+
+    def _import_audio_paths(self, audio_paths: list[Path]) -> None:
+        imported = 0
+        skipped = 0
+        imported_roots: list[int] = []
+        for source in audio_paths:
+            if source.suffix.lower() not in {".wav", ".flac"}:
+                skipped += 1
+                self._log(f"Skipped non-audio file: {source.name}")
+                continue
+            root_note = self._root_note_from_audio_filename(source)
+            initial = midi_to_name(root_note) if root_note is not None else ""
+            note_text = simpledialog.askstring(
+                "Import audio",
+                f"Root note for {source.name}?\n\nUse a DS note such as C4, F#3, or a key number like 72.\nLeave blank to skip this file.",
+                initialvalue=initial,
+            )
+            if note_text is None:
+                skipped += 1
+                continue
+            note_text = note_text.strip()
+            if not note_text:
+                skipped += 1
+                self._log(f"Skipped imported audio without a root note: {source.name}")
+                continue
+            try:
+                try:
+                    root_note = int(note_text)
+                except ValueError:
+                    root_note = name_to_midi(note_text)
+            except ValueError as exc:
+                skipped += 1
+                messagebox.showwarning("SampleSmith", f"Skipping {source.name}: {exc}")
+                continue
+            target = self._copy_import_audio(source)
+            info = SampleInfo(path=target, root_note=root_note, lo_note=root_note, hi_note=root_note, label=target.stem, mode="pitched")
+            self._upsert_sample(info)
+            imported += 1
+            imported_roots.append(root_note)
+            self._log(f"Imported audio: {source.name} → {target.name} as {midi_to_name(root_note)}")
+        if not imported:
+            self._log(f"No audio files imported ({skipped} skipped).")
+            return
+        if self.low_note is None or self.high_note is None:
+            self.low_note, self.high_note = min(imported_roots), max(imported_roots)
+            self.low_var.set(midi_to_name(self.low_note))
+            self.high_var.set(midi_to_name(self.high_note))
+            self.low_entry_var.set(midi_to_name(self.low_note))
+            self.high_entry_var.set(midi_to_name(self.high_note))
+        self._refresh_pitched_mappings()
+        preset = self._write_preset()
+        self._auto_save_project()
+        self._log(f"Imported {imported} audio file(s), skipped {skipped}, and updated {preset.name}")
 
     def _stray_audio_candidates(self) -> list[Path]:
         roots = [self._instrument_dir(), self._instrument_dir() / "Samples"]
