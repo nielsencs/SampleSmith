@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from tkinter import font as tkfont
 from pathlib import Path
 from tkinter import ttk
 from typing import Protocol
@@ -50,6 +51,10 @@ PREVIEW_KNOB_ARC_INSET_Y = 28
 PREVIEW_KNOB_ARC_SIZE = 38
 PREVIEW_KNOB_TRACK_COLOR = "#bfb9b9"
 PREVIEW_KNOB_VALUE_COLOR = "#252025"
+PREVIEW_TITLE_FONT_FAMILY = "Arial Narrow"
+PREVIEW_TITLE_FALLBACK_FONT_FAMILY = "Liberation Sans Narrow"
+PREVIEW_BAR_LABEL_COLOR = "#330033"
+PREVIEW_BAR_VALUE_COLOR = "#4c3f4c"
 
 
 class UiPreviewOwner(Protocol):
@@ -144,6 +149,7 @@ class DecentSamplerUiPreview:
         self.panel_tags: dict[str, str] = {}
         self.drag: dict[str, int | str] | None = None
         self.background_image: tk.PhotoImage | None = None
+        self.title_font: tkfont.Font | None = None
         if BARE_LAYOUT_IMAGE.exists():
             self.background_image = tk.PhotoImage(file=str(BARE_LAYOUT_IMAGE))
 
@@ -277,12 +283,17 @@ class DecentSamplerUiPreview:
         height = title_layout["height"]
         tag = "ui-title"
         hitbox = self.canvas.create_rectangle(x, y, x + width, y + height, outline="#b9a7b9", fill="", tags=(tag,))
+        title_size = max(9, int(title_layout["textSize"] * 0.58))
+        title_font = tkfont.Font(family=PREVIEW_TITLE_FONT_FAMILY, size=title_size)
+        if title_font.actual("family") == "Arial":
+            title_font = tkfont.Font(family=PREVIEW_TITLE_FALLBACK_FONT_FAMILY, size=title_size)
+        self.title_font = title_font
         text = self.canvas.create_text(
             x + width // 2,
             y + height // 2,
             text=name,
             fill="#3b143b",
-            font=("TkDefaultFont", max(9, int(title_layout["textSize"] * 0.58))),
+            font=title_font,
             tags=(tag,),
         )
         self.title_items = [hitbox, text]
@@ -332,22 +343,47 @@ class DecentSamplerUiPreview:
         canvas_x = x + PREVIEW_ORIGIN_X
         canvas_y = y + PREVIEW_ORIGIN_Y
         control_width = UI_BAR_WIDTH
-        bar_width = 14
-        bar_height = 42
+        bar_width = 16
+        bar_height = 38
         bar_left = canvas_x + (control_width - bar_width) // 2
-        bar_top = canvas_y + 22
+        bar_top = canvas_y + 20
         bar_bottom = bar_top + bar_height
-        fill_top = bar_bottom - max(3, int(round(bar_height * self._control_fraction(control_id))))
+        fill_top = bar_bottom - max(3, int(round((bar_height - 5) * self._control_fraction(control_id))))
         items = [
             self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + control_width, canvas_y + UI_BAR_HEIGHT, outline="", tags=(tag, "ui-knob")),
-            self.canvas.create_text(canvas_x + control_width // 2, canvas_y + 10, text=label, fill="#330033", font=("TkDefaultFont", 8), tags=(tag, "ui-knob")),
-            self.canvas.create_rectangle(bar_left, bar_top, bar_left + bar_width, bar_bottom, outline=PREVIEW_KNOB_TRACK_COLOR, width=2, tags=(tag, "ui-knob")),
+            self.canvas.create_text(canvas_x + control_width // 2, canvas_y + 9, text=label, fill=PREVIEW_BAR_LABEL_COLOR, font=("TkDefaultFont", 8), tags=(tag, "ui-knob")),
+            self.canvas.create_rectangle(bar_left, bar_top, bar_left + bar_width, bar_bottom, fill="#efe9ef", outline=PREVIEW_KNOB_TRACK_COLOR, width=1, tags=(tag, "ui-knob")),
             self.canvas.create_rectangle(bar_left + 3, fill_top, bar_left + bar_width - 3, bar_bottom - 3, fill=PREVIEW_KNOB_VALUE_COLOR, outline=PREVIEW_KNOB_VALUE_COLOR, tags=(tag, "ui-knob")),
+            self.canvas.create_text(canvas_x + control_width // 2, canvas_y + UI_BAR_HEIGHT - 7, text=self._control_display_value(control_id), fill=PREVIEW_BAR_VALUE_COLOR, font=("TkDefaultFont", 7), tags=(tag, "ui-knob")),
         ]
         self.canvas_items[control_id] = items
         self.canvas.tag_bind(tag, "<ButtonPress-1>", self._start_drag)
         self.canvas.tag_bind(tag, "<B1-Motion>", self._drag_knob)
         self.canvas.tag_bind(tag, "<ButtonRelease-1>", self._end_drag)
+
+    def _control_display_value(self, control_id: str) -> str:
+        specs = {
+            "amp_attack": ("amp_attack_var", "s"),
+            "amp_decay": ("amp_decay_var", "s"),
+            "amp_sustain": ("amp_sustain_var", "%"),
+            "amp_release": ("amp_release_var", "s"),
+        }
+        spec = specs.get(control_id)
+        if spec is None:
+            return ""
+        variable_name, unit = spec
+        variable = getattr(self.owner, variable_name, None)
+        if variable is None:
+            return ""
+        try:
+            value = float(variable.get())
+        except (TypeError, ValueError, tk.TclError):
+            return ""
+        if unit == "%":
+            return f"{round(value * 100):.0f}%"
+        if value < 1:
+            return f"{value:.2f}s"
+        return f"{value:.1f}s"
 
     def _control_fraction(self, control_id: str) -> float:
         specs = {
