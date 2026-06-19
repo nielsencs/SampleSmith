@@ -19,6 +19,11 @@ UI_TITLE_Y = 18
 UI_TITLE_WIDTH = 744
 UI_TITLE_HEIGHT = 22
 UI_TITLE_TEXT_SIZE = 18
+UI_TITLE_ID = "instrument_title"
+UI_TITLE_MIN_WIDTH = 120
+UI_TITLE_MIN_HEIGHT = 14
+UI_TITLE_MIN_TEXT_SIZE = 8
+UI_TITLE_MAX_TEXT_SIZE = 36
 UI_KNOB_COLUMNS = 10
 UI_KNOB_STEP_X = 70
 UI_KNOB_STEP_Y = 70
@@ -109,6 +114,29 @@ def ui_layout_position(control_id: str, index: int, ui_layout: dict[str, object]
 def ui_bar_layout_position(control_id: str, index: int, ui_layout: dict[str, object] | None) -> tuple[int, int]:
     default_x, default_y = default_ui_bar_position(index)
     return ui_layout_position_from_default(control_id, default_x, default_y, ui_layout)
+
+
+def ui_title_layout(ui_layout: dict[str, object] | None) -> dict[str, int]:
+    layout = {
+        "x": UI_TITLE_X,
+        "y": UI_TITLE_Y,
+        "width": UI_TITLE_WIDTH,
+        "height": UI_TITLE_HEIGHT,
+        "textSize": UI_TITLE_TEXT_SIZE,
+    }
+    if ui_layout and isinstance(ui_layout.get(UI_TITLE_ID), dict):
+        raw = ui_layout[UI_TITLE_ID]
+        for key in layout:
+            try:
+                layout[key] = int(float(raw.get(key, layout[key])))
+            except (TypeError, ValueError):
+                pass
+    layout["textSize"] = max(UI_TITLE_MIN_TEXT_SIZE, min(UI_TITLE_MAX_TEXT_SIZE, layout["textSize"]))
+    layout["height"] = max(UI_TITLE_MIN_HEIGHT, min(80, layout["height"]))
+    layout["width"] = max(UI_TITLE_MIN_WIDTH, min(DECENT_SAMPLER_UI_WIDTH, layout["width"]))
+    layout["x"] = max(0, min(DECENT_SAMPLER_UI_WIDTH - layout["width"], layout["x"]))
+    layout["y"] = max(0, min(DECENT_SAMPLER_UI_HEIGHT - layout["height"], layout["y"]))
+    return layout
 
 def generate_dspreset(
     instrument_name: str,
@@ -322,17 +350,18 @@ def generate_dspreset(
             },
         )
         tab = ET.SubElement(ui, "tab", {"name": "main"})
+        title_layout = ui_title_layout(ui_layout)
         ET.SubElement(
             tab,
             "label",
             {
-                "x": str(UI_TITLE_X),
-                "y": str(UI_TITLE_Y),
-                "width": str(UI_TITLE_WIDTH),
-                "height": str(UI_TITLE_HEIGHT),
+                "x": str(title_layout["x"]),
+                "y": str(title_layout["y"]),
+                "width": str(title_layout["width"]),
+                "height": str(title_layout["height"]),
                 "text": instrument_name,
                 "textColor": "DD330033",
-                "textSize": str(UI_TITLE_TEXT_SIZE),
+                "textSize": str(title_layout["textSize"]),
                 "hAlign": "center",
             },
         )
