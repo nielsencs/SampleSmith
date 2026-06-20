@@ -8,6 +8,11 @@ from pathlib import Path
 from tkinter import ttk
 from typing import Protocol
 
+try:
+    from PIL import Image, ImageDraw, ImageTk
+except ImportError:  # pragma: no cover - optional preview polish fallback
+    Image = ImageDraw = ImageTk = None
+
 from .dspreset import (
     DECENT_SAMPLER_UI_HEIGHT,
     DECENT_SAMPLER_UI_WIDTH,
@@ -56,6 +61,7 @@ PREVIEW_TITLE_FALLBACK_FONT_FAMILY = "Liberation Sans Narrow"
 PREVIEW_PANEL_OUTLINE_COLOR = "#c7b9c7"
 PREVIEW_PANEL_LABEL_COLOR = "#555055"
 PREVIEW_BAR_LABEL_COLOR = PREVIEW_PANEL_LABEL_COLOR
+PREVIEW_ANTIALIAS_SCALE = 4
 
 
 class UiPreviewOwner(Protocol):
@@ -148,6 +154,7 @@ class DecentSamplerUiPreview:
         self.panel_items: dict[str, list[int]] = {}
         self.panel_controls: dict[str, list[str]] = {}
         self.panel_tags: dict[str, str] = {}
+        self.control_images: list[tk.PhotoImage] = []
         self.drag: dict[str, int | str] | None = None
         self.background_image: tk.PhotoImage | None = None
         self.title_font: tkfont.Font | None = None
@@ -242,6 +249,7 @@ class DecentSamplerUiPreview:
         self.panel_items = {}
         self.panel_controls = {}
         self.panel_tags = {}
+        self.control_images = []
         if self.background_image is not None:
             self.canvas.create_image(0, 0, anchor="nw", image=self.background_image)
         else:
@@ -351,20 +359,38 @@ class DecentSamplerUiPreview:
         bar_top = canvas_y + 21
         bar_bottom = bar_top + bar_height
         fill_pixels = int(round((bar_height - 3) * self._control_fraction(control_id)))
-        items = [
-            self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + control_width, canvas_y + UI_BAR_HEIGHT, outline="", tags=(tag, "ui-knob")),
-            self.canvas.create_text(canvas_x + control_width // 2, canvas_y + 9, text=label, fill=PREVIEW_BAR_LABEL_COLOR, font=("TkDefaultFont", 8), tags=(tag, "ui-knob")),
-            self.canvas.create_rectangle(bar_left, bar_top, bar_left + bar_width, bar_bottom, fill="", outline=PREVIEW_KNOB_TRACK_COLOR, width=1, tags=(tag, "ui-knob")),
-        ]
-        if fill_pixels > 0:
-            fill_top = bar_bottom - 2 - fill_pixels
-            items.append(
-                self.canvas.create_rectangle(bar_left + 2, fill_top, bar_left + bar_width - 2, bar_bottom - 2, fill=PREVIEW_KNOB_VALUE_COLOR, outline=PREVIEW_KNOB_VALUE_COLOR, tags=(tag, "ui-knob"))
-            )
+        image = self._bar_image(fill_pixels, bar_width, bar_height)
+        items = [self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + control_width, canvas_y + UI_BAR_HEIGHT, outline="", tags=(tag, "ui-knob"))]
+        if image is not None:
+            self.control_images.append(image)
+            items.append(self.canvas.create_image(canvas_x, canvas_y, image=image, anchor="nw", tags=(tag, "ui-knob")))
+        else:
+            items.append(self.canvas.create_rectangle(bar_left, bar_top, bar_left + bar_width, bar_bottom, fill="", outline=PREVIEW_KNOB_TRACK_COLOR, width=1, tags=(tag, "ui-knob")))
+            if fill_pixels > 0:
+                fill_top = bar_bottom - 2 - fill_pixels
+                items.append(self.canvas.create_rectangle(bar_left + 2, fill_top, bar_left + bar_width - 2, bar_bottom - 2, fill=PREVIEW_KNOB_VALUE_COLOR, outline=PREVIEW_KNOB_VALUE_COLOR, tags=(tag, "ui-knob")))
+        items.append(self.canvas.create_text(canvas_x + control_width // 2, canvas_y + 9, text=label, fill=PREVIEW_BAR_LABEL_COLOR, font=("TkDefaultFont", 8), tags=(tag, "ui-knob")))
         self.canvas_items[control_id] = items
         self.canvas.tag_bind(tag, "<ButtonPress-1>", self._start_drag)
         self.canvas.tag_bind(tag, "<B1-Motion>", self._drag_knob)
         self.canvas.tag_bind(tag, "<ButtonRelease-1>", self._end_drag)
+
+    def _bar_image(self, fill_pixels: int, bar_width: int, bar_height: int) -> tk.PhotoImage | None:
+        if Image is None or ImageDraw is None or ImageTk is None:
+            return None
+        scale = PREVIEW_ANTIALIAS_SCALE
+        image = Image.new("RGBA", (UI_BAR_WIDTH * scale, UI_BAR_HEIGHT * scale), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        left = ((UI_BAR_WIDTH - bar_width) // 2) * scale
+        top = 21 * scale
+        right = left + bar_width * scale
+        bottom = top + bar_height * scale
+        draw.rectangle((left, top, right, bottom), outline=PREVIEW_KNOB_TRACK_COLOR, width=scale)
+        if fill_pixels > 0:
+            fill_top = bottom - 2 * scale - fill_pixels * scale
+            draw.rectangle((left + 2 * scale, fill_top, right - 2 * scale, bottom - 2 * scale), fill=PREVIEW_KNOB_VALUE_COLOR)
+        image = image.resize((UI_BAR_WIDTH, UI_BAR_HEIGHT), Image.Resampling.LANCZOS)
+        return ImageTk.PhotoImage(image)
 
     def _control_fraction(self, control_id: str) -> float:
         specs = {
@@ -429,22 +455,50 @@ class DecentSamplerUiPreview:
         tag = f"ui:{control_id}"
         canvas_x = x + PREVIEW_ORIGIN_X
         canvas_y = y + PREVIEW_ORIGIN_Y
-        knob_left = canvas_x + PREVIEW_KNOB_ARC_INSET_X
-        knob_top = canvas_y + PREVIEW_KNOB_ARC_INSET_Y
-        knob_right = knob_left + PREVIEW_KNOB_ARC_SIZE
-        knob_bottom = knob_top + PREVIEW_KNOB_ARC_SIZE
         arc_direction = 1 if PREVIEW_KNOB_ARC_EXTENT >= 0 else -1
         value_extent = arc_direction * max(6, int(round(abs(PREVIEW_KNOB_ARC_EXTENT) * self._control_fraction(control_id))))
-        items = [
-            self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + UI_KNOB_WIDTH, canvas_y + UI_KNOB_WIDTH, outline="", tags=(tag, "ui-knob")),
-            self.canvas.create_text(canvas_x + UI_KNOB_WIDTH // 2, canvas_y + 10, text=label, fill="#330033", font=("TkDefaultFont", 8), tags=(tag, "ui-knob")),
-            self.canvas.create_arc(knob_left, knob_top, knob_right, knob_bottom, start=PREVIEW_KNOB_ARC_START, extent=PREVIEW_KNOB_ARC_EXTENT, style="arc", outline=PREVIEW_KNOB_TRACK_COLOR, width=PREVIEW_KNOB_ARC_WIDTH, tags=(tag, "ui-knob")),
-            self.canvas.create_arc(knob_left, knob_top, knob_right, knob_bottom, start=PREVIEW_KNOB_ARC_START, extent=value_extent, style="arc", outline=PREVIEW_KNOB_VALUE_COLOR, width=PREVIEW_KNOB_ARC_WIDTH, tags=(tag, "ui-knob")),
-        ]
+        items = [self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + UI_KNOB_WIDTH, canvas_y + UI_KNOB_WIDTH, outline="", tags=(tag, "ui-knob"))]
+        image = self._knob_image(value_extent)
+        if image is not None:
+            self.control_images.append(image)
+            items.append(self.canvas.create_image(canvas_x, canvas_y, image=image, anchor="nw", tags=(tag, "ui-knob")))
+        else:
+            knob_left = canvas_x + PREVIEW_KNOB_ARC_INSET_X
+            knob_top = canvas_y + PREVIEW_KNOB_ARC_INSET_Y
+            knob_right = knob_left + PREVIEW_KNOB_ARC_SIZE
+            knob_bottom = knob_top + PREVIEW_KNOB_ARC_SIZE
+            items.extend(
+                [
+                    self.canvas.create_arc(knob_left, knob_top, knob_right, knob_bottom, start=PREVIEW_KNOB_ARC_START, extent=PREVIEW_KNOB_ARC_EXTENT, style="arc", outline=PREVIEW_KNOB_TRACK_COLOR, width=PREVIEW_KNOB_ARC_WIDTH, tags=(tag, "ui-knob")),
+                    self.canvas.create_arc(knob_left, knob_top, knob_right, knob_bottom, start=PREVIEW_KNOB_ARC_START, extent=value_extent, style="arc", outline=PREVIEW_KNOB_VALUE_COLOR, width=PREVIEW_KNOB_ARC_WIDTH, tags=(tag, "ui-knob")),
+                ]
+            )
+        items.append(self.canvas.create_text(canvas_x + UI_KNOB_WIDTH // 2, canvas_y + 10, text=label, fill="#330033", font=("TkDefaultFont", 8), tags=(tag, "ui-knob")))
         self.canvas_items[control_id] = items
         self.canvas.tag_bind(tag, "<ButtonPress-1>", self._start_drag)
         self.canvas.tag_bind(tag, "<B1-Motion>", self._drag_knob)
         self.canvas.tag_bind(tag, "<ButtonRelease-1>", self._end_drag)
+
+    def _knob_image(self, value_extent: int) -> tk.PhotoImage | None:
+        if Image is None or ImageDraw is None or ImageTk is None:
+            return None
+        scale = PREVIEW_ANTIALIAS_SCALE
+        image = Image.new("RGBA", (UI_KNOB_WIDTH * scale, UI_KNOB_WIDTH * scale), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        box = tuple(
+            value * scale
+            for value in (
+                PREVIEW_KNOB_ARC_INSET_X,
+                PREVIEW_KNOB_ARC_INSET_Y,
+                PREVIEW_KNOB_ARC_INSET_X + PREVIEW_KNOB_ARC_SIZE,
+                PREVIEW_KNOB_ARC_INSET_Y + PREVIEW_KNOB_ARC_SIZE,
+            )
+        )
+        width = PREVIEW_KNOB_ARC_WIDTH * scale
+        draw.arc(box, start=PREVIEW_KNOB_ARC_START, end=PREVIEW_KNOB_ARC_START + PREVIEW_KNOB_ARC_EXTENT, fill=PREVIEW_KNOB_TRACK_COLOR, width=width)
+        draw.arc(box, start=PREVIEW_KNOB_ARC_START, end=PREVIEW_KNOB_ARC_START + value_extent, fill=PREVIEW_KNOB_VALUE_COLOR, width=width)
+        image = image.resize((UI_KNOB_WIDTH, UI_KNOB_WIDTH), Image.Resampling.LANCZOS)
+        return ImageTk.PhotoImage(image)
 
     def _control_id_from_event(self) -> str | None:
         current = self.canvas.find_withtag("current")
@@ -474,6 +528,42 @@ class DecentSamplerUiPreview:
             else:
                 positions[control_id] = {"x": int(current["x"]), "y": int(current["y"])}
         return positions
+
+    def _control_size(self, control_id: str) -> tuple[int, int]:
+        controls = {str(control["id"]): control for control in self.visible_controls()}
+        control = controls.get(control_id)
+        if control is not None and str(control["group"]) == "Envelope":
+            return UI_BAR_WIDTH, UI_BAR_HEIGHT
+        return UI_KNOB_WIDTH, UI_KNOB_WIDTH
+
+    def _panel_bounds(self, title: str, positions: dict[str, dict[str, int]]) -> tuple[int, int, int, int] | None:
+        control_ids = self.panel_controls.get(title, [])
+        controls = {str(control["id"]): control for control in self.visible_controls()}
+        bounds: list[tuple[int, int, int, int]] = []
+        for control_id in control_ids:
+            position = positions.get(control_id)
+            if position is None:
+                continue
+            width, height = (UI_BAR_WIDTH, UI_BAR_HEIGHT) if controls.get(control_id, {}).get("group") == "Envelope" else (UI_KNOB_WIDTH, UI_KNOB_WIDTH)
+            bounds.append((position["x"], position["y"], position["x"] + width, position["y"] + height))
+        if not bounds:
+            return None
+        left = min(bound[0] for bound in bounds)
+        top = min(bound[1] for bound in bounds)
+        right = max(bound[2] for bound in bounds)
+        bottom = max(bound[3] for bound in bounds)
+        return (
+            max(0, left - UI_GROUP_PADDING),
+            max(0, top - UI_GROUP_TOP_PADDING),
+            min(DECENT_SAMPLER_UI_WIDTH, right + UI_GROUP_PADDING),
+            min(DECENT_SAMPLER_UI_HEIGHT, bottom + UI_GROUP_PADDING),
+        )
+
+    def _clamp_control_position(self, control_id: str, x: int, y: int) -> tuple[int, int]:
+        width, height = self._control_size(control_id)
+        max_x = min(UI_KNOB_MAX_X, DECENT_SAMPLER_UI_WIDTH - width)
+        max_y = min(UI_KNOB_MAX_Y, DECENT_SAMPLER_UI_HEIGHT - height - UI_GROUP_PADDING)
+        return max(0, min(max_x, x)), max(UI_KNOB_MIN_Y, min(max_y, y))
 
     def _controls_by_group(self) -> dict[str, list[dict[str, object]]]:
         groups: dict[str, list[dict[str, object]]] = {}
@@ -588,8 +678,7 @@ class DecentSamplerUiPreview:
             if control is None:
                 return
             current = {"x": int(control["x"]), "y": int(control["y"])}
-        new_x = max(0, min(UI_KNOB_MAX_X, current["x"] + int(event.x) - int(self.drag["x"])))
-        new_y = max(UI_KNOB_MIN_Y, min(UI_KNOB_MAX_Y, current["y"] + int(event.y) - int(self.drag["y"])))
+        new_x, new_y = self._clamp_control_position(control_id, current["x"] + int(event.x) - int(self.drag["x"]), current["y"] + int(event.y) - int(self.drag["y"]))
         dx = new_x - current["x"]
         dy = new_y - current["y"]
         if dx == 0 and dy == 0:
@@ -611,12 +700,12 @@ class DecentSamplerUiPreview:
             return
         requested_dx = int(event.x) - int(self.drag["x"])
         requested_dy = int(event.y) - int(self.drag["y"])
-        min_x = min(pos["x"] for pos in current_positions)
-        max_x = max(pos["x"] for pos in current_positions)
-        min_y = min(pos["y"] for pos in current_positions)
-        max_y = max(pos["y"] for pos in current_positions)
-        dx = max(-min_x, min(UI_KNOB_MAX_X - max_x, requested_dx))
-        dy = max(UI_KNOB_MIN_Y - min_y, min(UI_KNOB_MAX_Y - max_y, requested_dy))
+        panel_bounds = self._panel_bounds(title, positions)
+        if panel_bounds is None:
+            return
+        left, top, right, bottom = panel_bounds
+        dx = max(-left, min(DECENT_SAMPLER_UI_WIDTH - right, requested_dx))
+        dy = max(-top, min(UI_KNOB_MAX_Y + UI_KNOB_WIDTH + UI_GROUP_PADDING - bottom, requested_dy))
         if dx == 0 and dy == 0:
             return
         for item in self.panel_items.get(title, []):

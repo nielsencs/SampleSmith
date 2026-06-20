@@ -264,7 +264,7 @@ class SampleSmithApp(tk.Tk):
     def _build_pitched_tab(self) -> None:
         controls = ttk.Frame(self.pitched_tab)
         controls.pack(fill="x")
-        ttk.Button(controls, text="Record lowest note", command=lambda: self._detect_note("low")).pack(side="left")
+        ttk.Button(controls, text="Detect lowest", command=lambda: self._detect_note("low")).pack(side="left")
         self.low_var = tk.StringVar(value="not set")
         ttk.Label(controls, textvariable=self.low_var, width=10).pack(side="left", padx=3)
         self.low_entry_var = tk.StringVar()
@@ -273,7 +273,7 @@ class SampleSmithApp(tk.Tk):
         low_entry.bind("<Return>", lambda _event: self._set_note_from_entry("low"))
         low_entry.bind("<KP_Enter>", lambda _event: self._set_note_from_entry("low"))
         ttk.Button(controls, text="Set", command=lambda: self._set_note_from_entry("low")).pack(side="left", padx=(2, 8))
-        ttk.Button(controls, text="Record highest note", command=lambda: self._detect_note("high")).pack(side="left")
+        ttk.Button(controls, text="Detect highest", command=lambda: self._detect_note("high")).pack(side="left")
         self.high_var = tk.StringVar(value="not set")
         ttk.Label(controls, textvariable=self.high_var, width=10).pack(side="left", padx=3)
         self.high_entry_var = tk.StringVar()
@@ -284,7 +284,7 @@ class SampleSmithApp(tk.Tk):
         ttk.Button(controls, text="Set", command=lambda: self._set_note_from_entry("high")).pack(side="left", padx=(2, 8))
         ttk.Label(controls, text="Step").pack(side="left", padx=(4, 2))
         self.step_var = tk.IntVar(value=1)
-        ttk.Spinbox(controls, textvariable=self.step_var, from_=1, to=12, width=4, command=self._on_note_range_changed).pack(side="left")
+        ttk.Spinbox(controls, textvariable=self.step_var, from_=1, to=12, width=4).pack(side="left")
         ttk.Button(controls, text="Build note list", command=self._build_note_list).pack(side="left", padx=8)
 
         notes_area = ttk.Frame(self.pitched_tab)
@@ -1652,23 +1652,6 @@ class SampleSmithApp(tk.Tk):
             self.high_var.set(note_name)
             self.high_entry_var.set(note_name)
         self._log(f"Set {which} note to {note_name}")
-        self._on_note_range_changed()
-
-    def _on_note_range_changed(self) -> None:
-        if self.low_note is None or self.high_note is None:
-            self._auto_save_project()
-            return
-        self._refresh_pitched_mappings()
-        if self.samples:
-            try:
-                preset = self._write_preset()
-            except Exception as exc:
-                self._log(f"Could not update DecentSampler patch after range change: {exc}")
-                return
-            self._log(f"Updated note range and DecentSampler patch: {preset.name}")
-        else:
-            self._log("Updated note range")
-        self._auto_save_project()
 
     def _detect_note(self, which: str) -> None:
         if not messagebox.askokcancel("SampleSmith", f"After pressing OK, sing/play your {which} usable note for 2.5 seconds."):
@@ -1694,14 +1677,13 @@ class SampleSmithApp(tk.Tk):
                         self.high_var.set(name)
                         self.high_entry_var.set(name)
                     self._log(f"Set {which} note to {name}")
-                    self._on_note_range_changed()
             return apply
 
         self._run_worker("Detecting pitch...", work)
 
     def _build_note_list(self) -> None:
         if self.low_note is None or self.high_note is None:
-            messagebox.showwarning("SampleSmith", "Record lowest and highest notes first.")
+            messagebox.showwarning("SampleSmith", "Set lowest and highest notes first.")
             return
         for item in self.note_tree.get_children():
             self.note_tree.delete(item)
