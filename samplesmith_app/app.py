@@ -1437,7 +1437,10 @@ class SampleSmithApp(tk.Tk):
     def _load_project_data(self, data: dict[str, object], project_path: Path | None) -> None:
         self.project_path = project_path
         self.name_var.set(str(data.get("name", "NewInstrument")))
-        self.output_var.set(str(data.get("output", str(Path.cwd() / "samplesmith-projects"))))
+        output = Path(str(data.get("output", str(Path.cwd() / "samplesmith-projects")))).expanduser()
+        if project_path is not None and not output.is_absolute():
+            output = (project_path.parent / output).resolve()
+        self.output_var.set(str(output))
         self.sample_rate_var.set(int(data.get("sample_rate", DEFAULT_SAMPLE_RATE)))
         sample_format = str(data.get("sample_format", "flac") or "flac").lower()
         self.sample_format_var.set(sample_format if sample_format in {"flac", "wav"} else "flac")
@@ -1558,6 +1561,16 @@ class SampleSmithApp(tk.Tk):
         self.high_entry_var.set(midi_to_name(self.high_note) if self.high_note is not None else "")
         self.step_var.set(int(data.get("step", 1)))
         self.samples = [SampleInfo.from_dict(item) for item in data.get("samples", [])]
+        if project_path is not None:
+            project_dir = project_path.parent
+            for sample in self.samples:
+                if not sample.path.is_absolute():
+                    sample.path = (project_dir / sample.path).resolve()
+                if sample.source_paths:
+                    sample.source_paths = [
+                        path if path.is_absolute() else (project_dir / path).resolve()
+                        for path in sample.source_paths
+                    ]
         self._rebuild_trees_from_project()
 
 

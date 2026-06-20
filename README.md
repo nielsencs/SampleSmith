@@ -12,6 +12,8 @@ SampleSmith's main workflow is **Notes**: build a keyboard note list, record or 
 
 SampleSmith also saves a `.samplesmith.json` project file so an instrument can be reopened and extended later.
 
+For a small ready-made example, open `samplesmith-projects/SampleSmithSample/SampleSmithSample.samplesmith.json`; its quick start guide is `samplesmith-projects/SampleSmithSample/QUICK_START.md`.
+
 ## Windows app download
 
 For a friend who does not know Python, use the GitHub Actions build artifact:
