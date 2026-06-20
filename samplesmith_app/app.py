@@ -34,7 +34,7 @@ from .models import (
 )
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
-APP_ICON_PATH = ASSETS_DIR / "SampleSmith.png"
+APP_ICON_PATH = ASSETS_DIR / "SampleSmithIcon.png"
 
 
 class SampleSmithApp(tk.Tk):
