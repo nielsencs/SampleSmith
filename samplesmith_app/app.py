@@ -284,7 +284,7 @@ class SampleSmithApp(tk.Tk):
         ttk.Button(controls, text="Set", command=lambda: self._set_note_from_entry("high")).pack(side="left", padx=(2, 8))
         ttk.Label(controls, text="Step").pack(side="left", padx=(4, 2))
         self.step_var = tk.IntVar(value=1)
-        ttk.Spinbox(controls, textvariable=self.step_var, from_=1, to=12, width=4).pack(side="left")
+        ttk.Spinbox(controls, textvariable=self.step_var, from_=1, to=12, width=4, command=self._on_note_range_changed).pack(side="left")
         ttk.Button(controls, text="Build note list", command=self._build_note_list).pack(side="left", padx=8)
 
         notes_area = ttk.Frame(self.pitched_tab)
@@ -1652,6 +1652,23 @@ class SampleSmithApp(tk.Tk):
             self.high_var.set(note_name)
             self.high_entry_var.set(note_name)
         self._log(f"Set {which} note to {note_name}")
+        self._on_note_range_changed()
+
+    def _on_note_range_changed(self) -> None:
+        if self.low_note is None or self.high_note is None:
+            self._auto_save_project()
+            return
+        self._refresh_pitched_mappings()
+        if self.samples:
+            try:
+                preset = self._write_preset()
+            except Exception as exc:
+                self._log(f"Could not update DecentSampler patch after range change: {exc}")
+                return
+            self._log(f"Updated note range and DecentSampler patch: {preset.name}")
+        else:
+            self._log("Updated note range")
+        self._auto_save_project()
 
     def _detect_note(self, which: str) -> None:
         if not messagebox.askokcancel("SampleSmith", f"After pressing OK, sing/play your {which} usable note for 2.5 seconds."):
@@ -1677,6 +1694,7 @@ class SampleSmithApp(tk.Tk):
                         self.high_var.set(name)
                         self.high_entry_var.set(name)
                     self._log(f"Set {which} note to {name}")
+                    self._on_note_range_changed()
             return apply
 
         self._run_worker("Detecting pitch...", work)
@@ -1695,7 +1713,17 @@ class SampleSmithApp(tk.Tk):
             lo, hi = ranges[note]
             self.note_rows[note] = ""
             self.note_tree.insert("", "end", iid=iid, values=self._note_tree_values(note, None, plays_on=(lo, hi)))
-        self._log("Built note list with full-keyboard sample mapping")
+        self._refresh_pitched_mappings()
+        if self.samples:
+            try:
+                preset = self._write_preset()
+            except Exception as exc:
+                self._log(f"Built note list, but could not update DecentSampler patch: {exc}")
+            else:
+                self._log(f"Built note list and updated DecentSampler patch: {preset.name}")
+        else:
+            self._log("Built note list with full-keyboard sample mapping")
+        self._auto_save_project()
 
     def _selected_note(self) -> int | None:
         selected = self.note_tree.selection()
