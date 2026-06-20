@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+import math
 from tkinter import font as tkfont
 from pathlib import Path
 from tkinter import ttk
@@ -485,20 +486,30 @@ class DecentSamplerUiPreview:
         scale = PREVIEW_ANTIALIAS_SCALE
         image = Image.new("RGBA", (UI_KNOB_WIDTH * scale, UI_KNOB_WIDTH * scale), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
-        box = tuple(
-            value * scale
-            for value in (
-                PREVIEW_KNOB_ARC_INSET_X,
-                PREVIEW_KNOB_ARC_INSET_Y,
-                PREVIEW_KNOB_ARC_INSET_X + PREVIEW_KNOB_ARC_SIZE,
-                PREVIEW_KNOB_ARC_INSET_Y + PREVIEW_KNOB_ARC_SIZE,
-            )
-        )
         width = PREVIEW_KNOB_ARC_WIDTH * scale
-        draw.arc(box, start=PREVIEW_KNOB_ARC_START, end=PREVIEW_KNOB_ARC_START + PREVIEW_KNOB_ARC_EXTENT, fill=PREVIEW_KNOB_TRACK_COLOR, width=width)
-        draw.arc(box, start=PREVIEW_KNOB_ARC_START, end=PREVIEW_KNOB_ARC_START + value_extent, fill=PREVIEW_KNOB_VALUE_COLOR, width=width)
+        draw.line(self._knob_arc_points(PREVIEW_KNOB_ARC_START, PREVIEW_KNOB_ARC_EXTENT, scale), fill=PREVIEW_KNOB_TRACK_COLOR, width=width, joint="curve")
+        draw.line(self._knob_arc_points(PREVIEW_KNOB_ARC_START, value_extent, scale), fill=PREVIEW_KNOB_VALUE_COLOR, width=width, joint="curve")
         image = image.resize((UI_KNOB_WIDTH, UI_KNOB_WIDTH), Image.Resampling.LANCZOS)
         return ImageTk.PhotoImage(image)
+
+    def _knob_arc_points(self, start: int, extent: int, scale: int) -> list[tuple[float, float]]:
+        # Match Tk Canvas arc geometry, then downsample the supersized result.
+        # Pillow's draw.arc uses different angle semantics, which changes the
+        # knob's apparent shape/amount even with the same constants.
+        left = PREVIEW_KNOB_ARC_INSET_X * scale
+        top = PREVIEW_KNOB_ARC_INSET_Y * scale
+        size = PREVIEW_KNOB_ARC_SIZE * scale
+        center_x = left + size / 2
+        center_y = top + size / 2
+        radius = size / 2
+        steps = max(12, int(abs(extent) * scale / 3))
+        return [
+            (
+                center_x + math.cos(math.radians(start + extent * index / steps)) * radius,
+                center_y - math.sin(math.radians(start + extent * index / steps)) * radius,
+            )
+            for index in range(steps + 1)
+        ]
 
     def _control_id_from_event(self) -> str | None:
         current = self.canvas.find_withtag("current")
