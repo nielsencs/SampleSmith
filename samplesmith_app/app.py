@@ -33,10 +33,16 @@ from .models import (
     slugify,
 )
 
+ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+APP_ICON_PATH = ASSETS_DIR / "SampleSmith.png"
+
+
 class SampleSmithApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
+        self._app_icon: tk.PhotoImage | None = None
         self.title("SampleSmith")
+        self._set_window_icon()
         self.geometry("920x680")
         self.queue: queue.Queue[tuple[str, object]] = queue.Queue()
         self.samples: list[SampleInfo] = []
@@ -57,6 +63,15 @@ class SampleSmithApp(tk.Tk):
         self.blank_project_data = self._project_data()
         self.after_idle(self._open_last_project_if_available)
         self._queue_after_id = self.after(100, self._drain_queue)
+
+    def _set_window_icon(self) -> None:
+        if not APP_ICON_PATH.exists():
+            return
+        try:
+            self._app_icon = tk.PhotoImage(file=str(APP_ICON_PATH))
+            self.iconphoto(True, self._app_icon)
+        except tk.TclError:
+            self._app_icon = None
 
     def destroy(self) -> None:
         if self._queue_after_id is not None:
