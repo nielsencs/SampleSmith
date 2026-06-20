@@ -2,34 +2,34 @@
 <DecentSampler minVersion="1.0.0">
   <ui width="812" height="375" layoutMode="relative" bgMode="top_left">
     <tab name="main">
-      <label x="261" y="7" width="291" height="45" text="NewInstrument" textColor="DD330033" textSize="36" hAlign="center" />
-      <rectangle x="0" y="6" width="150" height="102" fillColor="#00000000" borderColor="#33330033" borderThickness="1" />
-      <label x="0" y="8" width="150" height="18" text="Envelope" textColor="AA000000" textSize="14" hAlign="center" />
-      <labeled-knob x="0" y="30" width="42" height="72" label="A" parameterName="A" type="float" minValue="0" maxValue="10" value="0.010" defaultValue="0.010" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999" style="linear_bar_vertical">
+      <label x="259" y="68" width="291" height="45" text="NewInstrument" textColor="DD330033" textSize="36" hAlign="center" />
+      <rectangle x="0" y="0" width="156" height="102" fillColor="#00000000" borderColor="#33330033" borderThickness="1" />
+      <label x="0" y="2" width="156" height="18" text="Envelope" textColor="AA000000" textSize="14" hAlign="center" />
+      <labeled-knob x="6" y="24" width="42" height="72" label="A" parameterName="A" type="float" minValue="0" maxValue="10" value="0.010" defaultValue="0.010" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999" style="linear_bar_vertical">
         <binding type="amp" level="instrument" position="0" parameter="ENV_ATTACK" />
       </labeled-knob>
-      <labeled-knob x="34" y="30" width="42" height="72" label="D" parameterName="D" type="float" minValue="0" maxValue="25" value="0.000" defaultValue="0.000" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999" style="linear_bar_vertical">
+      <labeled-knob x="40" y="24" width="42" height="72" label="D" parameterName="D" type="float" minValue="0" maxValue="25" value="0.000" defaultValue="0.000" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999" style="linear_bar_vertical">
         <binding type="amp" level="instrument" position="0" parameter="ENV_DECAY" />
       </labeled-knob>
-      <labeled-knob x="68" y="30" width="42" height="72" label="S" parameterName="S" type="float" minValue="0" maxValue="1" value="1.000" defaultValue="1.000" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999" style="linear_bar_vertical">
+      <labeled-knob x="74" y="24" width="42" height="72" label="S" parameterName="S" type="float" minValue="0" maxValue="1" value="1.000" defaultValue="1.000" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999" style="linear_bar_vertical">
         <binding type="amp" level="instrument" position="0" parameter="ENV_SUSTAIN" />
       </labeled-knob>
-      <labeled-knob x="102" y="30" width="42" height="72" label="R" parameterName="R" type="float" minValue="0" maxValue="25" value="0.800" defaultValue="0.800" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999" style="linear_bar_vertical">
+      <labeled-knob x="108" y="24" width="42" height="72" label="R" parameterName="R" type="float" minValue="0" maxValue="25" value="0.800" defaultValue="0.800" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999" style="linear_bar_vertical">
         <binding type="amp" level="instrument" position="0" parameter="ENV_RELEASE" />
       </labeled-knob>
-      <rectangle x="729" y="6" width="83" height="102" fillColor="#00000000" borderColor="#33330033" borderThickness="1" />
-      <label x="729" y="8" width="83" height="18" text="Reverb" textColor="AA000000" textSize="14" hAlign="center" />
-      <labeled-knob x="735" y="30" width="72" label="Amount" parameterName="Amount" type="float" minValue="0" maxValue="1" value="0.500" defaultValue="0.500" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999">
+      <rectangle x="728" y="113" width="84" height="102" fillColor="#00000000" borderColor="#33330033" borderThickness="1" />
+      <label x="728" y="115" width="84" height="18" text="Reverb" textColor="AA000000" textSize="14" hAlign="center" />
+      <labeled-knob x="734" y="137" width="72" label="Amount" parameterName="Amount" type="float" minValue="0" maxValue="1" value="0.500" defaultValue="0.500" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999">
         <binding type="effect" level="instrument" position="1" parameter="FX_REVERB_WET_LEVEL" />
       </labeled-knob>
-      <rectangle x="0" y="180" width="78" height="102" fillColor="#00000000" borderColor="#33330033" borderThickness="1" />
-      <label x="0" y="182" width="78" height="18" text="Delay" textColor="AA000000" textSize="14" hAlign="center" />
-      <labeled-knob x="0" y="204" width="72" label="Amount" parameterName="Amount" type="float" minValue="0" maxValue="1" value="0.500" defaultValue="0.500" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999">
+      <rectangle x="0" y="113" width="84" height="102" fillColor="#00000000" borderColor="#33330033" borderThickness="1" />
+      <label x="0" y="115" width="84" height="18" text="Delay" textColor="AA000000" textSize="14" hAlign="center" />
+      <labeled-knob x="6" y="137" width="72" label="Amount" parameterName="Amount" type="float" minValue="0" maxValue="1" value="0.500" defaultValue="0.500" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999">
         <binding type="effect" level="instrument" position="0" parameter="FX_WET_LEVEL" />
       </labeled-knob>
-      <rectangle x="729" y="180" width="83" height="102" fillColor="#00000000" borderColor="#33330033" borderThickness="1" />
-      <label x="729" y="182" width="83" height="18" text="Chorus" textColor="AA000000" textSize="14" hAlign="center" />
-      <labeled-knob x="735" y="204" width="72" label="Amount" parameterName="Amount" type="float" minValue="0" maxValue="1" value="0.500" defaultValue="0.500" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999">
+      <rectangle x="728" y="0" width="84" height="102" fillColor="#00000000" borderColor="#33330033" borderThickness="1" />
+      <label x="728" y="2" width="84" height="18" text="Chorus" textColor="AA000000" textSize="14" hAlign="center" />
+      <labeled-knob x="734" y="24" width="72" label="Amount" parameterName="Amount" type="float" minValue="0" maxValue="1" value="0.500" defaultValue="0.500" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999">
         <binding type="effect" level="instrument" position="2" parameter="FX_MIX" />
       </labeled-knob>
     </tab>
