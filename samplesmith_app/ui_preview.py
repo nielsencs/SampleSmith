@@ -49,6 +49,9 @@ from .dspreset import (
 BARE_LAYOUT_IMAGE = Path(__file__).resolve().parent / "assets" / "decent_sampler_bare_layout.png"
 PREVIEW_ORIGIN_X = 0
 PREVIEW_ORIGIN_Y = 51
+PREVIEW_CONTROL_LAYER_TOP = PREVIEW_ORIGIN_Y
+PREVIEW_CONTROL_LAYER_BOTTOM = 266
+PREVIEW_CONTROL_SAFE_BOTTOM = PREVIEW_CONTROL_LAYER_BOTTOM - PREVIEW_CONTROL_LAYER_TOP
 PREVIEW_KNOB_ARC_START = 230
 PREVIEW_KNOB_ARC_EXTENT = -260
 PREVIEW_KNOB_ARC_WIDTH = 4
@@ -189,6 +192,12 @@ class DecentSamplerUiPreview:
         ttk.Label(parent, textvariable=self.status_var).pack(anchor="w", pady=(6, 0))
         self.redraw()
 
+    def _control_canvas_x(self, x: int) -> int:
+        return x + PREVIEW_ORIGIN_X
+
+    def _control_canvas_y(self, y: int) -> int:
+        return y + PREVIEW_CONTROL_LAYER_TOP
+
     def visible_controls(self) -> list[dict[str, object]]:
         controls: list[dict[str, object]] = []
         index = 0
@@ -288,8 +297,8 @@ class DecentSamplerUiPreview:
     def _draw_instrument_name(self) -> None:
         name = self.owner.name_var.get().strip() or "Untitled instrument"
         title_layout = self._current_title_layout()
-        x = PREVIEW_ORIGIN_X + title_layout["x"]
-        y = PREVIEW_ORIGIN_Y + title_layout["y"]
+        x = self._control_canvas_x(title_layout["x"])
+        y = self._control_canvas_y(title_layout["y"])
         width = title_layout["width"]
         height = title_layout["height"]
         tag = "ui-title"
@@ -321,19 +330,19 @@ class DecentSamplerUiPreview:
             self.panel_tags[panel_tag] = title
             self.panel_controls[title] = [str(control["id"]) for control in group_controls]
             if title == "Envelope":
-                left = min(int(control["x"]) + PREVIEW_ORIGIN_X for control in group_controls)
-                top = min(int(control["y"]) + PREVIEW_ORIGIN_Y for control in group_controls)
-                right = max(int(control["x"]) + PREVIEW_ORIGIN_X + UI_BAR_WIDTH for control in group_controls)
-                bottom = max(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_BAR_HEIGHT for control in group_controls)
+                left = min(self._control_canvas_x(int(control["x"])) for control in group_controls)
+                top = min(self._control_canvas_y(int(control["y"])) for control in group_controls)
+                right = max(self._control_canvas_x(int(control["x"])) + UI_BAR_WIDTH for control in group_controls)
+                bottom = max(self._control_canvas_y(int(control["y"])) + UI_BAR_HEIGHT for control in group_controls)
             else:
-                left = min(int(control["x"]) + PREVIEW_ORIGIN_X for control in group_controls)
-                top = min(int(control["y"]) + PREVIEW_ORIGIN_Y for control in group_controls)
-                right = max(int(control["x"]) + PREVIEW_ORIGIN_X + UI_KNOB_WIDTH for control in group_controls)
-                bottom = max(int(control["y"]) + PREVIEW_ORIGIN_Y + UI_KNOB_WIDTH for control in group_controls)
+                left = min(self._control_canvas_x(int(control["x"])) for control in group_controls)
+                top = min(self._control_canvas_y(int(control["y"])) for control in group_controls)
+                right = max(self._control_canvas_x(int(control["x"])) + UI_KNOB_WIDTH for control in group_controls)
+                bottom = max(self._control_canvas_y(int(control["y"])) + UI_KNOB_WIDTH for control in group_controls)
             x1 = max(0, left - UI_GROUP_PADDING)
             y1 = max(0, top - UI_GROUP_TOP_PADDING)
             x2 = min(DECENT_SAMPLER_UI_WIDTH, right + UI_GROUP_PADDING)
-            y2 = min(DECENT_SAMPLER_UI_HEIGHT, bottom + UI_GROUP_PADDING)
+            y2 = min(PREVIEW_CONTROL_LAYER_BOTTOM, bottom + UI_GROUP_PADDING)
             rectangle = self.canvas.create_rectangle(x1, y1, x2, y2, fill="", outline=PREVIEW_PANEL_OUTLINE_COLOR, tags=(panel_tag, "ui-panel"))
             label = self.canvas.create_text(
                 x1 + (x2 - x1) // 2,
@@ -351,8 +360,8 @@ class DecentSamplerUiPreview:
 
     def _draw_bar(self, control_id: str, label: str, x: int, y: int) -> None:
         tag = f"ui:{control_id}"
-        canvas_x = x + PREVIEW_ORIGIN_X
-        canvas_y = y + PREVIEW_ORIGIN_Y
+        canvas_x = self._control_canvas_x(x)
+        canvas_y = self._control_canvas_y(y)
         control_width = UI_BAR_WIDTH
         bar_width = 20
         bar_height = 34
@@ -454,8 +463,8 @@ class DecentSamplerUiPreview:
 
     def _draw_knob(self, control_id: str, label: str, group: str, x: int, y: int) -> None:
         tag = f"ui:{control_id}"
-        canvas_x = x + PREVIEW_ORIGIN_X
-        canvas_y = y + PREVIEW_ORIGIN_Y
+        canvas_x = self._control_canvas_x(x)
+        canvas_y = self._control_canvas_y(y)
         arc_direction = 1 if PREVIEW_KNOB_ARC_EXTENT >= 0 else -1
         value_extent = arc_direction * max(6, int(round(abs(PREVIEW_KNOB_ARC_EXTENT) * self._control_fraction(control_id))))
         items = [self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + UI_KNOB_WIDTH, canvas_y + UI_KNOB_WIDTH, outline="", tags=(tag, "ui-knob"))]
@@ -573,7 +582,7 @@ class DecentSamplerUiPreview:
     def _clamp_control_position(self, control_id: str, x: int, y: int) -> tuple[int, int]:
         width, height = self._control_size(control_id)
         max_x = min(UI_KNOB_MAX_X, DECENT_SAMPLER_UI_WIDTH - width)
-        max_y = min(UI_KNOB_MAX_Y, DECENT_SAMPLER_UI_HEIGHT - height - UI_GROUP_PADDING)
+        max_y = min(UI_KNOB_MAX_Y, PREVIEW_CONTROL_SAFE_BOTTOM - height - UI_GROUP_PADDING)
         return max(0, min(max_x, x)), max(UI_KNOB_MIN_Y, min(max_y, y))
 
     def _controls_by_group(self) -> dict[str, list[dict[str, object]]]:
@@ -616,7 +625,8 @@ class DecentSamplerUiPreview:
         x = int(event.x)
         y = int(event.y)
         title_layout = self._current_title_layout()
-        if title_layout["x"] <= x <= title_layout["x"] + title_layout["width"] and title_layout["y"] + PREVIEW_ORIGIN_Y <= y <= title_layout["y"] + PREVIEW_ORIGIN_Y + title_layout["height"]:
+        title_y = self._control_canvas_y(title_layout["y"])
+        if title_layout["x"] <= x <= title_layout["x"] + title_layout["width"] and title_y <= y <= title_y + title_layout["height"]:
             self._start_title_drag(event)
             if self.drag:
                 self.drag["background"] = True
@@ -716,7 +726,7 @@ class DecentSamplerUiPreview:
             return
         left, top, right, bottom = panel_bounds
         dx = max(-left, min(DECENT_SAMPLER_UI_WIDTH - right, requested_dx))
-        dy = max(-top, min(UI_KNOB_MAX_Y + UI_KNOB_WIDTH + UI_GROUP_PADDING - bottom, requested_dy))
+        dy = max(-top, min(PREVIEW_CONTROL_SAFE_BOTTOM - bottom, requested_dy))
         if dx == 0 and dy == 0:
             return
         for item in self.panel_items.get(title, []):
