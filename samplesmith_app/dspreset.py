@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 import shutil
+import time
 import xml.etree.ElementTree as ET
 
 from .models import SampleInfo, clamp_float, decent_sampler_root_note, slugify, valid_loop_points
@@ -118,6 +119,16 @@ def ui_layout_position(control_id: str, index: int, ui_layout: dict[str, object]
 def ui_bar_layout_position(control_id: str, index: int, ui_layout: dict[str, object] | None) -> tuple[int, int]:
     default_x, default_y = default_ui_bar_position(index)
     return ui_layout_position_from_default(control_id, default_x, default_y, ui_layout)
+
+
+def sample_path_for_preset(sample_path: Path, output_dir: Path) -> str:
+    try:
+        return sample_path.relative_to(output_dir).as_posix()
+    except ValueError as exc:
+        raise RuntimeError(
+            "Sample audio is outside this instrument folder; import or copy it into the project before generating a DecentSampler preset: "
+            f"{sample_path}"
+        ) from exc
 
 
 def ui_title_layout(ui_layout: dict[str, object] | None, text: str = "") -> dict[str, int]:
@@ -643,7 +654,7 @@ def generate_dspreset(
             sample_loop_crossfade_mode = "equal_power"
         sample_loop_enabled = loop_enabled if sample.loop_enabled is None else sample.loop_enabled
         attrs = {
-            "path": sample.path.relative_to(output_dir).as_posix(),
+            "path": sample_path_for_preset(sample.path, output_dir),
             "rootNote": str(decent_sampler_root_note(sample.root_note)),
             "loNote": str(sample.lo_note),
             "hiNote": str(sample.hi_note),
@@ -684,7 +695,13 @@ def export_dsbundle(
     bundle_dir = instrument_dir.parent / f"{slugify(instrument_name)}.dsbundle"
     bundle_samples_dir = bundle_dir / "Samples"
     if bundle_dir.exists():
-        shutil.rmtree(bundle_dir)
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        backup_dir = bundle_dir.with_name(f"{bundle_dir.name}.backup-{timestamp}")
+        counter = 2
+        while backup_dir.exists():
+            backup_dir = bundle_dir.with_name(f"{bundle_dir.name}.backup-{timestamp}-{counter}")
+            counter += 1
+        shutil.move(str(bundle_dir), str(backup_dir))
     bundle_samples_dir.mkdir(parents=True, exist_ok=True)
 
     used_relative_paths: set[Path] = set()

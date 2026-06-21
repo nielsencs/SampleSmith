@@ -7,6 +7,7 @@ import math
 import os
 import re
 import queue
+import copy
 import shutil
 import threading
 import time
@@ -821,6 +822,7 @@ class SampleSmithApp(tk.Tk):
         return output_root / slug / f"{slug}.samplesmith.json"
 
     def _project_data(self) -> dict[str, object]:
+        project_dir = (self.project_path or self._default_project_path()).parent
         return {
             "version": 2,
             "note_convention": "decent_sampler_screen_keys",
@@ -938,9 +940,23 @@ class SampleSmithApp(tk.Tk):
             "low_note": self.low_note,
             "high_note": self.high_note,
             "step": self.step_var.get(),
-            "samples": [sample.to_dict() for sample in self.samples],
+            "samples": [self._sample_project_data(sample, project_dir) for sample in self.samples],
             "ui_layout": self.ui_layout,
         }
+
+    @staticmethod
+    def _path_project_text(path: Path, project_dir: Path) -> str:
+        try:
+            return str(path.relative_to(project_dir))
+        except ValueError:
+            return str(path)
+
+    def _sample_project_data(self, sample: SampleInfo, project_dir: Path) -> dict[str, object]:
+        data = sample.to_dict()
+        data["path"] = self._path_project_text(sample.path, project_dir)
+        if sample.source_paths:
+            data["source_paths"] = [self._path_project_text(path, project_dir) for path in sample.source_paths]
+        return data
 
     def _save_project(self, path: Path | None = None) -> Path:
         target = path or self.project_path or self._default_project_path()
@@ -972,6 +988,7 @@ class SampleSmithApp(tk.Tk):
             new_dir.mkdir(parents=True, exist_ok=True)
             return
         new_dir.mkdir(parents=True, exist_ok=True)
+        planned_copies: list[tuple[Path, Path]] = []
         for sample in self.samples:
             try:
                 relative = sample.path.relative_to(old_dir)
@@ -979,8 +996,9 @@ class SampleSmithApp(tk.Tk):
                 continue
             target = new_dir / relative
             if sample.path.exists() and sample.path.resolve() != target.resolve():
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(sample.path, target)
+                if target.exists():
+                    raise FileExistsError(f"Save As would overwrite an existing audio file:\n\n{target}")
+                planned_copies.append((sample.path, target))
             sample.path = target
             if sample.source_paths:
                 remapped = []
@@ -992,26 +1010,42 @@ class SampleSmithApp(tk.Tk):
                         continue
                     source_target = new_dir / source_relative
                     if source_path.exists() and source_path.resolve() != source_target.resolve():
-                        source_target.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(source_path, source_target)
+                        if source_target.exists():
+                            raise FileExistsError(f"Save As would overwrite an existing source audio file:\n\n{source_target}")
+                        planned_copies.append((source_path, source_target))
                     remapped.append(source_target)
                 sample.source_paths = remapped
+        for source, target in planned_copies:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
 
     def _save_project_as(self, chosen: Path) -> Path:
         target = self._normal_project_save_path(chosen)
         new_name = self._project_name_from_save_path(target)
         old_dir = self._instrument_dir()
         new_dir = target.parent
+        old_name = self.name_var.get()
+        old_output = self.output_var.get()
+        old_project_path = self.project_path
+        old_samples = copy.deepcopy(self.samples)
 
-        self.name_var.set(new_name)
-        self.output_var.set(str(new_dir.parent))
-        self.project_path = target
-        self._copy_and_remap_project_paths(old_dir, new_dir)
-        if self.samples:
-            self._write_preset()
-        saved = self._save_project(target)
-        self._rebuild_trees_from_project()
-        return saved
+        try:
+            self.name_var.set(new_name)
+            self.output_var.set(str(new_dir.parent))
+            self.project_path = target
+            self._copy_and_remap_project_paths(old_dir, new_dir)
+            if self.samples:
+                self._write_preset()
+            saved = self._save_project(target)
+            self._rebuild_trees_from_project()
+            return saved
+        except Exception:
+            self.name_var.set(old_name)
+            self.output_var.set(old_output)
+            self.project_path = old_project_path
+            self.samples = old_samples
+            self._rebuild_trees_from_project()
+            raise
 
     def _settings_path(self) -> Path:
         override = os.environ.get("SAMPLESMITH_SETTINGS_PATH")
@@ -2667,7 +2701,12 @@ class SampleSmithApp(tk.Tk):
         if not self.samples:
             messagebox.showwarning("SampleSmith", "No recorded samples yet.")
             return
-        preset = self._write_preset()
+        try:
+            preset = self._write_preset()
+        except Exception as exc:
+            self._log(f"Could not generate DecentSampler patch: {exc}")
+            messagebox.showerror("SampleSmith", f"Could not generate DecentSampler patch:\n\n{exc}")
+            return
         self._log(f"Generated {preset}")
         messagebox.showinfo("SampleSmith", f"Generated:\n{preset}")
 
@@ -2675,14 +2714,19 @@ class SampleSmithApp(tk.Tk):
         if not self.samples:
             messagebox.showwarning("SampleSmith", "No recorded samples yet.")
             return
-        samples = self._exportable_note_samples()
-        bundle = export_dsbundle(
-            self.name_var.get(),
-            self._instrument_dir(),
-            samples,
-            **self._dspreset_options(),
-        )
-        self._refresh_pitched_mappings()
+        try:
+            samples = self._exportable_note_samples()
+            bundle = export_dsbundle(
+                self.name_var.get(),
+                self._instrument_dir(),
+                samples,
+                **self._dspreset_options(),
+            )
+            self._refresh_pitched_mappings()
+        except Exception as exc:
+            self._log(f"Could not export DecentSampler bundle: {exc}")
+            messagebox.showerror("SampleSmith", f"Could not export DecentSampler bundle:\n\n{exc}")
+            return
         self._log(f"Exported DecentSampler bundle: {bundle}")
         messagebox.showinfo("SampleSmith", f"Exported .dsbundle:\n{bundle}")
 

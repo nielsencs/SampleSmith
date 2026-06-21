@@ -6,25 +6,28 @@ It is built for the practical Reaper / DecentSampler / Audacity sort of workflow
 
 The aim is practical playable-instrument usefulness rather than laboratory purity. If you only record one pitched sample, SampleSmith spreads it across the keyboard. If you record several, it maps them into overlapping ranges so each sample keeps its home note while still giving you transformed low/high sounds that can be musically useful.
 
+## Quick start for newcomers
+
+SampleSmith makes a DecentSampler instrument from your own recorded or imported sounds. DecentSampler is the free sampler plug-in/app that plays the finished `.dspreset`; SampleSmith is the editor that helps you build it.
+
+1. Install DecentSampler from Decent Samples for your system or DAW.
+2. Get SampleSmith:
+   - **Windows app:** on GitHub, open this repo → **Actions** → latest successful **Build Windows app** run → **Artifacts** → **SampleSmith-Windows** zip. GitHub may ask you to sign in, and Actions artifacts expire after a while. Unzip it and run `SampleSmith.exe` inside the `SampleSmith` folder.
+   - **Python/source:** install the dependencies below, then run `python samplesmith.py`.
+3. In SampleSmith, start a project, set the instrument name, then use **Import audio…**, **Import folder…**, or record notes directly. WAV and FLAC are supported.
+4. Check the **Notes** table: each sound needs a root note such as `C4` or a DecentSampler key number such as `72`.
+5. Click **Generate / update .dspreset**. Open the generated `.dspreset` in DecentSampler, including from your DAW.
+6. Use **Save** / **Save As…** to keep the `.samplesmith.json` project, and **Export .dsbundle** when you want a portable DecentSampler bundle folder.
+
+Windows may warn that the app is from an unknown publisher because it is not code-signed yet.
+
 ## What it does
 
 SampleSmith's main workflow is **Notes**: build a keyboard note list, record or import sounds onto those notes, trim/normalise the audio, bridge gaps with generated samples when useful, edit mapping/loops, and generate a DecentSampler `.dspreset`. Pitched notes, drones, growls, one-shots, hits, breaths, scrapes, and odd noises all belong in the same note-based workflow.
 
 SampleSmith also saves a `.samplesmith.json` project file so an instrument can be reopened and extended later.
 
-For a small ready-made example, open `samplesmith-projects/SampleSmithSample/SampleSmithSample.samplesmith.json`; its quick start guide is `samplesmith-projects/SampleSmithSample/QUICK_START.md`.
-
-## Windows app download
-
-For a friend who does not know Python, use the GitHub Actions build artifact:
-
-1. Open the repository's **Actions** tab.
-2. Choose **Build Windows app**.
-3. Open the latest successful run.
-4. Download **SampleSmith-Windows**.
-5. Unzip it and run `SampleSmith.exe` inside the `SampleSmith` folder.
-
-Windows may warn that the app is from an unknown publisher because it is not code-signed yet.
+For a small ready-made example, open `samplesmith-projects/SampleSmithSample/SampleSmithSample.samplesmith.json`; its project-specific guide is `samplesmith-projects/SampleSmithSample/QUICK_START.md`.
 
 ## Install dependencies
 
