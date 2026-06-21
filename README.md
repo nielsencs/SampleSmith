@@ -23,7 +23,7 @@ Windows may warn that the app is from an unknown publisher because it is not cod
 
 ## What it does
 
-SampleSmith's main workflow is **Notes**: build a keyboard note list, record or import sounds onto those notes, trim/normalise the audio, bridge gaps with generated samples when useful, edit mapping/loops, and generate a DecentSampler `.dspreset`. Pitched notes, drones, growls, one-shots, hits, breaths, scrapes, and odd noises all belong in the same note-based workflow.
+SampleSmith's main workflow is **Notes**: build a keyboard note list, record or import sounds onto those notes, trim/normalise the audio, bridge gaps with generated samples when useful, edit mapping/loops, and generate a DecentSampler `.dspreset`.
 
 SampleSmith also saves a `.samplesmith.json` project file so an instrument can be reopened and extended later.
 
