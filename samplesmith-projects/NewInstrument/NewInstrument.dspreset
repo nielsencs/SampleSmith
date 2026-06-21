@@ -3,18 +3,18 @@
   <ui width="812" height="375" layoutMode="relative" bgMode="top_left">
     <tab name="main">
       <label x="259" y="68" width="291" height="45" text="NewInstrument" textColor="DD330033" textSize="36" hAlign="center" />
-      <rectangle x="0" y="0" width="88" height="102" fillColor="#00000000" borderColor="#33330033" borderThickness="1" />
-      <label x="0" y="2" width="88" height="18" text="Envelope" textColor="AA000000" textSize="14" hAlign="center" />
-      <labeled-knob x="6" y="24" width="22" height="72" label="A" parameterName="A" type="float" minValue="0" maxValue="10" value="0.010" defaultValue="0.010" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999" style="linear_bar_vertical">
+      <rectangle x="0" y="0" width="126" height="102" fillColor="#00000000" borderColor="#33330033" borderThickness="1" />
+      <label x="0" y="2" width="126" height="18" text="Envelope" textColor="AA000000" textSize="14" hAlign="center" />
+      <labeled-knob x="6" y="24" width="42" height="72" label="A" parameterName="A" type="float" minValue="0" maxValue="10" value="0.010" defaultValue="0.010" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999" style="linear_bar_vertical">
         <binding type="amp" level="instrument" position="0" parameter="ENV_ATTACK" />
       </labeled-knob>
-      <labeled-knob x="24" y="24" width="22" height="72" label="D" parameterName="D" type="float" minValue="0" maxValue="25" value="0.000" defaultValue="0.000" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999" style="linear_bar_vertical">
+      <labeled-knob x="30" y="24" width="42" height="72" label="D" parameterName="D" type="float" minValue="0" maxValue="25" value="0.000" defaultValue="0.000" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999" style="linear_bar_vertical">
         <binding type="amp" level="instrument" position="0" parameter="ENV_DECAY" />
       </labeled-knob>
-      <labeled-knob x="42" y="24" width="22" height="72" label="S" parameterName="S" type="float" minValue="0" maxValue="1" value="1.000" defaultValue="1.000" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999" style="linear_bar_vertical">
+      <labeled-knob x="54" y="24" width="42" height="72" label="S" parameterName="S" type="float" minValue="0" maxValue="1" value="1.000" defaultValue="1.000" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999" style="linear_bar_vertical">
         <binding type="amp" level="instrument" position="0" parameter="ENV_SUSTAIN" />
       </labeled-knob>
-      <labeled-knob x="60" y="24" width="22" height="72" label="R" parameterName="R" type="float" minValue="0" maxValue="25" value="0.800" defaultValue="0.800" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999" style="linear_bar_vertical">
+      <labeled-knob x="78" y="24" width="42" height="72" label="R" parameterName="R" type="float" minValue="0" maxValue="25" value="0.800" defaultValue="0.800" textColor="AA000000" textSize="16" trackForegroundColor="CC000000" trackBackgroundColor="66999999" style="linear_bar_vertical">
         <binding type="amp" level="instrument" position="0" parameter="ENV_RELEASE" />
       </labeled-knob>
       <rectangle x="728" y="113" width="84" height="102" fillColor="#00000000" borderColor="#33330033" borderThickness="1" />

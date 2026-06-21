@@ -140,15 +140,15 @@
       "y": 24
     },
     "amp_decay": {
-      "x": 24,
+      "x": 30,
       "y": 24
     },
     "amp_sustain": {
-      "x": 42,
+      "x": 54,
       "y": 24
     },
     "amp_release": {
-      "x": 60,
+      "x": 78,
       "y": 24
     },
     "reverb_wet": {
