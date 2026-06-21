@@ -60,6 +60,8 @@ PREVIEW_KNOB_ARC_WIDTH = 5
 PREVIEW_KNOB_ARC_INSET_X = 17
 PREVIEW_KNOB_ARC_INSET_Y = 28
 PREVIEW_KNOB_ARC_SIZE = 40
+PREVIEW_KNOB_ARC_PREVIEW_OFFSET_X = -1
+PREVIEW_KNOB_ARC_PREVIEW_OFFSET_Y = -2
 PREVIEW_KNOB_TRACK_COLOR = "#c6c3c3"
 PREVIEW_KNOB_ARC_TRACK_COLOR = "#a29e9b"
 PREVIEW_KNOB_VALUE_COLOR = "#21201f"
@@ -72,6 +74,10 @@ FONT_SCALE_FACTOR = 0.66
 PREVIEW_PANEL_OUTLINE_COLOR = "#8c7c83"
 PREVIEW_PANEL_LABEL_COLOR = "#555055"
 PREVIEW_BAR_LABEL_COLOR = PREVIEW_PANEL_LABEL_COLOR
+PREVIEW_BAR_TRACK_WIDTH = 16
+PREVIEW_BAR_TRACK_HEIGHT = 38
+PREVIEW_BAR_TRACK_TOP = 20
+PREVIEW_BAR_FILL_INSET = 2
 PREVIEW_ANTIALIAS_SCALE = 4
 
 
@@ -378,12 +384,12 @@ class DecentSamplerUiPreview:
         canvas_x = self._control_canvas_x(x)
         canvas_y = self._control_canvas_y(y)
         control_width = UI_BAR_WIDTH
-        bar_width = 20
-        bar_height = 30
+        bar_width = PREVIEW_BAR_TRACK_WIDTH
+        bar_height = PREVIEW_BAR_TRACK_HEIGHT
         bar_left = canvas_x + (control_width - bar_width) // 2
-        bar_top = canvas_y + 24
+        bar_top = canvas_y + PREVIEW_BAR_TRACK_TOP
         bar_bottom = bar_top + bar_height
-        fill_pixels = int(round((bar_height - 3) * self._control_fraction(control_id)))
+        fill_pixels = int(round((bar_height - PREVIEW_BAR_FILL_INSET - 1) * self._control_fraction(control_id)))
         image = self._bar_image(fill_pixels, bar_width, bar_height)
         items = [self.canvas.create_rectangle(canvas_x, canvas_y, canvas_x + control_width, canvas_y + UI_BAR_HEIGHT, outline="", tags=(tag, "ui-knob"))]
         if image is not None:
@@ -392,8 +398,8 @@ class DecentSamplerUiPreview:
         else:
             items.append(self.canvas.create_rectangle(bar_left, bar_top, bar_left + bar_width, bar_bottom, fill="", outline=PREVIEW_KNOB_TRACK_COLOR, width=1, tags=(tag, "ui-knob")))
             if fill_pixels > 0:
-                fill_top = bar_bottom - 2 - fill_pixels
-                items.append(self.canvas.create_rectangle(bar_left + 2, fill_top, bar_left + bar_width - 2, bar_bottom - 2, fill=PREVIEW_KNOB_VALUE_COLOR, outline=PREVIEW_KNOB_VALUE_COLOR, tags=(tag, "ui-knob")))
+                fill_top = bar_bottom - PREVIEW_BAR_FILL_INSET - fill_pixels
+                items.append(self.canvas.create_rectangle(bar_left + PREVIEW_BAR_FILL_INSET, fill_top, bar_left + bar_width - PREVIEW_BAR_FILL_INSET, bar_bottom - PREVIEW_BAR_FILL_INSET, fill=PREVIEW_KNOB_VALUE_COLOR, outline=PREVIEW_KNOB_VALUE_COLOR, tags=(tag, "ui-knob")))
         items.append(self.canvas.create_text(canvas_x + control_width // 2, canvas_y + 9, text=label, fill=PREVIEW_BAR_LABEL_COLOR, font=("TkDefaultFont", 8), tags=(tag, "ui-knob")))
         self.canvas_items[control_id] = items
         self.canvas.tag_bind(tag, "<ButtonPress-1>", self._start_drag)
@@ -407,13 +413,14 @@ class DecentSamplerUiPreview:
         image = Image.new("RGBA", (UI_BAR_WIDTH * scale, UI_BAR_HEIGHT * scale), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
         left = ((UI_BAR_WIDTH - bar_width) // 2) * scale
-        top = 24 * scale
+        top = PREVIEW_BAR_TRACK_TOP * scale
         right = left + bar_width * scale
         bottom = top + bar_height * scale
+        fill_inset = PREVIEW_BAR_FILL_INSET * scale
         draw.rectangle((left, top, right, bottom), outline=PREVIEW_KNOB_TRACK_COLOR, width=scale)
         if fill_pixels > 0:
-            fill_top = bottom - 2 * scale - fill_pixels * scale
-            draw.rectangle((left + 2 * scale, fill_top, right - 2 * scale, bottom - 2 * scale), fill=PREVIEW_KNOB_VALUE_COLOR)
+            fill_top = bottom - fill_inset - fill_pixels * scale
+            draw.rectangle((left + fill_inset, fill_top, right - fill_inset, bottom - fill_inset), fill=PREVIEW_KNOB_VALUE_COLOR)
         image = image.resize((UI_BAR_WIDTH, UI_BAR_HEIGHT), Image.Resampling.LANCZOS)
         return ImageTk.PhotoImage(image)
 
@@ -488,8 +495,8 @@ class DecentSamplerUiPreview:
             self.control_images.append(image)
             items.append(self.canvas.create_image(canvas_x, canvas_y, image=image, anchor="nw", tags=(tag, "ui-knob")))
         else:
-            knob_left = canvas_x + PREVIEW_KNOB_ARC_INSET_X
-            knob_top = canvas_y + PREVIEW_KNOB_ARC_INSET_Y
+            knob_left = canvas_x + PREVIEW_KNOB_ARC_INSET_X + PREVIEW_KNOB_ARC_PREVIEW_OFFSET_X
+            knob_top = canvas_y + PREVIEW_KNOB_ARC_INSET_Y + PREVIEW_KNOB_ARC_PREVIEW_OFFSET_Y
             knob_right = knob_left + PREVIEW_KNOB_ARC_SIZE
             knob_bottom = knob_top + PREVIEW_KNOB_ARC_SIZE
             items.extend(
@@ -528,8 +535,8 @@ class DecentSamplerUiPreview:
         # Match Tk Canvas arc geometry, then downsample the supersized result.
         # Pillow's draw.arc uses different angle semantics, which changes the
         # knob's apparent shape/amount even with the same constants.
-        left = PREVIEW_KNOB_ARC_INSET_X * scale
-        top = PREVIEW_KNOB_ARC_INSET_Y * scale
+        left = (PREVIEW_KNOB_ARC_INSET_X + PREVIEW_KNOB_ARC_PREVIEW_OFFSET_X) * scale
+        top = (PREVIEW_KNOB_ARC_INSET_Y + PREVIEW_KNOB_ARC_PREVIEW_OFFSET_Y) * scale
         size = PREVIEW_KNOB_ARC_SIZE * scale
         center_x = left + size / 2
         center_y = top + size / 2
