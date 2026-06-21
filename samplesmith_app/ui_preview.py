@@ -53,6 +53,8 @@ PREVIEW_CONTROL_LAYER_TOP = PREVIEW_ORIGIN_Y
 PREVIEW_CONTROL_LAYER_BOTTOM = 266
 PREVIEW_CONTROL_SAFE_BOTTOM = PREVIEW_CONTROL_LAYER_BOTTOM - PREVIEW_CONTROL_LAYER_TOP
 PREVIEW_KNOB_ARC_START = 230
+# Carl-tuned DecentSampler preview-match values: off limits for now.
+# Do not retune these during cleanup/refactor work unless Carl explicitly asks.
 PREVIEW_KNOB_ARC_EXTENT = -290
 PREVIEW_KNOB_ARC_WIDTH = 5
 PREVIEW_KNOB_ARC_INSET_X = 17
@@ -61,15 +63,26 @@ PREVIEW_KNOB_ARC_SIZE = 40
 PREVIEW_KNOB_TRACK_COLOR = "#c6c3c3"
 PREVIEW_KNOB_ARC_TRACK_COLOR = "#a29e9b"
 PREVIEW_KNOB_VALUE_COLOR = "#21201f"
-PREVIEW_TITLE_FONT_FAMILY = "SF Pro Text" # Actual font in DS?
-PREVIEW_TITLE_FONT_FAMILY = "Segoe UI"    # Closest Windows alternative to SF Pro Text.
-PREVIEW_TITLE_FONT_FAMILY = "Arial"       # Closest fallback if SF Pro Text and Segoe UI are not available.
-PREVIEW_TITLE_FALLBACK_FONT_FAMILY = "Liberation Sans Narrow" # Worse! On windows anyway.
+PREVIEW_TITLE_FONT_CANDIDATES = (
+    "SF Pro Text",  # Likely DecentSampler/JUCE system-font match when installed; do not bundle.
+    "Segoe UI",     # Closest common Windows alternative.
+    "Arial",        # Plain fallback; currently closer than narrow fonts.
+)
 FONT_SCALE_FACTOR = 0.66
 PREVIEW_PANEL_OUTLINE_COLOR = "#8c7c83"
 PREVIEW_PANEL_LABEL_COLOR = "#555055"
 PREVIEW_BAR_LABEL_COLOR = PREVIEW_PANEL_LABEL_COLOR
 PREVIEW_ANTIALIAS_SCALE = 4
+
+
+def preview_title_font(size: int) -> tkfont.Font:
+    """Pick the closest installed font for DecentSampler-style title text."""
+    installed = {family.lower(): family for family in tkfont.families()}
+    for family in PREVIEW_TITLE_FONT_CANDIDATES:
+        installed_family = installed.get(family.lower())
+        if installed_family:
+            return tkfont.Font(family=installed_family, size=size)
+    return tkfont.Font(family="TkDefaultFont", size=size)
 
 
 class UiPreviewOwner(Protocol):
@@ -308,9 +321,7 @@ class DecentSamplerUiPreview:
         tag = "ui-title"
         hitbox = self.canvas.create_rectangle(x, y, x + width, y + height, outline="", fill="", tags=(tag,))
         title_size = max(9, int(title_layout["textSize"] * FONT_SCALE_FACTOR))
-        title_font = tkfont.Font(family=PREVIEW_TITLE_FONT_FAMILY, size=title_size)
-        # if title_font.actual("family") == "Arial":
-        #     title_font = tkfont.Font(family=PREVIEW_TITLE_FALLBACK_FONT_FAMILY, size=title_size)
+        title_font = preview_title_font(title_size)
         self.title_font = title_font
         text = self.canvas.create_text(
             x + width // 2,
