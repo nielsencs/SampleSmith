@@ -58,11 +58,12 @@ PREVIEW_KNOB_ARC_WIDTH = 4
 PREVIEW_KNOB_ARC_INSET_X = 17
 PREVIEW_KNOB_ARC_INSET_Y = 28
 PREVIEW_KNOB_ARC_SIZE = 38
-PREVIEW_KNOB_TRACK_COLOR = "#bfb9b9"
-PREVIEW_KNOB_VALUE_COLOR = "#252025"
+PREVIEW_KNOB_TRACK_COLOR = "#c6c3c3"
+PREVIEW_KNOB_ARC_TRACK_COLOR = ""
+PREVIEW_KNOB_VALUE_COLOR = "#2a2929"
 PREVIEW_TITLE_FONT_FAMILY = "Arial Narrow"
 PREVIEW_TITLE_FALLBACK_FONT_FAMILY = "Liberation Sans Narrow"
-PREVIEW_PANEL_OUTLINE_COLOR = "#c7b9c7"
+PREVIEW_PANEL_OUTLINE_COLOR = "#bcb4bc"
 PREVIEW_PANEL_LABEL_COLOR = "#555055"
 PREVIEW_BAR_LABEL_COLOR = PREVIEW_PANEL_LABEL_COLOR
 PREVIEW_ANTIALIAS_SCALE = 4
@@ -364,9 +365,9 @@ class DecentSamplerUiPreview:
         canvas_y = self._control_canvas_y(y)
         control_width = UI_BAR_WIDTH
         bar_width = 20
-        bar_height = 34
+        bar_height = 30
         bar_left = canvas_x + (control_width - bar_width) // 2
-        bar_top = canvas_y + 21
+        bar_top = canvas_y + 24
         bar_bottom = bar_top + bar_height
         fill_pixels = int(round((bar_height - 3) * self._control_fraction(control_id)))
         image = self._bar_image(fill_pixels, bar_width, bar_height)
@@ -392,7 +393,7 @@ class DecentSamplerUiPreview:
         image = Image.new("RGBA", (UI_BAR_WIDTH * scale, UI_BAR_HEIGHT * scale), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
         left = ((UI_BAR_WIDTH - bar_width) // 2) * scale
-        top = 21 * scale
+        top = 24 * scale
         right = left + bar_width * scale
         bottom = top + bar_height * scale
         draw.rectangle((left, top, right, bottom), outline=PREVIEW_KNOB_TRACK_COLOR, width=scale)
@@ -483,7 +484,7 @@ class DecentSamplerUiPreview:
                     self.canvas.create_arc(knob_left, knob_top, knob_right, knob_bottom, start=PREVIEW_KNOB_ARC_START, extent=value_extent, style="arc", outline=PREVIEW_KNOB_VALUE_COLOR, width=PREVIEW_KNOB_ARC_WIDTH, tags=(tag, "ui-knob")),
                 ]
             )
-        items.append(self.canvas.create_text(canvas_x + UI_KNOB_WIDTH // 2, canvas_y + 10, text=label, fill="#330033", font=("TkDefaultFont", 8), tags=(tag, "ui-knob")))
+        items.append(self.canvas.create_text(canvas_x + UI_KNOB_WIDTH // 2, canvas_y + 10, text=label, fill=PREVIEW_PANEL_LABEL_COLOR, font=("TkDefaultFont", 8), tags=(tag, "ui-knob")))
         self.canvas_items[control_id] = items
         self.canvas.tag_bind(tag, "<ButtonPress-1>", self._start_drag)
         self.canvas.tag_bind(tag, "<B1-Motion>", self._drag_knob)
@@ -496,10 +497,18 @@ class DecentSamplerUiPreview:
         image = Image.new("RGBA", (UI_KNOB_WIDTH * scale, UI_KNOB_WIDTH * scale), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
         width = PREVIEW_KNOB_ARC_WIDTH * scale
-        draw.line(self._knob_arc_points(PREVIEW_KNOB_ARC_START, PREVIEW_KNOB_ARC_EXTENT, scale), fill=PREVIEW_KNOB_TRACK_COLOR, width=width, joint="curve")
-        draw.line(self._knob_arc_points(PREVIEW_KNOB_ARC_START, value_extent, scale), fill=PREVIEW_KNOB_VALUE_COLOR, width=width, joint="curve")
+        if PREVIEW_KNOB_ARC_TRACK_COLOR:
+            self._draw_round_arc(draw, PREVIEW_KNOB_ARC_START, PREVIEW_KNOB_ARC_EXTENT, PREVIEW_KNOB_ARC_TRACK_COLOR, width, scale)
+        self._draw_round_arc(draw, PREVIEW_KNOB_ARC_START, value_extent, PREVIEW_KNOB_VALUE_COLOR, width, scale)
         image = image.resize((UI_KNOB_WIDTH, UI_KNOB_WIDTH), Image.Resampling.LANCZOS)
         return ImageTk.PhotoImage(image)
+
+    def _draw_round_arc(self, draw: ImageDraw.ImageDraw, start: int, extent: int, color: str, width: int, scale: int) -> None:
+        points = self._knob_arc_points(start, extent, scale)
+        draw.line(points, fill=color, width=width, joint="curve")
+        radius = width / 2
+        for x, y in (points[0], points[-1]):
+            draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=color)
 
     def _knob_arc_points(self, start: int, extent: int, scale: int) -> list[tuple[float, float]]:
         # Match Tk Canvas arc geometry, then downsample the supersized result.
