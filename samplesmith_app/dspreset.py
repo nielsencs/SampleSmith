@@ -36,6 +36,7 @@ UI_KNOB_WIDTH = 72
 UI_BAR_WIDTH = 42
 UI_BAR_HEIGHT = 72
 UI_BAR_STEP_X = 24
+UI_BAR_EXPORT_WIDTH = 16
 UI_BAR_GROUP_GRID_SLOTS = 3
 UI_KNOB_START_X = 30
 UI_KNOB_START_Y = 64
@@ -47,6 +48,7 @@ UI_GROUP_PADDING = 6
 UI_GROUP_TOP_PADDING = 24
 UI_GROUP_TITLE_GAP = 8
 UI_KNOB_GAP = 6
+UI_BAR_EXPORT_OFFSET_X = (UI_BAR_WIDTH - UI_BAR_EXPORT_WIDTH) // 2
 UI_KNOB_VISIBLE_INSET_X = 9
 UI_KNOB_VISIBLE_INSET_Y = 24
 UI_KNOB_VISIBLE_WIDTH = UI_KNOB_WIDTH - UI_KNOB_VISIBLE_INSET_X * 2
@@ -523,13 +525,17 @@ def generate_dspreset(
 
         def add_amp_knob(control_id: str, label: str, parameter: str, min_value: str, max_value: str, value: str, default_value: str, layout_index: int) -> None:
             x_pos, y_pos = ui_bar_layout_position(control_id, layout_index, ui_layout)
+            # DecentSampler renders linear bars across the whole exported
+            # labeled-knob width. Keep the editor's wider 42px layout cell for
+            # selection/spacing, but export the visible DS bar as a narrow strip
+            # centred inside that cell.
             knob = ET.SubElement(
                 tab,
                 "labeled-knob",
                 {
-                    "x": str(x_pos),
+                    "x": str(x_pos + UI_BAR_EXPORT_OFFSET_X),
                     "y": str(y_pos),
-                    "width": str(UI_BAR_WIDTH),
+                    "width": str(UI_BAR_EXPORT_WIDTH),
                     "height": str(UI_BAR_HEIGHT),
                     "label": label,
                     "parameterName": label,
