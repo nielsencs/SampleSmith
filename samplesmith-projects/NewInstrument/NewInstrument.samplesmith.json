@@ -117,7 +117,7 @@
   "step": 1,
   "samples": [
     {
-      "path": "D:\\GitHub\\SampleSmith\\samplesmith-projects\\NewInstrument\\Samples\\CarlSampler_C3.wav",
+      "path": "Samples\\CarlSampler_C3.wav",
       "root_note": 60,
       "lo_note": 60,
       "hi_note": 60,
@@ -130,9 +130,9 @@
       "centerX": 404,
       "centerY": 90,
       "textSize": 36,
-      "width": 291,
+      "width": 80,
       "height": 45,
-      "x": 259,
+      "x": 364,
       "y": 68
     },
     "amp_attack": {
