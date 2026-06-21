@@ -821,6 +821,40 @@ class SampleSmithApp(tk.Tk):
         slug = slugify(name)
         return output_root / slug / f"{slug}.samplesmith.json"
 
+    def _output_root_from_project_data(self, data: dict[str, object], project_path: Path | None) -> Path:
+        raw_output = str(data.get("output", str(Path.cwd() / "samplesmith-projects")) or "")
+        output = Path(raw_output).expanduser()
+        if project_path is None:
+            return output
+
+        name = str(data.get("name", "NewInstrument"))
+        slug = slugify(name)
+        project_dir = project_path.parent
+        portable_output = project_dir.parent if project_dir.name == slug else project_dir
+
+        windows_absolute = bool(re.match(r"^[A-Za-z]:[\\/]", raw_output))
+        if not raw_output.strip():
+            return portable_output
+        if output.is_absolute() or windows_absolute:
+            candidate_output = output
+        else:
+            candidate_output = (project_dir / output).resolve()
+
+        # A saved output root is only still valid for this opened project if it
+        # would place the project file exactly where it was opened from. If the
+        # project has been moved/copied to another machine, keep output beside
+        # the opened project instead of writing .dspreset files back to the old
+        # machine-specific path.
+        expected_project = candidate_output / slug / f"{slug}.samplesmith.json"
+        try:
+            if expected_project.resolve() == project_path.resolve():
+                return candidate_output
+        except OSError:
+            pass
+        if expected_project == project_path:
+            return candidate_output
+        return portable_output
+
     def _project_data(self) -> dict[str, object]:
         project_dir = (self.project_path or self._default_project_path()).parent
         return {
@@ -1471,9 +1505,7 @@ class SampleSmithApp(tk.Tk):
     def _load_project_data(self, data: dict[str, object], project_path: Path | None) -> None:
         self.project_path = project_path
         self.name_var.set(str(data.get("name", "NewInstrument")))
-        output = Path(str(data.get("output", str(Path.cwd() / "samplesmith-projects")))).expanduser()
-        if project_path is not None and not output.is_absolute():
-            output = (project_path.parent / output).resolve()
+        output = self._output_root_from_project_data(data, project_path)
         self.output_var.set(str(output))
         self.sample_rate_var.set(int(data.get("sample_rate", DEFAULT_SAMPLE_RATE)))
         sample_format = str(data.get("sample_format", "flac") or "flac").lower()

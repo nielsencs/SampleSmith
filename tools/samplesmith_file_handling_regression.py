@@ -93,6 +93,48 @@ def test_generate_preset_rejects_external_samples_clearly(tmp: Path) -> None:
         raise AssertionError("external sample path was accepted for a movable .dspreset")
 
 
+def test_opening_moved_project_rehomes_output_root(tmp: Path) -> None:
+    os.environ["SAMPLESMITH_SETTINGS_PATH"] = str(tmp / "settings.json")
+    project = tmp / "new-computer" / "NewInstrument" / "NewInstrument.samplesmith.json"
+    sample = project.parent / "Samples" / "CarlSampler_C3.wav"
+    make_wav(sample)
+    project.parent.mkdir(parents=True, exist_ok=True)
+    project.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "name": "NewInstrument",
+                "output": r"D:\\GitHub\\SampleSmith\\samplesmith-projects",
+                "sample_rate": 44100,
+                "sample_format": "wav",
+                "low_note": 60,
+                "high_note": 60,
+                "step": 1,
+                "samples": [
+                    {
+                        "path": "Samples/CarlSampler_C3.wav",
+                        "root_note": 60,
+                        "lo_note": 60,
+                        "hi_note": 60,
+                        "label": "CarlSampler_C3",
+                        "mode": "pitched",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    app = SampleSmithApp()
+    try:
+        app._open_project(project, prompt_for_strays=False)
+        assert Path(app.output_var.get()) == project.parent.parent, app.output_var.get()
+        preset = app._write_preset()
+        assert preset == project.parent / "NewInstrument.dspreset", preset
+        assert preset.exists()
+    finally:
+        app.destroy()
+
+
 def test_dsbundle_export_preserves_existing_bundle_dir(tmp: Path) -> None:
     instrument_dir = tmp / "projects" / "BundleTest"
     sample = instrument_dir / "Samples" / "C4.wav"
@@ -120,6 +162,7 @@ def main() -> int:
         test_project_saves_internal_sample_paths_relative(tmp)
         test_save_as_refuses_to_overwrite_existing_audio(tmp)
         test_generate_preset_rejects_external_samples_clearly(tmp)
+        test_opening_moved_project_rehomes_output_root(tmp)
         test_dsbundle_export_preserves_existing_bundle_dir(tmp)
     print("file-handling regression checks passed")
     return 0
