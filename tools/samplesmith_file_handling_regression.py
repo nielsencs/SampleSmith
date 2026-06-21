@@ -112,7 +112,7 @@ def test_opening_moved_project_rehomes_output_root(tmp: Path) -> None:
                 "step": 1,
                 "samples": [
                     {
-                        "path": "Samples/CarlSampler_C3.wav",
+                        "path": r"Samples\CarlSampler_C3.wav",
                         "root_note": 60,
                         "lo_note": 60,
                         "hi_note": 60,

@@ -18,6 +18,13 @@ A4_HZ = 440.0
 DEFAULT_SAMPLE_RATE = 44100
 
 
+def portable_project_path(value: object) -> Path:
+    text = str(value)
+    if "\\" in text and not re.match(r"^[A-Za-z]:[\\/]", text):
+        text = text.replace("\\", "/")
+    return Path(text)
+
+
 def slugify(value: str) -> str:
     value = re.sub(r"[^A-Za-z0-9._ -]+", "", value.strip())
     value = re.sub(r"[\s-]+", "_", value)
@@ -151,7 +158,7 @@ class SampleInfo:
             except (TypeError, ValueError):
                 loop_crossfade = None
         return cls(
-            path=Path(str(data["path"])),
+            path=portable_project_path(data["path"]),
             root_note=int(data["root_note"]),
             lo_note=int(data["lo_note"]),
             hi_note=int(data["hi_note"]),
@@ -165,7 +172,7 @@ class SampleInfo:
             generated=bool(data.get("generated", False)),
             custom_mapping=bool(data.get("custom_mapping", False)),
             source_roots=[int(root) for root in data.get("source_roots", [])] if data.get("source_roots") else None,
-            source_paths=[Path(str(path)) for path in data.get("source_paths", [])] if data.get("source_paths") else None,
+            source_paths=[portable_project_path(path) for path in data.get("source_paths", [])] if data.get("source_paths") else None,
         )
 
 def clamp_midi_note(midi_note: int) -> int:

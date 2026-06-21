@@ -829,6 +829,7 @@ class SampleSmithApp(tk.Tk):
 
         name = str(data.get("name", "NewInstrument"))
         slug = slugify(name)
+        project_path = project_path.resolve()
         project_dir = project_path.parent
         portable_output = project_dir.parent if project_dir.name == slug else project_dir
 
@@ -852,8 +853,8 @@ class SampleSmithApp(tk.Tk):
         except OSError:
             pass
         if expected_project == project_path:
-            return candidate_output
-        return portable_output
+            return candidate_output.resolve()
+        return portable_output.resolve()
 
     def _project_data(self) -> dict[str, object]:
         project_dir = (self.project_path or self._default_project_path()).parent
